@@ -1,12 +1,11 @@
 # diaglib
 
-## Authors and acknowledgment
-Ivan Gianni', Tommaso Nottoli, and Filippo Lipparini
-MoLECoLab Pisa
-Department of Chemistry and Industrial Chemistry
-University of Pisa
-Via G. Moruzzi 13, I-56124, Pisa, Italy
-
+## Authors and acknowledgment  
+Ivan Gianni', Tommaso Nottoli, and Filippo Lipparini  
+MoLECoLab Pisa  
+Department of Chemistry and Industrial Chemistry  
+University of Pisa  
+Via G. Moruzzi 13, I-56124, Pisa, Italy  
 Pisa, november 2022
 
 ## License
