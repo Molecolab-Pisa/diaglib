@@ -29,7 +29,7 @@ both algorithms require two user-provided routines to apply the matrx
 and a suitable preconditioner to a set of vectors.
 such routines have the following interface:
 
-  subroutine matvec(n,m,x,ax)
+  subroutine matvec(n,m,x,ax)  
   subroutine precnd(n,m,shift,x,ax)
 
 where n,m are integers and x(n,m) and ax(n,m) are double precision
