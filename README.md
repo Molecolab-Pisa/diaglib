@@ -8,6 +8,8 @@ University of Pisa
 Via G. Moruzzi 13, I-56124, Pisa, Italy  
 Pisa, november 2022
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7680658.svg)](https://doi.org/10.5281/zenodo.7680658)
+
 ## License
 diaglib is licensed under the LGPL v2.1 license
 
