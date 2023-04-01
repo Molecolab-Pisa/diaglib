@@ -9,14 +9,14 @@ program main
   integer  :: n, n_eig, itmax, i, j, n_want, m_max
   real(dp) :: shift, tol
   logical  :: ok
-  external :: mmult, mprec
+  external :: mmult, mprec, smult
 !
-  real(dp), allocatable :: eig(:), evec(:,:), diagonal(:)
+  real(dp), allocatable :: eig(:), evec(:,:), diagonal(:), scr(:,:)
 !
 ! initialize:
 !
   n      = 1000
-  n_want = 20
+  n_want = 10
   n_eig  = min(2*n_want,n_want+5)
   tol    = 1.0e-10_dp
   shift  = 0.0_dp
@@ -27,6 +27,24 @@ program main
 ! allocate memory. note that the matrix a is defined in the stack of module "utils".
 !
   allocate (a(n,n), eig(n_eig), evec(n,n_eig), diagonal(n))
+  allocate (s(n,n))
+!
+! build a positive definite, symmetric overlap matrix:
+!
+  allocate (scr(n,n))
+! s = 0.0_dp
+! do i = 1, n
+!   s(i,i) = 1.0_dp
+! end do
+  do i = 1, n
+    do j = 1, i-1
+      call random_number(s(j,i))
+      s(j,i) = 0.1_dp * s(j,i)
+      s(i,j) = s(j,i)
+    end do
+    call random_number(s(i,i))
+    s(i,i) = s(i,i) + 2.0_dp 
+  end do
 !
 ! build a silly matrix:
 !
@@ -39,6 +57,7 @@ program main
     end do
   end do
 !
+!
 ! clean up arrays, make a very crude guess of the first eigenvector:
 !
   eig  = 0.0_dp
@@ -46,11 +65,16 @@ program main
   do i = 1, n_eig
     evec(i,i) = 1.0_dp
   end do
-  call lobpcg_driver(.true.,n,n_want,n_eig,itmax,tol,shift,mmult,mprec,eig,evec,ok)
+  call lobpcg_driver(.true.,.true.,n,n_want,n_eig,itmax,tol,shift,mmult,mprec,smult,eig,evec,ok)
 !
+  call dsygv(1,'n','l',n,a,n,s,n,eig,scr,n*n,i)
+  write(6,*) 'eigs from lapack:'
+  write(6,'(f20.12)') eig(1:n_want)
   write(6,*) ' # matmul = ', nmult
   write(6,*)
-  nmult = 0
+  stop
+  nmult  = 0
+  nsmult = 0
 !
 ! clean up arrays, make a very crude guess of the first eigenvector:
 !
@@ -83,6 +107,26 @@ end program main
     end do
     return
   end subroutine mmult
+!
+  subroutine smult(n,m,x,sx)
+    use utils
+    implicit none
+!
+!   simple-minded matrix-vector multiplication routine, that needs to be passed as 
+!   an argument to lobpcg
+!
+    integer,                   intent(in)    :: n, m
+    real(dp),  dimension(n,m), intent(in)    :: x
+    real(dp),  dimension(n,m), intent(inout) :: sx
+!
+    integer :: icol
+!
+    nmult = nmult + m
+    do icol = 1, m
+      sx(:,icol) = matmul(s,x(:,icol))
+    end do
+    return
+  end subroutine smult
 !
   subroutine mprec(n,m,fac,x,px)
     use utils

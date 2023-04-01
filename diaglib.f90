@@ -155,8 +155,8 @@ module diaglib
 !
   contains
 !
-  subroutine lobpcg_driver(verbose,n,n_targ,n_max,max_iter,tol, &
-                           shift,matvec,precnd,eig,evec,ok)
+  subroutine lobpcg_driver(verbose,gen_eig,n,n_targ,n_max,max_iter,tol, &
+                           shift,matvec,precnd,bvec,eig,evec,ok)
 !
 !   main driver for lobpcg.
 !
@@ -165,6 +165,9 @@ module diaglib
 !
 !   verbose:  logical, whether to print various information at each 
 !             iteration (eigenvalues, residuals...).
+!
+!   gen_eig:  logical, whether a generalized eigenvalue problem has
+!             to be solved. 
 !
 !   n:        integer, size of the matrix to be diagonalized.
 !
@@ -185,7 +188,10 @@ module diaglib
 !   matvec:   external subroutine that performs the matrix-vector
 !             multiplication
 !
-!   precnd:   external subroutine that applied a preconditioner.
+!   precnd:   external subroutine that applies a preconditioner.
+!
+!   bvec:     external subroutine that applies the metric to a vector.
+!             only referenced is gen is true.
 !
 !   output variables:
 !   =================
@@ -199,14 +205,14 @@ module diaglib
 !
 !   ok:       logical, true if lobpcg converged.
 !
-    logical,                      intent(in)    :: verbose
+    logical,                      intent(in)    :: verbose, gen_eig
     integer,                      intent(in)    :: n, n_targ, n_max
     integer,                      intent(in)    :: max_iter
     real(dp),                     intent(in)    :: tol, shift
     real(dp), dimension(n_max),   intent(inout) :: eig
     real(dp), dimension(n,n_max), intent(inout) :: evec
     logical,                      intent(inout) :: ok
-    external                                    :: matvec, precnd
+    external                                    :: matvec, precnd, bvec
 !
 !   local variables:
 !   ================
@@ -215,9 +221,10 @@ module diaglib
                              len_a, len_u
     integer               :: istat
     real(dp)              :: sqrtn, tol_rms, tol_max, xx(1)
-    real(dp), allocatable :: space(:,:), aspace(:,:), a_red(:,:), &
-                             e_red(:), r(:,:), r_norm(:,:)
-    real(dp), allocatable :: u_x(:,:), u_p(:,:), x_new(:,:), ax_new(:,:)
+    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), &
+                             a_red(:,:), e_red(:), r(:,:), r_norm(:,:)
+    real(dp), allocatable :: u_x(:,:), u_p(:,:), x_new(:,:), ax_new(:,:), &
+                             bx_new(:,:)
     logical,  allocatable :: done(:)
 !
 !   external functions:
@@ -236,7 +243,8 @@ module diaglib
 !   matrix-multiplied vectors and the residual:
 !
     len_a = 3*n_max
-    allocate (space(n,len_a), aspace(n,len_a), r(n,n_max), stat=istat)
+    allocate (space(n,len_a), aspace(n,len_a), bspace(n,len_a), &
+              r(n,n_max), stat=istat)
     call check_mem(istat)
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
@@ -244,9 +252,9 @@ module diaglib
     allocate (a_red(len_a,len_a), e_red(len_a), stat=istat)
     call check_mem(istat)
 !
-!   allocate memory for temporary copies of x and ax:
+!   allocate memory for temporary copies of x, ax, and bx:
 !
-    allocate (x_new(n,n_max), ax_new(n,n_max), stat=istat)
+    allocate (x_new(n,n_max), ax_new(n,n_max), bx_new(n,n_max), stat=istat)
     call check_mem(istat)
 !
 !   allocate memory for convergence check
@@ -271,9 +279,17 @@ module diaglib
 !
     call check_guess(n,n_max,evec)
 !
+!   compute b*evec and b-orthogonalize the guess
+!
+    if (gen_eig) then 
+      call bvec(n,n_max,evec,bx_new)
+      call b_ortho(n,n_max,evec,bx_new)
+    end if
+!
 !   compute the first eigenpairs by diagonalizing the reduced matrix:
 !
     call dcopy(n*n_max,evec,1,space,1)
+    if (gen_eig) call dcopy(n*n_max,bx_new,1,bspace,1)
     call get_time(t1)
     call matvec(n,n_max,space,aspace)
     call get_time(t2)
@@ -292,14 +308,24 @@ module diaglib
     call dcopy(n*n_max,evec,1,space,1)
     call dgemm('n','n',n,n_max,n_max,one,aspace,n,a_red,len_a,zero,evec,n)
     call dcopy(n*n_max,evec,1,aspace,1)
+    if (gen_eig) then 
+      call dgemm('n','n',n,n_max,n_max,one,bspace,n,a_red,len_a,zero,evec,n)
+      call dcopy(n*n_max,evec,1,bspace,1)
+    end if
 !
 !   do the first iteration explicitly. 
 !   build the residuals:
 !
     call dcopy(n*n_max,aspace,1,r,1)
-    do i_eig = 1, n_max
-      call daxpy(n,-eig(i_eig),space(:,i_eig),1,r(:,i_eig),1)
-    end do
+    if (gen_eig) then 
+      do i_eig = 1, n_max
+        call daxpy(n,-eig(i_eig),bspace(:,i_eig),1,r(:,i_eig),1)
+      end do
+    else
+      do i_eig = 1, n_max
+        call daxpy(n,-eig(i_eig),space(:,i_eig),1,r(:,i_eig),1)
+      end do
+    end if
 !
 !   compute the preconditioned residuals:
 !
@@ -310,7 +336,13 @@ module diaglib
 !   orthogonalize:
 !
     call get_time(t1)
-    call ortho_vs_x(.false.,n,n_max,n_max,space,space(1,ind_w),xx,xx)
+    if (gen_eig) then
+      call b_ortho_vs_x(n,n_max,n_max,space,bspace,space(1,ind_w))
+      call bvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
+      call b_ortho(n,n_max,space(1,ind_w),bspace(1,ind_w))
+    else
+      call ortho_vs_x(.false.,n,n_max,n_max,space,space(1,ind_w),xx,xx)
+    end if
     call get_time(t2)
     t_ortho = t_ortho + t2 - t1
 !
@@ -361,10 +393,13 @@ module diaglib
       end if
       eig = e_red(1:n_max)
 !
-!     update x and ax:
+!     update x and ax, and, if required, bx:
 !
       call dgemm('n','n',n,n_max,len_u,one,space,n,a_red,len_a,zero,x_new,n)
       call dgemm('n','n',n,n_max,len_u,one,aspace,n,a_red,len_a,zero,ax_new,n)
+      if (gen_eig) then
+        call dgemm('n','n',n,n_max,len_u,one,bspace,n,a_red,len_a,zero,bx_new,n)
+      end if
 !
 !     compute the residuals and their rms and sup norms:
 !
@@ -375,7 +410,11 @@ module diaglib
 !
         if (done(i_eig)) cycle
 !
-        call daxpy(n,-eig(i_eig),x_new(:,i_eig),1,r(:,i_eig),1)
+        if (gen_eig) then
+          call daxpy(n,-eig(i_eig),bx_new(:,i_eig),1,r(:,i_eig),1)
+        else
+          call daxpy(n,-eig(i_eig),x_new(:,i_eig),1,r(:,i_eig),1)
+        end if
         r_norm(1,i_eig) = dnrm2(n,r(:,i_eig),1)/sqrtn
         r_norm(2,i_eig) = maxval(abs(r(:,i_eig)))
       end do
@@ -428,12 +467,18 @@ module diaglib
 !
 !     p  = space  * u_p
 !     ap = aspace * u_p
+!     bp = bspace * u_p
 !     note that this is numerically safe, as u_p is orthogonal.
 !
       call dgemm('n','n',n,n_act,len_u,one,space,n,u_p,len_u,zero,evec,n)
       call dcopy(n_act*n,evec,1,space(1,ind_p),1)
       call dgemm('n','n',n,n_act,len_u,one,aspace,n,u_p,len_u,zero,evec,n)
       call dcopy(n_act*n,evec,1,aspace(1,ind_p),1)
+!
+      if (gen_eig) then
+        call dgemm('n','n',n,n_act,len_u,one,bspace,n,u_p,len_u,zero,evec,n)
+        call dcopy(n_act*n,evec,1,bspace(1,ind_p),1)
+      end if
 !
       deallocate(u_x, u_p, stat = istat)
       call check_mem(istat)
@@ -442,6 +487,9 @@ module diaglib
 !
       call dcopy(n*n_max,x_new,1,space,1)
       call dcopy(n*n_max,ax_new,1,aspace,1)
+      if (gen_eig) then 
+        call dcopy(n*n_max,bx_new,1,bspace,1)
+      end if
 !
 !     compute the preconditioned residuals w:
 !
@@ -450,7 +498,13 @@ module diaglib
 !     orthogonalize w against x and p, and then orthonormalize it:
 !
       call get_time(t1)
-      call ortho_vs_x(.false.,n,n_max+n_act,n_act,space,space(1,ind_w),xx,xx)
+      if (gen_eig) then 
+        call b_ortho_vs_x(n,n_max+n_act,n_act,space,bspace,space(1,ind_w))
+        call bvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
+        call b_ortho(n,n_max,space(1,ind_w),bspace(1,ind_w))
+      else
+        call ortho_vs_x(.false.,n,n_max+n_act,n_act,space,space(1,ind_w),xx,xx)
+      end if
       call get_time(t2)
       t_ortho = t_ortho + t2 - t1
 !
@@ -899,6 +953,49 @@ module diaglib
     return
   end subroutine ortho
 !
+  subroutine b_ortho(n,m,u,bu)
+    implicit none
+!
+!   b-orthogonalize m vectors of lenght n using the cholesky decomposition
+!   of the overlap matrix.
+!   this is in principle not a good idea, as the u'bu matrix can be very
+!   ill-conditioned, independent of how bas is b, and only works if x is
+!   already orthonormal. 
+!
+!   arguments:
+!   ==========
+!
+    integer,                     intent(in)    :: n, m
+    real(dp),  dimension(n,m),   intent(inout) :: u, bu
+!
+!   local variables
+!   ===============
+!
+    integer               :: info
+    real(dp), allocatable :: metric(:,:)
+!
+!   external functions:
+!   ===================
+!
+    external dpotrf, dtrsm, dgemm
+!
+    allocate (metric(m,m))
+!
+    call dgemm('t','n',m,m,n,one,u,n,bu,n,zero,metric,m)
+!
+!   compute the cholesky factorization of the metric.
+!
+    call dpotrf('l',m,metric,m,info)
+!
+!   get u * l^-T and bu * l^-T
+!
+    call dtrsm('r','l','t','n',n,m,one,metric,m,u,n)
+    call dtrsm('r','l','t','n',n,m,one,metric,m,bu,n)
+!
+    deallocate (metric)
+    return
+  end subroutine b_ortho
+!
   subroutine ortho_cd(do_other,n,m,u,w,ok)
     implicit none
 !
@@ -970,7 +1067,6 @@ module diaglib
 !
 !   compute the cholesky factorization of the metric.
 !
-      msave = metric
       call dpotrf('l',m,metric,m,info)
 !
 !     if dpotrf failed, try a second time, after level-shifting the diagonal of the metric.
@@ -1116,6 +1212,88 @@ module diaglib
 !
     return
   end subroutine ortho_vs_x
+!
+  subroutine b_ortho_vs_x(n,m,k,x,bx,u)
+    implicit none
+!
+!   given two sets x(n,m) and u(n,k) of vectors, where x 
+!   is assumed to be orthogonal, b-orthogonalize u against x.
+!   furthermore, orthonormalize u.
+!
+!   this routine performs the u vs x orthogonalization and the
+!   subsequent orthonormalization of u iteratively, until the
+!   overlap between x and the orthogonalized u is smaller than
+!   a (tight) threshold. 
+!
+!   arguments:
+!   ==========
+!
+    integer,                   intent(in)    :: n, m, k
+    real(dp),  dimension(n,m), intent(in)    :: x, bx
+    real(dp),  dimension(n,k), intent(inout) :: u
+!
+!   local variables:
+!   ================
+!
+    logical                :: done, ok
+    integer                :: it
+    real(dp)               :: xu_norm, xx(1)
+    real(dp),  allocatable :: xu(:,:)
+!
+!   external functions:
+!   ===================
+!
+    intrinsic              :: random_number
+    real(dp)               :: dnrm2
+    external               :: dnrm2, dgemm
+!   
+    integer, parameter     :: maxit = 10
+    logical, parameter     :: useqr = .false.
+!
+!   allocate space for the overlap between x and u.
+!
+    ok = .false.
+    allocate (xu(m,k))
+    done = .false.
+    it   = 0
+!
+!   start with an initial orthogonalization to improve conditioning.
+!
+    if (.not. useqr) call ortho_cd(.false.,n,k,u,xx,ok)
+    if (.not. ok .or. useqr) call ortho(.false.,n,k,u,xx)
+!
+!   iteratively orthogonalize u against x, and then orthonormalize u.
+!
+    do while (.not. done)
+      it = it + 1
+!
+!     u = u - x (bx^t u)
+!
+      call dgemm('t','n',m,k,n,one,bx,n,u,n,zero,xu,m)
+      call dgemm('n','n',n,k,m,-one,x,n,xu,m,one,u,n)
+!
+!     now, orthonormalize u.
+!
+      if (.not. useqr) call ortho_cd(.false.,n,k,u,xx,ok)
+      if (.not. ok .or. useqr) call ortho(.false.,n,k,u,xx)
+!
+!     compute the overlap between the orthonormalized u and x and decide
+!     whether the orthogonalization procedure converged.
+!
+      call dgemm('t','n',m,k,n,one,bx,n,u,n,zero,xu,m)
+      xu_norm = dnrm2(m*k,xu,1)
+      write(6,*) 'it, xu_norm =', it, xu_norm
+      done    = xu_norm.lt.tol_ortho
+!
+!     if things went really wrong, abort.
+!
+      if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x'
+    end do
+!
+    deallocate(xu)
+!
+    return
+  end subroutine b_ortho_vs_x
 !
 ! utilities
 ! =========
