@@ -98,6 +98,13 @@ module diaglib
 !                  the linear transformation applied to v can also be 
 !                  applied to a second set of vectors, tipically, av.
 !
+! b_ortho_vs_x:    same as ortho_vs_x, but vectors are b-orthogonalized
+!                  against the existing ones, where b is the metric in the
+!                  generalized eigenvalues problem.
+!
+! b_ortho:         same as ortho_cd, but the orthogonalization is performed
+!                  with respect to the metric b.
+!
 ! check_guess:     routine to check whether a guess is provided by the user
 !                  and whether the provided vectors are already orthonormal.
 !                  if no guess is provided, a random guess is generated.
@@ -269,6 +276,8 @@ module diaglib
     t_mv     = zero
     t_tot    = zero
     space    = zero
+    bspace   = zero
+    aspace   = zero
     a_red    = zero
 !
     call get_time(t_tot)
@@ -279,7 +288,7 @@ module diaglib
 !
     call check_guess(n,n_max,evec)
 !
-!   compute b*evec and b-orthogonalize the guess
+!   if required, compute b*evec and b-orthogonalize the guess
 !
     if (gen_eig) then 
       call bvec(n,n_max,evec,bx_new)
@@ -308,6 +317,9 @@ module diaglib
     call dcopy(n*n_max,evec,1,space,1)
     call dgemm('n','n',n,n_max,n_max,one,aspace,n,a_red,len_a,zero,evec,n)
     call dcopy(n*n_max,evec,1,aspace,1)
+!
+!   if required, also get b times the ritz vector:
+!
     if (gen_eig) then 
       call dgemm('n','n',n,n_max,n_max,one,bspace,n,a_red,len_a,zero,evec,n)
       call dcopy(n*n_max,evec,1,bspace,1)
@@ -338,6 +350,10 @@ module diaglib
     call get_time(t1)
     if (gen_eig) then
       call b_ortho_vs_x(n,n_max,n_max,space,bspace,space(1,ind_w))
+!
+!     after b_ortho, w is b-orthogonal to x, and orthonormal. 
+!     compute the application of b to w, and b-orthonormalize it.
+!
       call bvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
       call b_ortho(n,n_max,space(1,ind_w),bspace(1,ind_w))
     else
@@ -500,8 +516,8 @@ module diaglib
       call get_time(t1)
       if (gen_eig) then 
         call b_ortho_vs_x(n,n_max+n_act,n_act,space,bspace,space(1,ind_w))
-        call bvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
-        call b_ortho(n,n_max,space(1,ind_w),bspace(1,ind_w))
+        call bvec(n,n_act,space(1,ind_w),bspace(1,ind_w))
+        call b_ortho(n,n_act,space(1,ind_w),bspace(1,ind_w))
       else
         call ortho_vs_x(.false.,n,n_max+n_act,n_act,space,space(1,ind_w),xx,xx)
       end if
@@ -525,8 +541,8 @@ module diaglib
 !
 !   deallocate memory and return.
 !
-    deallocate (work, tau, space, aspace, r, a_red, e_red, done, r_norm, &
-                stat = istat)
+    deallocate (work, tau, space, aspace, bspace, r, a_red, e_red, & 
+                x_new, ax_new, bx_new, done, r_norm, stat = istat)
     call check_mem(istat)
 !
     return
@@ -971,8 +987,11 @@ module diaglib
 !   local variables
 !   ===============
 !
-    integer               :: info
-    real(dp), allocatable :: metric(:,:)
+    integer               :: info, i, j
+    real(dp), allocatable :: metric(:,:), sigma(:), u_svd(:,:), vt_svd(:,:), &
+                             temp(:,:)
+    real(dp), parameter   :: tol_svd = 1.0e-5_dp
+    logical,  parameter   :: use_svd = .true.
 !
 !   external functions:
 !   ===================
@@ -983,14 +1002,59 @@ module diaglib
 !
     call dgemm('t','n',m,m,n,one,u,n,bu,n,zero,metric,m)
 !
-!   compute the cholesky factorization of the metric.
+    if (use_svd) then
 !
-    call dpotrf('l',m,metric,m,info)
+!     debug option: use svd to b-orthonormalize, by computing
+!     b**(-1/2)
 !
-!   get u * l^-T and bu * l^-T
+      allocate (sigma(m), u_svd(m,m), vt_svd(m,m), temp(n,m))
+      call dgesvd('a','a',m,m,metric,m,sigma,u_svd,m,vt_svd,m,work,lwork,info)
 !
-    call dtrsm('r','l','t','n',n,m,one,metric,m,u,n)
-    call dtrsm('r','l','t','n',n,m,one,metric,m,bu,n)
+!     compute sigma**(-1/2)
+!
+      do i = 1, m
+        if (sigma(i) .gt. tol_svd) then
+          sigma(i) = 1/sqrt(sigma(i))
+        else
+          sigma(i) = zero
+        end if
+      end do
+!
+!     compute metric ** (-1/2). first, compute sigma ** (-1/2) vt
+!
+      metric = zero
+      do i = 1, m
+        do j = 1, m
+          metric(j,i) = metric(j,i) + sigma(j)*vt_svd(j,i)
+        end do
+      end do
+!
+!     now, multiply for u:
+!
+      vt_svd = metric
+      call dgemm('n','n',m,m,m,one,u_svd,m,vt_svd,m,zero,metric,m)
+!
+!     metric contains s ** (-1/2), and projects out directions corresponding
+!     to pathological singular values. 
+!     orthogonalize u and bu:
+!
+      call dgemm('n','n',n,m,m,one,u,n,metric,m,zero,temp,n)
+      u = temp
+      call dgemm('n','n',n,m,m,one,bu,n,metric,m,zero,temp,n)
+      bu = temp
+!
+      deallocate (sigma, u_svd, vt_svd, temp)
+    else
+!
+!     compute the cholesky factorization of the metric.
+!
+      call dpotrf('l',m,metric,m,info)
+!
+!     get u * l^-T and bu * l^-T
+!
+      call dtrsm('r','l','t','n',n,m,one,metric,m,u,n)
+      call dtrsm('r','l','t','n',n,m,one,metric,m,bu,n)
+    end if
 !
     deallocate (metric)
     return
@@ -1165,7 +1229,7 @@ module diaglib
     external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
-    logical, parameter     :: useqr = .false.
+    logical, parameter     :: useqr = .true.
 !
 !   allocate space for the overlap between x and u.
 !
@@ -1248,7 +1312,7 @@ module diaglib
     external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
-    logical, parameter     :: useqr = .false.
+    logical, parameter     :: useqr = .true.
 !
 !   allocate space for the overlap between x and u.
 !
@@ -1282,12 +1346,11 @@ module diaglib
 !
       call dgemm('t','n',m,k,n,one,bx,n,u,n,zero,xu,m)
       xu_norm = dnrm2(m*k,xu,1)
-      write(6,*) 'it, xu_norm =', it, xu_norm
       done    = xu_norm.lt.tol_ortho
 !
 !     if things went really wrong, abort.
 !
-      if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x'
+      if (it.gt.maxit) stop ' catastrophic failure of b_ortho_vs_x'
     end do
 !
     deallocate(xu)

@@ -6,12 +6,13 @@ program main
 ! simple minded test program to call the lobpcg routine
 !
   implicit none
-  integer  :: n, n_eig, itmax, i, j, n_want, m_max
+  integer  :: n, n_eig, itmax, i, j, n_want, m_max, n_seed
   real(dp) :: shift, tol
   logical  :: ok
   external :: mmult, mprec, smult
 !
-  real(dp), allocatable :: eig(:), evec(:,:), diagonal(:), scr(:,:)
+  integer,  allocatable :: iseed(:)
+  real(dp), allocatable :: eig(:), evec(:,:), diagonal(:)
 !
 ! initialize:
 !
@@ -28,22 +29,22 @@ program main
 !
   allocate (a(n,n), eig(n_eig), evec(n,n_eig), diagonal(n))
   allocate (s(n,n))
+  call random_seed(size=n_seed)
+  allocate (iseed(n_seed))
+  iseed = 1
+  call random_seed(put=iseed)
+  deallocate (iseed)
 !
 ! build a positive definite, symmetric overlap matrix:
 !
-  allocate (scr(n,n))
-! s = 0.0_dp
-! do i = 1, n
-!   s(i,i) = 1.0_dp
-! end do
   do i = 1, n
     do j = 1, i-1
       call random_number(s(j,i))
-      s(j,i) = 0.1_dp * s(j,i)
+      s(j,i) = 0.01_dp * s(j,i)
       s(i,j) = s(j,i)
     end do
     call random_number(s(i,i))
-    s(i,i) = s(i,i) + 2.0_dp 
+    s(i,i) = s(i,i) + 3.0_dp 
   end do
 !
 ! build a silly matrix:
@@ -57,7 +58,6 @@ program main
     end do
   end do
 !
-!
 ! clean up arrays, make a very crude guess of the first eigenvector:
 !
   eig  = 0.0_dp
@@ -67,12 +67,8 @@ program main
   end do
   call lobpcg_driver(.true.,.true.,n,n_want,n_eig,itmax,tol,shift,mmult,mprec,smult,eig,evec,ok)
 !
-  call dsygv(1,'n','l',n,a,n,s,n,eig,scr,n*n,i)
-  write(6,*) 'eigs from lapack:'
-  write(6,'(f20.12)') eig(1:n_want)
   write(6,*) ' # matmul = ', nmult
   write(6,*)
-  stop
   nmult  = 0
   nsmult = 0
 !
@@ -84,8 +80,10 @@ program main
     evec(i,i) = 1.0_dp
   end do
   call davidson_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,shift,mmult,mprec,eig,evec,ok)
-!
+ 
   write(6,*) ' # matmul = ', nmult
+!
+  deallocate (a, evec, eig, diagonal, s)
 !
 end program main
   subroutine mmult(n,m,x,ax)

@@ -2,8 +2,8 @@
 #   Makefile
 #
 FC = gfortran
-#FFLAGS = -fopenmp -Wall -std=f95 --pedantic -Wall -fcheck=all -fdebug=all -ftrapuv
-FFLAGS = -O0 -fimplicit-none  -Wall  -Wline-truncation  -Wcharacter-truncation  -Wsurprising  -Waliasing  -Wimplicit-interface  -Wunused-parameter  -fwhole-file  -fcheck=all  -std=f95  -pedantic  -fbacktrace
+FFLAGS = -fopenmp -Wall -std=f95 --pedantic -ftrapv
+#FFLAGS = -O0 -fimplicit-none  -Wall  -Wline-truncation  -Wcharacter-truncation  -Wsurprising  -Waliasing  -Wunused-parameter  -fwhole-file  -fcheck=all -g -std=f95  -pedantic  -fbacktrace
 LIBS = -lblas -llapack 
 
 MODS   = real_precision.o diaglib.o
