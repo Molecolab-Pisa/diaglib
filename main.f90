@@ -79,7 +79,8 @@ program main
   do i = 1, n_eig
     evec(i,i) = 1.0_dp
   end do
-  call davidson_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,shift,mmult,mprec,eig,evec,ok)
+! call davidson_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,shift,mmult,mprec,eig,evec,ok)
+  call gen_david_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,shift,mmult,mprec,smult,eig,evec,ok)
  
   write(6,*) ' # matmul = ', nmult
 !
