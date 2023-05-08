@@ -1098,6 +1098,11 @@ module diaglib
 !
     call dcopy(n*n_max,evec,1,space,1)
 !
+!   apply the b matrix and b-orthogonalize the guess:
+!
+    call bvec(n,n_max,space,bspace)
+    call b_ortho(n,n_max,space,bspace)
+!
 !   initialize the number of active vectors and the associated indices.
 !
     n_act = n_max
@@ -1134,14 +1139,14 @@ module diaglib
 !
       call get_time(t1)
       call matvec(n,n_act,space(1,i_beg+n_rst),aspace(1,i_beg+n_rst))
-      call bvec(n,n_act,space(1,i_beg+n_rst),bspace(1,i_beg+n_rst))
+!     call bvec(n,n_act,space(1,i_beg+n_rst),bspace(1,i_beg+n_rst))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrices 
 !
       call dgemm('t','n',ldu,n_act,n,one,space,n,aspace(1,i_beg+n_rst),n,zero,a_red(1,i_beg+n_rst),lda)
-      call dgemm('t','n',ldu,n_act,n,one,space,n,bspace(1,i_beg+n_rst),n,zero,s_red(1,i_beg+n_rst),lda)
+!     call dgemm('t','n',ldu,n_act,n,one,space,n,bspace(1,i_beg+n_rst),n,zero,s_red(1,i_beg+n_rst),lda)
 !
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
@@ -1154,12 +1159,13 @@ module diaglib
         n_rst   = 0
       end if
       a_copy = a_red
-      s_copy = s_red
+!     s_copy = s_red
 !
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      call dsygv(1,'v','u',ldu,a_copy,lda,s_copy,lda,e_red,work,lwork,info)
+!     call dsygv(1,'v','u',ldu,a_copy,lda,s_copy,lda,e_red,work,lwork,info)
+      call dsyev('v','u',ldu,a_copy,lda,e_red,work,lwork,info)
       call get_time(t2)
       t_diag = t_diag + t2 - t1
 !
@@ -1244,7 +1250,9 @@ module diaglib
 !       orthonormalize them.
 !
         call get_time(t1)
-        call ortho_vs_x(.false.,n,ldu,n_act,space,space(1,i_beg),xx,xx)
+        call b_ortho_vs_x(n,ldu,n_act,space,bspace,space(1,i_beg))
+        call bvec(n,n_act,space(1,i_beg),bspace(1,i_beg))
+        call b_ortho(n,n_act,space(1,i_beg),bspace(1,i_beg))
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
       else
@@ -1257,6 +1265,7 @@ module diaglib
 !
         call dcopy(n_max*n,evec,1,space,1)
         call dcopy(n_max*n,b_evec,1,bspace,1)
+        call b_ortho(n,n_max,space,bspace)
         aspace = zero
         bspace = zero
         a_red  = zero
