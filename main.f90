@@ -13,13 +13,15 @@ program main
 !
   integer,  allocatable :: iseed(:)
   real(dp), allocatable :: eig(:), evec(:,:), diagonal(:), a_copy(:,:), s_copy(:,:), w(:)
+  real(dp), allocatable :: adiag(:), sigdiag(:) 
+  logical,  allocatable :: mask(:)
 !
 ! initialize:
 !
-  n      = 100
+  n      = 500
   n2     = 2*n
-  n_want = 1
-  n_eig  = 1 !min(2*n_want,n_want+5)
+  n_want = 10
+  n_eig  = min(2*n_want,n_want+5)
   tol    = 1.0e-10_dp
   shift  = 0.0_dp
   itmax  = 1000
@@ -39,6 +41,7 @@ program main
 ! allocate memory for the a, b, apb, amb, sigma, delta, spd, smd matrices:
 !
   allocate (aa(n,n), bb(n,n), apb(n,n), amb(n,n), sigma(n,n), delta(n,n), spd(n,n), smd(n,n))
+  allocate (adiag(n), sigdiag(n))
 !
 ! build a positive definite, symmetric apb, amb, sigma matrices:
 !
@@ -111,17 +114,24 @@ program main
   1000 format(t3,' eigenvalue # ',i6,': ',f12.6,/,t3,' eigenvector: ')
   close (10)
 !
-  ipos = 0
-  fac  = 1.0d20
   do i = 1, n
-    if ((aa(i,i) - sigma(i,i)).lt.fac) then
-      fac  = aa(i,i) - sigma(i,i)
-      ipos = i
-    end if
-  end do
+    adiag(i)   = aa(i,i)  
+    sigdiag(i) = sigma(i,i)
+  enddo
+!
+  diagonal = adiag - sigdiag
+!
+  allocate(mask(n))
+  mask = .true.
 !
   evec = 0.0d0
-  evec(ipos,1) = 1.0d0
+  do i = 1, n_eig
+    ipos = minloc(diagonal,dim=1,mask=mask)
+    mask(ipos) = .false.   
+    evec(ipos,i) = 1.0d0
+  enddo
+!
+  deallocate(mask)
 !
   sqrttwo = sqrt(2.0d0)
   call caslr_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec,ambvec,spdvec,smdvec,eig,evec,ok)

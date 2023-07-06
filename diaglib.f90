@@ -722,18 +722,15 @@ module diaglib
 !     perform this iteration's matrix-vector multiplication:
 !
       call get_time(t1)
-      call apbmul(n,n_act,vp(1,i_beg+n_rst),lvp(1,i_beg+n_rst))
-      call ambmul(n,n_act,vm(1,i_beg+n_rst),lvm(1,i_beg+n_rst))
-      call spdmul(n,n_act,vp(1,i_beg+n_rst),bvm(1,i_beg+n_rst))
-      call smdmul(n,n_act,vm(1,i_beg+n_rst),bvp(1,i_beg+n_rst))
+      call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+      call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+      call spdmul(n,n_act,vp(1,i_beg),bvm(1,i_beg))
+      call smdmul(n,n_act,vm(1,i_beg),bvp(1,i_beg))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrix 
 !
-!     call dgemm('t','n',ldu,n_act,n,one,vp,n,lvp(1,i_beg+n_rst),n,zero,epmat(1,i_beg+n_rst),lda)
-!     call dgemm('t','n',ldu,n_act,n,one,vm,n,lvm(1,i_beg+n_rst),n,zero,emmat(1,i_beg+n_rst),lda)
-!     call dgemm('t','n',ldu,n_act,n,one,vm,n,bvm(1,i_beg+n_rst),n,zero,smat(1,i_beg+n_rst),lda)
       call dgemm('t','n',ldu,ldu,n,one,vp,n,lvp,n,zero,epmat,lda)
       call dgemm('t','n',ldu,ldu,n,one,vm,n,lvm,n,zero,emmat,lda)
       call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)
@@ -741,14 +738,6 @@ module diaglib
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
 !
-      if (restart) then
-        stop ' restart nyi.'
-!       do i_eig = 1, n_rst
-!         a_red(i_eig,i_eig) = e_red(i_eig)
-!       end do
-!       restart = .false.
-!       n_rst   = 0
-      end if
       a_red = zero
       s_red = zero
       a_red(1:ldu,1:ldu)             = epmat(1:ldu,1:ldu)
@@ -767,7 +756,7 @@ module diaglib
 !     eigenvectors 
 !
       do i_eig = 1, n_max
-        eig(i_eig)      = 1.0/e_red(2*ldu - i_eig + 1)
+        eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
         up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
         um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
       end do
@@ -852,7 +841,6 @@ module diaglib
         end do
         ind   = n_max - n_act + 1
         call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
-!       call precnd(n,n_act,-eig(ind),r(1,ind),space(1,i_beg))
 !
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
@@ -864,10 +852,53 @@ module diaglib
         t_ortho = t_ortho + t2 - t1
       else
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
-        stop ' restart nyi.'
+        n_act = n_max 
+        vp = zero
+        vm = zero
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        do i_eig = 1, n_max
+          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+        end do
+        call ortho_cd(.false.,n,n_max,vp,xx,ok)
+        call ortho_cd(.false.,n,n_max,vm,xx,ok)
+        lvp   = zero
+        lvm   = zero
+        bvp   = zero
+        bvm   = zero
+        a_red = zero
+        s_red = zero
+        epmat = zero
+        emmat = zero
+        smat  = zero
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_rst = n_rst + 1
+          else
+            exit
+          end if
+        end do
+!
+        restart = .true.
       end if
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
 !
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
     return
   end subroutine caslr_driver
 !
