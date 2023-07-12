@@ -2,12 +2,12 @@
 #   Makefile
 #
 FC = gfortran
-FFLAGS = -fopenmp -Wall -std=f95 --pedantic -ftrapv
-#FFLAGS = -O0 -fimplicit-none  -Wall  -Wline-truncation  -Wcharacter-truncation  -Wsurprising  -Waliasing  -Wunused-parameter  -fwhole-file  -fcheck=all -g -std=f95  -pedantic  -fbacktrace
+#FFLAGS = -fopenmp -Wall -std=f95 --pedantic -ftrapv -fbacktrace -g
+FFLAGS = -O0 -fimplicit-none  -Wall  -Wline-truncation  -Wcharacter-truncation  -Wsurprising  -Waliasing  -Wunused-parameter  -fwhole-file  -fcheck=all -g -std=f95  -pedantic  -fbacktrace
 LIBS = -lblas -llapack 
 
-MODS   = real_precision.o diaglib.o
-OBJS   = utils.o main.o
+MODS   = real_precision.o utils.o diaglib.o
+OBJS   = main.o
 #
 all:    $(MODS) $(OBJS)
 	$(FC) $(FFLAGS) -o main.exe $(OBJS) $(MODS) $(LIBS)
