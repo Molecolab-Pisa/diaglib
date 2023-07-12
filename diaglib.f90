@@ -727,18 +727,11 @@ module diaglib
       call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
       call spdmul(n,n_act,vp(1,i_beg),bvm(1,i_beg))
       call smdmul(n,n_act,vm(1,i_beg),bvp(1,i_beg))
-!     call apbmul(n,n_act,vp(1,i_beg+n_rst),lvp(1,i_beg+n_rst))
-!     call ambmul(n,n_act,vm(1,i_beg+n_rst),lvm(1,i_beg+n_rst))
-!     call spdmul(n,n_act,vp(1,i_beg+n_rst),bvm(1,i_beg+n_rst))
-!     call smdmul(n,n_act,vm(1,i_beg+n_rst),bvp(1,i_beg+n_rst))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrix 
 !
-!     call dgemm('t','n',ldu,n_act,n,one,vp,n,lvp(1,i_beg+n_rst),n,zero,epmat(1,i_beg+n_rst),lda)
-!     call dgemm('t','n',ldu,n_act,n,one,vm,n,lvm(1,i_beg+n_rst),n,zero,emmat(1,i_beg+n_rst),lda)
-!     call dgemm('t','n',ldu,n_act,n,one,vm,n,bvm(1,i_beg+n_rst),n,zero,smat(1,i_beg+n_rst),lda)
       call dgemm('t','n',ldu,ldu,n,one,vp,n,lvp,n,zero,epmat,lda)
       call dgemm('t','n',ldu,ldu,n,one,vm,n,lvm,n,zero,emmat,lda)
       call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)

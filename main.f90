@@ -18,7 +18,7 @@ program main
 !
 ! initialize:
 !
-  n      = 200
+  n      = 500
   n2     = 2*n
   n_want = 10
   n_eig  = min(2*n_want,n_want+5)
@@ -26,7 +26,7 @@ program main
   shift  = 0.0_dp
   itmax  = 1000
   nmult  = 0
-  m_max  = 10
+  m_max  = 20
 !
 ! allocate memory. note that the matrix a is defined in the stack of module "utils".
 !
