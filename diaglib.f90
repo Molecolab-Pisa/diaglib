@@ -892,6 +892,15 @@ module diaglib
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
 !
+    call get_time(t1)
+    t_tot = t1 - t_tot
+    1000 format(t3,'timings for caslr (cpu/wall):   ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
     deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,a_red,a_copy,s_red,s_copy,e_red, &
                epmat,emmat,smat,up,um,eigp,eigm,bp,bm)
 !
@@ -1310,6 +1319,15 @@ module diaglib
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
 !
+    call get_time(t1)
+    t_tot = t1 - t_tot
+    1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
     deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,s_red,s_copy,e_red,smat,up,um,eigp,eigm,bp,bm)
 !
 1050 format(t5,'----------------------------------------',/,&

@@ -66,6 +66,12 @@ program main
   do i = 1, n
     sigma(i,i) = sigma(i,i) + 1.0d0
   end do
+!fl
+  sigma = 0.0d0
+  do i = 1, n
+    sigma(i,i) = 1.0d0
+  end do
+  delta = 0.0d0
 !
 ! build antisymmetric delta:
 !
@@ -113,7 +119,7 @@ program main
     write(10,*)
   end do
 !
-  close (10)
+! close (10)
 !
   do i = 1, n
     adiag(i)   = aa(i,i)  
@@ -126,7 +132,9 @@ program main
   allocate(mask(n))
   mask = .true.
 !
-  evec = 0.0d0
+  call random_number(evec)
+! evec = 0.0d0
+  evec = (evec - 0.5d0) * 0.01d0
   do i = 1, n_eig
     ipos = minloc(diagonal,dim=1,mask=mask)
     mask(ipos) = .false.   
@@ -150,7 +158,9 @@ program main
   allocate(mask(n))
   mask = .true.
 !
-  evec = 0.0d0
+  call random_number(evec)
+! evec = 0.0d0
+  evec = (evec - 0.5d0) * 0.01d0
   do i = 1, n_eig
     ipos = minloc(diagonal,dim=1,mask=mask)
     mask(ipos) = .false.   
