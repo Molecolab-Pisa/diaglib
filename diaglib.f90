@@ -850,6 +850,15 @@ module diaglib
         t_ortho = t_ortho + t2 - t1
       else
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        restart = .true.
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+!
         n_act = n_max 
         vp = zero
         vm = zero
@@ -861,8 +870,10 @@ module diaglib
           vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
           vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
         end do
+!
         call ortho_cd(.false.,n,n_max,vp,xx,ok)
         call ortho_cd(.false.,n,n_max,vm,xx,ok)
+!
         lvp   = zero
         lvm   = zero
         bvp   = zero
@@ -873,21 +884,6 @@ module diaglib
         emmat = zero
         smat  = zero
 !
-!       initialize indexes back to their starting values 
-!
-        ldu   = 0
-        i_beg = 1
-        m_dim = 1
-        n_rst = 0
-        do i_eig = 1, n_targ
-          if (done(i_eig)) then
-            n_rst = n_rst + 1
-          else
-            exit
-          end if
-        end do
-!
-        restart = .true.
       end if
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
@@ -1303,11 +1299,45 @@ module diaglib
         t_ortho = t_ortho + t2 - t1
       else
 !
-        write(6,*) ' restart nyi.'
-        stop
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
         restart = .true.
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+!        
+        n_act = n_max 
+        vp = zero
+        vm = zero
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        do i_eig = 1, n_max
+          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+        end do
+!
+        lvp   = zero
+        lvm   = zero
+!
+        call apbvec(n,n_max,vp,lvp)
+        call b_ortho(n,n_max,vp,lvp)
+        call ambvec(n,n_max,vm,lvm)
+        call b_ortho(n,n_max,vm,lvm)
+!
+        bvp   = zero
+        bvm   = zero
+        s_red = zero
+        smat  = zero
+!        
       end if
+!      
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
+!      
     end do
 !
     deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,s_red,s_copy,e_red,smat,up,um,eigp,eigm,bp,bm)
