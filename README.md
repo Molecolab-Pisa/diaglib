@@ -1,7 +1,7 @@
 # diaglib
 
 ## Authors and acknowledgment  
-Ivan Gianni', Tommaso Nottoli, and Filippo Lipparini  
+Ivan Gianni', Tommaso Nottoli, Riccardo Alessandro, Federica Pes, and Filippo Lipparini  
 MoLECoLab Pisa  
 Department of Chemistry and Industrial Chemistry  
 University of Pisa  
