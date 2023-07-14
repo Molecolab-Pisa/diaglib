@@ -18,9 +18,9 @@ program main
 !
 ! initialize:
 !
-  n      = 500
+  n      = 1000
   n2     = 2*n
-  n_want = 10
+  n_want = 6
   n_eig  = min(2*n_want,n_want+5)
   tol    = 1.0e-10_dp
   shift  = 0.0_dp
@@ -66,12 +66,6 @@ program main
   do i = 1, n
     sigma(i,i) = sigma(i,i) + 1.0d0
   end do
-!fl
-  sigma = 0.0d0
-  do i = 1, n
-    sigma(i,i) = 1.0d0
-  end do
-  delta = 0.0d0
 !
 ! build antisymmetric delta:
 !
@@ -107,10 +101,9 @@ program main
   allocate (work(lwork))
   s_copy = s
   a_copy = a
-  write(6,*) 'calling the big dsygv'
   call dsygv(1,'V','L',n2,s_copy,n2,a_copy,n2,w,work,lwork,info)
   deallocate (work)
-!
+ 
   open (unit = 10, file = 'lapack.txt', form = 'formatted', access = 'sequential')
   do i = 1, n_want
     write(10,1000) i, 1.0d0/w(n2-i+1)
@@ -118,9 +111,9 @@ program main
     write(10,'(10f12.6)') s_copy(:,n2-i+1)
     write(10,*)
   end do
-!
-! close (10)
-!
+ 
+  close (10)
+ 
   do i = 1, n
     adiag(i)   = aa(i,i)  
     sigdiag(i) = sigma(i,i)
@@ -129,46 +122,13 @@ program main
   diagonal = adiag - sigdiag
 !
   1000 format(t3,' eigenvalue # ',i6,': ',f12.6,/,t3,' eigenvector: ')
-  allocate(mask(n))
-  mask = .true.
 !
-  call random_number(evec)
-! evec = 0.0d0
-  evec = (evec - 0.5d0) * 0.01d0
-  do i = 1, n_eig
-    ipos = minloc(diagonal,dim=1,mask=mask)
-    mask(ipos) = .false.   
-    evec(ipos,i) = 1.0d0
-  enddo
+! test caslr for various guesses.
 !
-  deallocate(mask)
-  call caslr_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec,ambvec,spdvec,smdvec,lrprec_1,eig,evec,ok)
-  open (unit = 10, file = 'gendav.txt', form = 'formatted', access = 'sequential')
-!
-  sqrttwo = sqrt(2.0d0)
-  do i = 1, n_want
-    write(10,1000) i, eig(i)
-    if (evec(1,i) .lt. 0.0d0) evec(:,i) = - evec(:,i)
-    write(10,'(10f12.6)') evec(:,i)/sqrttwo
-    write(10,*)
+  do i = 2, 6
+    call guess_evec(i,n2,n_eig,diagonal,evec)
+    call caslr_eff_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec,ambvec,spdvec,smdvec,lreffprec,eig,evec,ok)
   end do
-!
-  close (10)
-!
-  allocate(mask(n))
-  mask = .true.
-!
-  call random_number(evec)
-! evec = 0.0d0
-  evec = (evec - 0.5d0) * 0.01d0
-  do i = 1, n_eig
-    ipos = minloc(diagonal,dim=1,mask=mask)
-    mask(ipos) = .false.   
-    evec(ipos,i) = 1.0d0
-  enddo
-!
-  deallocate(mask)
-  call caslr_eff_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec,ambvec,spdvec,smdvec,lreffprec,eig,evec,ok)
   open (unit = 10, file = 'newdav.txt', form = 'formatted', access = 'sequential')
   do i = 1, n_want
     write(10,1000) i, eig(i)
@@ -351,3 +311,99 @@ end program main
 !
     return
   end subroutine lreffprec
+!
+  subroutine guess_evec(iwhat,n,m,diagonal,evec)
+    use real_precision
+    implicit none
+    integer,                  intent(in)    :: iwhat, n, m
+    real(dp), dimension(n),   intent(in)    :: diagonal
+    real(dp), dimension(n,m), intent(inout) :: evec
+!
+!   guess the eigenvector.
+!
+    integer              :: i, ipos, n_seed
+    integer, allocatable :: iseed(:)
+    logical, allocatable :: mask(:)
+!
+!   initialize a random number generator in a predictible way.
+!
+    call random_seed(size=n_seed)
+    allocate (iseed(n_seed))
+    iseed = 1
+    call random_seed(put=iseed)
+    deallocate (iseed)
+!
+    evec = 0.0_dp
+!
+    allocate (mask(n))
+!
+    if (iwhat.eq.1) then
+!
+!     get the minimum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = minloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = 1.0d0
+      enddo
+    else if (iwhat.eq.2) then
+!
+!     get the maximum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = maxloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = 1.0d0
+      enddo
+    else if (iwhat.eq.3) then
+!
+!     random vector between 0 and 1
+!
+      call random_number(evec)
+    else if (iwhat.eq.4) then
+!
+!     random vector between -0.5 and 0.5
+!
+      call random_number(evec)
+      evec = evec - 0.50_dp
+    else if (iwhat.eq.5) then
+!
+      call random_number(evec)
+      evec = evec * 0.01_dp
+!
+!     get the maximum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = maxloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = evec(ipos,i) + 1.0d0
+      enddo
+
+    else if (iwhat.eq.6) then
+!
+      call random_number(evec)
+      evec = evec * 0.01_dp
+!
+!     get the minimum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = minloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = evec(ipos,i) + 1.0d0
+      enddo
+    end if
+    return
+  end subroutine guess_evec
+
+
+
+
+
+
+
+
+

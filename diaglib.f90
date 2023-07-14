@@ -2756,8 +2756,8 @@ module diaglib
     200 format(t3,20d12.4)
 !
     do i = 1, n
-      if (iform.eq.1) write(6,100) mat(i,:)
-      if (iform.eq.2) write(6,200) mat(i,:)
+      if (iform.eq.1) write(6,100) mat(i,1:n)
+      if (iform.eq.2) write(6,200) mat(i,1:n)
     end do
     return
   end subroutine prtmat
