@@ -457,7 +457,7 @@ module diaglib
         write(6,*)
       end if
       if (all(done(1:n_targ))) then
-        call dcopy(n*n_max,ax_new,1,evec,1)
+        call dcopy(n*n_max,x_new,1,evec,1)
         ok = .true.
         exit
       end if
@@ -585,10 +585,12 @@ module diaglib
 !
     integer               :: n_frozen
 !
-    integer               :: it, i_eig
+    integer               :: i, j, k, it, i_eig
+!
+    integer               :: lwork_svd
 !
     real(dp)              :: sqrtn, tol_rms, tol_max
-    real(dp)              :: xx(1)
+    real(dp)              :: xx(1), lw_svd(1)
 !
 !   arrays to control convergence and orthogonalization
 !
@@ -607,6 +609,12 @@ module diaglib
 !
     real(dp), allocatable :: a_red(:,:), a_copy(:,:), s_red(:,:), s_copy(:,:), e_red(:)
     real(dp), allocatable :: epmat(:,:), emmat(:,:), smat(:,:)
+!
+!   auxiliary quantities for the helmich-paris algorithm
+!
+    real(dp), allocatable :: u_1(:,:), sv_1(:), vt_1(:,:), u_2(:,:), sv_2(:), vt_2(:,:), &
+                             ept(:,:), emt(:,:), cmat(:,:), xpt(:,:), xmt(:,:), scr(:,:)
+    real(dp), allocatable :: work_svd(:)
 !
 !   restarting variables
 !
@@ -655,6 +663,18 @@ module diaglib
 !
     allocate (up(lda,n_max), um(lda,n_max), eigp(n,n_max), eigm(n,n_max), bp(n,n_max), bm(n,n_max), stat = istat)
     call check_mem(istat)
+!
+!   allocate additional memory for the helmich-paris algorithm:
+!
+    if (i_alg.eq.1) then
+      allocate (u_1(lda,lda), sv_1(lda), vt_1(lda,lda), u_2(lda,lda), sv_2(lda), vt_2(lda,lda), &
+                ept(lda,lda), emt(lda,lda), cmat(lda,lda), xpt(lda,lda), xmt(lda,lda), scr(lda,lda), stat = istat)
+      call check_mem(istat)
+!
+      call dgesvd('a','a',lda,lda,u_1,lda,sv_1,u_1,lda,vt_1,lda,lw_svd,-1,info)
+      lwork_svd = int(lw_svd(1))
+      allocate (work_svd(lwork_svd))
+    end if
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
 !
@@ -743,22 +763,104 @@ module diaglib
       s_red(1:ldu,ldu+1:2*ldu)       = transpose(smat(1:ldu,1:ldu))
       s_red(ldu+1:2*ldu,1:ldu)       = smat(1:ldu,1:ldu)
 !
-!     diagonalize the reduced matrix
-!
       call get_time(t1)
-      call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
+      if (i_alg.eq.0) then
+!
+!       default algorithm: solve the 2n-dimensional inverse problem.
+!
+        call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
+!
+!       extract the eigenvalues and compute the ritz approximation to the
+!       eigenvectors 
+!
+        do i_eig = 1, n_max
+          eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
+          up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
+          um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
+!fl
+!         write(6,*) 'eig: ', eig(i_eig)
+!         write(6,*) 'up ', i_eig
+!         write(6,'(10f12.6)') up(1:ldu,i_eig)
+!         write(6,*) 'um ', i_eig
+!         write(6,'(10f12.6)') um(1:ldu,i_eig)
+        end do
+!
+      else if (i_alg.eq.1) then
+!     
+!       helmich-paris algorithm
+!
+        scr = smat
+!
+!       compute the svd of smat
+!
+        call dgesvd('a','a',ldu,ldu,scr,lda,sv_1,u_1,lda,vt_1,lda,work_svd,lwork_svd,info)
+!
+!       divide the columns of u_1 and the rows of v_1 by the square root of the singular values
+!
+        do i = 1, ldu
+          u_1(:,i) = u_1(:,i) / sqrt(sv_1(i))
+          vt_1(i,:) = vt_1(i,:) / sqrt(sv_1(i))
+        end do
+!
+!       for the projected ep and em matrices:
+!
+        call dgemm('n','t',ldu,ldu,ldu,one,epmat,lda,vt_1,lda,zero,scr,lda)
+        call dgemm('n','n',ldu,ldu,ldu,one,vt_1,lda,scr,lda,zero,ept,lda)
+        call dgemm('n','n',ldu,ldu,ldu,one,emmat,lda,u_1,lda,zero,scr,lda)
+        call dgemm('t','n',ldu,ldu,ldu,one,u_1,lda,scr,lda,zero,emt,lda)
+!
+!       compute their cholesky decomposition:
+!
+        call dpotrf('l',ldu,ept,lda,info)
+        call dpotrf('l',ldu,emt,lda,info)
+!
+!       assemble c = (l^-)^t l^+
+!
+        do j = 1, ldu
+          do i = 1, ldu 
+            cmat(i,j) = zero
+            do k = max(i,j), ldu
+              cmat(i,j) = cmat(i,j) + emt(k,i) * ept(k,j)
+            end do
+          end do
+        end do
+!
+!       compute its svd:
+!
+        call dgesvd('a','a',ldu,ldu,cmat,lda,sv_2,u_2,lda,vt_2,lda,work_svd,lwork_svd,info)
+!
+!       assemble xpt and xmt
+!
+        do i = 2, ldu
+          do j = 1, i-1
+            ept(j,i) = zero
+            emt(j,i) = zero
+          end do
+        end do
+        call dgemm('n','n',ldu,ldu,ldu,one,emt,lda,u_2,lda,zero,scr,lda)
+        call dgemm('t','n',ldu,ldu,ldu,one,vt_1,lda,scr,lda,zero,xpt,lda)
+        call dgemm('n','t',ldu,ldu,ldu,one,ept,lda,vt_2,lda,zero,scr,lda)
+        call dgemm('n','n',ldu,ldu,ldu,one,u_1,lda,scr,lda,zero,xmt,lda)
+!
+!       normalize and gather the eigenvalues and eigenvectors:
+!
+        do i_eig = 1, n_max
+          eig(i_eig)  = sv_2(ldu - i_eig + 1)
+          up(1:ldu,i_eig) = xpt(1:ldu,ldu - i_eig + 1)/(sqrt(two) * sv_2(ldu - i_eig + 1))
+          um(1:ldu,i_eig) = xmt(1:ldu,ldu - i_eig + 1)/(sqrt(two) * sv_2(ldu - i_eig + 1))
+!fl
+!         write(6,*) 'eig: ', eig(i_eig)
+!         write(6,*) 'up ', i_eig
+!         write(6,'(10f12.6)') up(1:ldu,i_eig)
+!         write(6,*) 'um ', i_eig
+!         write(6,'(10f12.6)') um(1:ldu,i_eig)
+        end do
+!
+!       gather the eigenvalues
+!
+      end if
       call get_time(t2)
       t_diag = t_diag + t2 - t1
-!
-!     extract the eigenvalues and compute the ritz approximation to the
-!     eigenvectors 
-!
-      do i_eig = 1, n_max
-        eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
-        up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
-        um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
-      end do
-!
       call dgemm('n','n',n,n_max,ldu,one,vp,n,up,lda,zero,eigp,n)
       call dgemm('n','n',n,n_max,ldu,one,vm,n,um,lda,zero,eigm,n)
 !
@@ -2446,7 +2548,7 @@ module diaglib
     external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
-    logical, parameter     :: useqr = .true.
+    logical, parameter     :: useqr = .false.
 !
 !   allocate space for the overlap between x and u.
 !
@@ -2483,6 +2585,7 @@ module diaglib
       call dgemm('t','n',m,k,n,one,x,n,u,n,zero,xu,m)
       xu_norm = dnrm2(m*k,xu,1)
       done    = xu_norm.lt.tol_ortho
+!     write(6,*) it, xu_norm
 !
 !     if things went really wrong, abort.
 !
