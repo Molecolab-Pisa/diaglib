@@ -1470,6 +1470,379 @@ module diaglib
     return
   end subroutine caslr_eff_driver
 !
+  subroutine ssf_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,diagonal, &
+                        apbvec,ambvec,eig,evec,ok)
+!
+!   main driver for the strattman, scuseria, and frisch algorithm.
+!
+!   input variables:
+!   ================
+!
+!   verbose:  logical, whether to print various information at each 
+!             iteration (eigenvalues, residuals...).
+!
+!   n:        integer, size of the matrix to be diagonalized.
+!
+!   n_targ:   integer, number of required eigenpairs.
+!
+!   n_max:    integer, maximum size of the search space. should be 
+!             >= n_targ. note that eig and evec should be allocated 
+!             n_max and (n,n_max) rather than n_targ and (n,n_targ). 
+!             for better convergence, a value larger than n_targ (eg.,
+!             n_targ + 10) is recommended.
+!   
+!   max_iter: integer, maximum allowed number of iterations.
+!
+!   tol:      double precision real, the convergence threshold.
+!
+!   max_dav:  integer. maximum allowed number of iterations before a 
+!             restart is forced. 
+!             when n_max eigenvalues are searched, this implies a maximum
+!             dimension of the expansion subspace of n_max * max_dav.
+!
+!   diagonal: the diagonal of a, to be used as a preconditioner.
+!
+!   apbvec:   external subroutine that performs the (a+b) matrix-vector
+!             multiplication
+!
+!   ambvec:   external subroutine that performs the (a-b) matrix-vector
+!             multiplication
+!
+!   output variables:
+!   =================
+!
+!   eig:      double precision array of size n_max. if ok is true, 
+!             the computed eigenvalues in asceding order.
+!
+!   evec:     double precision array of size (n,n_max,2). 
+!             if ok is true, in output the computed right and left eigenvectors,
+!             in the first and second (n,n_max) block, respectively.
+!
+!   ok:       logical, true if davidson converged.
+!
+    implicit none
+    logical,                        intent(in)    :: verbose
+    integer,                        intent(in)    :: n, n_targ, n_max
+    integer,                        intent(in)    :: max_iter, max_dav
+    real(dp),                       intent(in)    :: tol
+    real(dp), dimension(n),         intent(in)    :: diagonal
+    real(dp), dimension(n_max),     intent(inout) :: eig
+    real(dp), dimension(n,n_max,2), intent(inout) :: evec
+    logical,                        intent(inout) :: ok
+    external                                      :: apbvec, ambvec
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg, ind1, ind2
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: i, j, it, i_eig
+!
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: xx(1)
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+    real(dp), allocatable :: v(:,:), apbv(:,:), ambv(:,:) 
+    real(dp), allocatable :: r_l(:,:), r_r(:,:), r_norm(:,:)
+!
+!   eigenvectors of the reduced problem 
+!
+    real(dp), allocatable :: u_l(:,:), u_r(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: epmat(:,:), emmat(:,:), e_red(:)
+!
+!   copy of the eigenvectors at the previous iteration:
+!
+    real(dp), allocatable :: evec_old(:,:,:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dnrm2, dgemm, dsyev
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (v(n,lda), apbv(n,lda), ambv(n,lda), r_l(n,n_max), r_r(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues/eigenvectors:
+!
+    allocate (e_red(lda), epmat(lda,lda), emmat(lda,lda), u_r(lda,lda), &
+              u_l(lda,lda), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for a copy of the old eigenvectors:
+!
+    allocate (evec_old(n,n_max,2), stat = istat)
+    call check_mem(istat)
+!
+!   set a few parameters.
+!
+    n_act   = n_max
+    tol_rms = tol
+    tol_max = ten * tol
+    done    = .false.
+    ind     = 1
+    i_beg   = 1
+    m_dim   = 2
+    ldu     = 0
+    restart = .false.
+!
+!   clean up the expansion space and make a guess:
+!
+    v = zero
+    do i_eig = 1, 2*n_act
+      v(i_eig,i_eig) = one
+    end do
+!   call guess_evec(1,n,2*n_act,diagonal,v)
+!
+!   clean up:
+!
+    evec     = zero
+    evec_old = zero
+    apbv     = zero
+    ambv     = zero
+    epmat    = zero
+    emmat    = zero
+    r_norm   = zero
+    e_red    = zero
+    u_r      = zero
+    u_l      = zero
+    r_r      = zero
+    r_l      = zero
+!
+!   main loop
+!
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     save the previous eigenvectors and update the dimension of the subspace:
+!
+      evec_old = evec
+      ldu      = ldu + 2*n_act
+!
+!     perform the required matrix-vector multiplications:
+!
+      call apbvec(n,2*n_act,v(1,i_beg),apbv(1,i_beg))
+      call ambvec(n,2*n_act,v(1,i_beg),ambv(1,i_beg))
+!
+!     build the reduced matrices:
+!
+      call dgemm('t','n',ldu,ldu,n,one,v,n,apbv,n,zero,epmat,lda)
+      call dgemm('t','n',ldu,ldu,n,one,v,n,ambv,n,zero,emmat,lda)
+!
+!     now, compute the left and right eigenvectors of the non-hermitian eigenvalue
+!     problem
+!
+!     (a-b) (a+b) u_r = w^2 u_r
+!     (a+b) u_r = w u_l
+!
+!     by first transforming it into a symmetric problem and by diagonalizing
+!     (a-b)^1/2 (a+b) (a-b)^1/2.
+!
+!     start by computing (a-b)^1/2:
+!
+      u_r = emmat
+      call dsyev('v','u',ldu,u_r,lda,e_red,work,lwork,info)
+!
+!     compute the square root of the eigenvalues:
+!
+      do i = 1, ldu
+        if (e_red(i).lt.zero) then
+          write(6,*) 'warning: negative eigenvalues in A - B!'
+          e_red(i) = sqrt(abs(e_red(i)))
+        else
+          e_red(i) = sqrt(e_red(i))
+        end if
+      end do
+!
+!     now, assemble (a-b)^1/2:
+!
+      do j = 1, ldu
+        do i = 1, ldu
+          u_l(i,j) = u_r(j,i) * e_red(i)
+        end do
+      end do
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,u_r,lda,u_l,lda,zero,emmat,lda)
+!
+!     assemble the symmetric matrix:
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,emmat,lda,epmat,lda,zero,u_r,lda)
+      call dgemm('n','n',ldu,ldu,ldu,one,u_r,lda,emmat,lda,zero,u_l,lda)
+!
+!     diagonalize:
+!
+      call dsyev('v','u',ldu,u_l,lda,e_red,work,lwork,info)
+!
+!     gather the eigenvalues, and then assemble the right eigenvectors:
+!
+      do i_eig = 1, n_max
+        eig(i_eig) = sqrt(e_red(i_eig))
+      end do
+      call dgemm('n','n',ldu,ldu,ldu,one,emmat,lda,u_l,lda,zero,u_r,lda)
+!
+!     assemble the left eigenvectors:
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,epmat,lda,u_r,lda,zero,u_l,lda)
+      do i = 1, ldu
+        u_l(:,i) = u_l(:,i)/sqrt(e_red(i))
+      end do
+!
+!     we have now solved the rayleigh-ritz problem. 
+!     compute the approximated right and left eigenvectors:
+!
+      call dgemm('n','n',n,n_max,ldu,one,v,n,u_r,lda,zero,evec,n)
+      call dgemm('n','n',n,n_max,ldu,one,v,n,u_l,lda,zero,evec(1,1,2),n)
+!
+!     before we bi-orthonormalize the eigenvectors, let us compute the ssf
+!     residuals, i.e., 
+!
+!     r_l = (a+b)x_r - w x_l
+!     r_r = (a-b)x_l - w x_r
+!
+      call dgemm('n','n',n,n_max,ldu,one,apbv,n,u_r,lda,zero,r_l,n)
+      call dgemm('n','n',n,n_max,ldu,one,ambv,n,u_l,lda,zero,r_r,n)
+      do i_eig = 1, n_max
+        r_r(:,i_eig) = r_r(:,i_eig) - eig(i_eig) * evec(:,i_eig,1)
+        r_l(:,i_eig) = r_l(:,i_eig) - eig(i_eig) * evec(:,i_eig,2)
+      end do
+!
+!     bi-orthonormalize:
+!
+      call bi_ortho(n,n_max,evec,evec(1,1,2))
+!
+!     compute the norm of the residuals and check converge:
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        r_norm(1,i_eig) = dnrm2(n,r_r(:,i_eig),1) + dnrm2(n,r_l(:,i_eig),1)
+        r_norm(2,i_eig) = maxval(abs(r_r(:,i_eig))) + maxval(abs(r_l(:,i_eig)))
+      end do
+      do i_eig = 1, n_targ
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information:
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, eig(i_eig), r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        exit
+      end if
+!
+!     update the subspace
+!
+      if (m_dim .lt. dim_dav) then
+!
+!       add 2*n_act new vectors to the expansion subspace:
+!
+        m_dim = m_dim + 2
+        i_beg = i_beg + 2 * n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        do i_eig = 1, n_act
+          ind1 = i_beg + i_eig - 1
+          ind2 = ind1  + n_act
+          do i = 1, n
+            v(i,ind1) = r_r(i,ind+i_eig-1)/(eig(ind) - diagonal(i))
+            v(i,ind2) = r_l(i,ind+i_eig-1)/(eig(ind) - diagonal(i))
+          end do
+        end do
+!
+!       orthogonalize the new vectors to the old ones:
+!
+        call ortho_vs_x(.false.,n,ldu,2*n_act,v,v(1,i_beg),xx,xx)
+      else
+        stop 'nyi.'
+      end if
+    end do
+!
+    deallocate (e_red)
+    deallocate (work,tau)
+    deallocate (done,v,apbv,ambv,r_norm)
+    deallocate (epmat,emmat,r_l,r_r,u_r,u_l)
+    deallocate (evec_old)
+    return
+  end subroutine ssf_driver
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
                              shift,matvec,precnd,eig,evec,ok)
 !
@@ -2447,6 +2820,7 @@ module diaglib
         return
       end if
       call dgemm('t','n',m,m,n,one,u,n,u,n,zero,metric,m)
+      msave = metric
 !
 !   compute the cholesky factorization of the metric.
 !
@@ -2502,7 +2876,7 @@ module diaglib
 !
     ok = .true.
 !
-    deallocate (metric)
+    deallocate (metric, msave)
     return
   end subroutine ortho_cd
 !
@@ -2547,7 +2921,7 @@ module diaglib
     real(dp)               :: dnrm2
     external               :: dnrm2, dgemm
 !   
-    integer, parameter     :: maxit = 10
+    integer, parameter     :: maxit = 20
     logical, parameter     :: useqr = .false.
 !
 !   allocate space for the overlap between x and u.
@@ -2585,7 +2959,7 @@ module diaglib
       call dgemm('t','n',m,k,n,one,x,n,u,n,zero,xu,m)
       xu_norm = dnrm2(m*k,xu,1)
       done    = xu_norm.lt.tol_ortho
-!     write(6,*) it, xu_norm
+!     write(6,*) it, xu_norm, tol_ortho
 !
 !     if things went really wrong, abort.
 !
@@ -2677,6 +3051,76 @@ module diaglib
 !
     return
   end subroutine b_ortho_vs_x
+!
+  
+  subroutine bi_ortho(n,m,u_l,u_r)
+    implicit none
+!
+!   given two set of vectors, biorthogonalize them by computing the LU decomposition
+!   of the overlap matrix and then solving
+!
+!     u_l = u_l l^t
+!     u_r = u_r u
+!
+    integer,                  intent(in)    :: n, m
+    real(dp), dimension(n,m), intent(inout) :: u_l, u_r
+!
+    integer               :: i, it, istat
+    real(dp)              :: fac, m_norm
+    logical               :: done
+    integer,  parameter   :: maxit = 10
+!
+    integer,  allocatable :: ipiv(:)
+    real(dp), allocatable :: over(:,:)
+!
+    real(dp)              :: dnrm2
+    external              :: dnrm2
+!
+!   allocate memory.
+!
+    allocate (over(m,m), ipiv(m), stat = istat)
+    call check_mem(istat)
+!
+    done = .false.
+    it   = 0
+!
+    do while (.not. done)
+      it = it + 1
+!
+!     compute the overlap:
+!
+      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,over,m)
+!
+!   compute its lu decomposition:
+!
+      call dgetrf(m,m,over,m,ipiv,info)
+!
+!   swap the eigenvectors to handle pivoting:
+!
+      if (m.gt.1) then
+        call dlaswp(m,u_l,n,1,m,ipiv,1)
+        call dlaswp(m,u_r,n,1,m,ipiv,1)
+      end if
+!
+!   solve the triangular systems:
+!
+      call dtrsm('r','l','t','u',n,m,one,over,m,u_l,n)
+      call dtrsm('r','u','n','n',n,m,one,over,m,u_r,n)
+!
+!   compute the new overlap:
+!
+      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,over,m)
+      m_norm = dnrm2(m*m,over,1) - sqrt(dble(m))
+      done   = abs(m_norm).lt.tol_ortho
+!
+!     if things went really wrong, abort.
+!
+      if (it.gt.maxit) stop ' catastrophic failure of bi_ortho'
+    end do
+!
+    deallocate(over, ipiv, stat = istat)
+    return
+  end subroutine bi_ortho
 !
 ! utilities
 ! =========

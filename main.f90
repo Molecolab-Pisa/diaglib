@@ -11,9 +11,9 @@ program main
 !
 ! initialize:
 !
-  n      = 2000
-  n_want = 100
-  tol    = 1.0e-6_dp
+  n      = 5000
+  n_want = 50
+  tol    = 1.0e-8_dp
   itmax  = 1000
   m_max  = 20
   nmult  = 0
@@ -22,8 +22,8 @@ program main
 !
 ! call test_symm(.true.,n,n_want,tol,itmax,m_max)
 ! call test_geneig(.true.,n,n_want,tol,itmax,m_max)
-! call test_scflr(.true.,n,n_want,tol,itmax,m_max)
-  call test_caslr(.false.,n,n_want,tol,itmax,m_max)
+  call test_scflr(.false.,n,n_want,tol,itmax,m_max)
+! call test_caslr(.false.,n,n_want,tol,itmax,m_max)
 !
 end program main
   subroutine mmult(n,m,x,ax)
@@ -662,7 +662,7 @@ end program main
   subroutine test_scflr(check_lapack,n,n_want,tol,itmax,m_max)
     use real_precision
     use utils
-    use diaglib, only : caslr_driver, caslr_eff_driver
+    use diaglib, only : caslr_driver, caslr_eff_driver, ssf_driver
     implicit none
     logical,  intent(in) :: check_lapack
     integer,  intent(in) :: n, n_want, itmax, m_max
@@ -676,7 +676,7 @@ end program main
     integer  :: i, j, lwork, info
     integer  :: n2, n_eig
     real(dp) :: sqrttwo, lw(1)
-    real(dp), allocatable :: evec(:,:), eig(:), diagonal(:)
+    real(dp), allocatable :: evec(:,:), eig(:), diagonal(:), evec_ssf(:,:,:)
     real(dp), allocatable :: work(:), w(:)
 !
     external apbvec, ambvec, spdvec, smdvec, lrprec_1, lrprec_2
@@ -698,17 +698,17 @@ end program main
 !   build a positive definite, symmetric apb, amb matrices:
 !  
     do i = 1, n
-      apb(i,i) = 5.0_dp + real(i,kind=dp)
+      apb(i,i) = 6.0_dp + real(i,kind=dp)
       do j = 1, i - 1
         apb(j,i) = 1.0_dp/real(i+j,kind=dp)
         apb(i,j) = apb(j,i)
       end do 
     end do
     do i = 1, n
-      amb(i,i) =2.0_dp + dble(i)
+      amb(i,i) =3.0_dp + dble(i)
       do j = 1, i - 1
-        apb(j,i) = 0.2_dp/dble(i+j)
-        apb(i,j) = apb(j,i)
+        amb(j,i) = 0.2_dp/dble(i+j)
+        amb(i,j) = amb(j,i)
       end do 
     end do
 !  
@@ -781,21 +781,35 @@ end program main
 !   gather diag(a) - diag(sigma):
 !
     do i = 1, n
-      diagonal(i) = aa(i,i) - sigma(i,i)
+      diagonal(i) = aa(i,i)! - sigma(i,i)
     enddo
 !
 !   for better convergence, we seek more eigenpairs and stop the iterations when the
 !   required ones are converged.
 !
-    n_eig = min(2*n_want, n_want + 5)
+!   n_eig = min(2*n_want, n_want + 5)
+    n_eig = n_want
 !
 !   allocate memory for the eigenvectors and eigenvalues:
 !
-    allocate (evec(n2,n_eig), eig(n_eig))
+    allocate (evec(n2,n_eig), eig(n_eig), evec_ssf(n,n_eig,2))
+!
+!   call the ssf driver; note that a different guessing strategy is used, and it is
+!   done inside the driver. 
+!
+    call ssf_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,diagonal,apbvec,ambvec,eig,evec_ssf,ok)
 !
 !   make a guess for the eigenvector (see guess_evec for more information)
 !
-    call guess_evec(4,n2,n_eig,diagonal,evec)
+    do i = 1, n
+      diagonal(i) = aa(i,i) - sigma(i,i)
+    enddo
+!
+!    call guess_evec(4,n2,n_eig,diagonal,evec)
+    evec = 0.0_dp
+    do i = 1, n_eig
+      evec(i,i) = 1.0_dp
+    end do
 !
 !   call the traditional solver:
 !
@@ -816,7 +830,11 @@ end program main
 !
 !   make a guess for the eigenvector (see guess_evec for more information)
 !
-    call guess_evec(4,n2,n_eig,diagonal,evec)
+!   call guess_evec(4,n2,n_eig,diagonal,evec)
+    evec = 0.0_dp
+    do i = 1, n_eig
+      evec(i,i) = 1.0_dp
+    end do
 !
 !   call the modified solver:
 !
