@@ -141,11 +141,11 @@ module diaglib
 !
 ! useful constants
 !
-  real(dp), parameter    :: zero = 0.0_dp, one = 1.0_dp, ten = 10.0_dp
+  real(dp), parameter    :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
 !
 ! convergence thresholds for orthogonalization
 !
-  real(dp), parameter    :: tol_ortho = 1.0e-14_dp
+  real(dp), parameter    :: tol_ortho = 1.0e-13_dp
 ! 
 ! memory and info for lapack routines
 !
@@ -457,7 +457,7 @@ module diaglib
         write(6,*)
       end if
       if (all(done(1:n_targ))) then
-        call dcopy(n*n_max,ax_new,1,evec,1)
+        call dcopy(n*n_max,x_new,1,evec,1)
         ok = .true.
         exit
       end if
@@ -548,6 +548,1299 @@ module diaglib
     return
 
   end subroutine lobpcg_driver
+!
+  subroutine ssf_driver(verbose,n,n_guess,n_targ,n_max,max_iter,tol,max_dav, &
+                        apbmul,ambmul,precnd,eig,evec,ok)
+    use utils
+    implicit none
+    logical, intent(in)                           :: verbose
+    integer,                        intent(in)    :: n, n_guess, n_targ, n_max
+    integer,                        intent(in)    :: max_iter, max_dav
+    real(dp),                       intent(in)    :: tol
+    real(dp), dimension(n_max),     intent(inout) :: eig
+    real(dp), dimension(n,n_max,2), intent(inout) :: evec
+    logical,                        intent(inout) :: ok
+    external                                      :: apbmul, ambmul, spdmul, smdmul, &
+                                                     lrprec
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda, lda2
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: i, j, k, it, i_eig
+!
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: xx(1), lw_svd(1)
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+    real(dp), allocatable :: v(:,:), apbv(:,:), ambv(:,:) 
+    real(dp), allocatable :: r_l(:,:), r_r(:,:), r_norm(:,:)
+!
+!   eigenvectors of the reduced problem 
+!
+    real(dp), allocatable :: u_l(:,:), u_r(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: epmat(:,:), emmat(:,:), e_red(:)
+!fl debug
+    real(dp), allocatable :: matab(:,:), evl(:,:), evr(:,:), wr(:), wi(:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dcopy, dnrm2, dgemm, dsyev
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (v(n,lda), apbv(n,lda), ambv(n,lda), r_l(n,n_max), r_r(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues/eigenvectors:
+!
+    allocate (e_red(lda), epmat(lda,lda), emmat(lda,lda), u_r(lda,lda), &
+              u_l(lda,lda), stat=istat)
+    call check_mem(istat)
+!
+    if (n_guess.lt.2) then
+      evec = zero
+      call check_guess(n,n_max,evec)
+      call check_guess(n,n_max,evec(:,:,2))
+!
+!   put the guess eigenvectors in the expansion space:
+!
+      call dcopy(n*n_max,evec,1,v,1)
+      call dcopy(n*n_max,evec(:,:,2),1,v(:,n_max+1),1)
+      n_act = n_max
+      call ortho_cd(.false.,n,n_act,v,xx,ok)
+      m_dim = 2
+    else if (mod(n_guess,n_max).eq.0) then
+!
+!   put the guess eigenvectors in the expansion space:
+!
+      call dcopy(n*n_guess,evec,1,v,1)
+      call dcopy(n*n_guess,evec(:,:,2),1,v(1,n_max*n_guess+1),1)
+      n_act = n_guess * n_max
+      call ortho_cd(.false.,n,n_act,v,xx,ok)
+      m_dim = 2 * n_guess
+    end if
+!
+    done = .false.
+    v = 0.0d0
+    do i_eig = 1, 2*n_max
+      v(i_eig,i_eig) = one
+    end do
+!
+    write(6,*) 'guess = '
+    write(6,'(10f12.6)') v(:,1:2*n_act)
+!
+    ind   = 1
+    i_beg = 1
+    ldu   = 0
+!
+    restart = .false.
+!
+!   main loop
+!
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu = ldu + 2*n_act
+!
+!     perform this iteration's matrix-vector multiplication:
+!
+      call get_time(t1)
+!
+      write(6,*) 'v:'
+      write(6,'(10f12.6)') v(:,i_beg:i_beg+2*n_act-1)
+
+      call apbmul(n,2*n_act,v(1,i_beg),apbv(1,i_beg))
+      write(6,*) 'apbv:'
+      write(6,'(10f12.6)') apbv(:,i_beg:i_beg+2*n_act-1)
+      call ambmul(n,2*n_act,v(1,i_beg),ambv(1,i_beg))
+      write(6,*) 'ambv:'
+      write(6,'(10f12.6)') ambv(:,i_beg:i_beg+2*n_act-1)
+!
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!
+!     build the reduced matrices 
+!
+      call dgemm('t','n',ldu,ldu,n,one,v,n,apbv,n,zero,epmat,lda)
+      call dgemm('t','n',ldu,ldu,n,one,v,n,ambv,n,zero,emmat,lda)
+!fl debug
+      allocate (matab(ldu,ldu), evl(ldu,ldu), evr(ldu,ldu), wr(ldu), wi(ldu))
+      call dgemm('n','n',ldu,ldu,ldu,one,epmat,lda,emmat,lda,zero,matab,ldu)
+      call dgeev('v','v',ldu,matab,ldu,wr,wi,evl,ldu,evr,ldu,work,lwork,info)
+!
+      write(6,*) 'eigenvalues from dgeev:'
+      write(6,*) sqrt(wr)
+      write(6,*) wi
+      write(6,*) 'right eigenvectors from dgeev:'
+      call prtmat(ldu,ldu,evr,1)
+      write(6,*) 'left eigenvectors from dgeev:'
+      call prtmat(ldu,ldu,evl,1)
+!
+!
+!     compute emmat ** 1/2
+!
+      u_r = emmat
+      call dsyev('v','u',ldu,u_r,lda,e_red,work,lwork,info)
+      do i = 1, ldu
+        if (e_red(i).lt.zero) then
+          write(6,*) 'warning: negative eigenvalues in A - B!'
+          e_red(i) = sqrt(abs(e_red(i)))
+        else
+          e_red(i) = sqrt(e_red(i))
+        end if
+      end do
+!
+      do j = 1, ldu
+        do i = 1, ldu
+          u_l(i,j) = u_r(j,i) * e_red(i)
+        end do
+      end do
+!
+!     put overwrite emmat with emmat ** 1/2 
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,u_r,lda,u_l,lda,zero,emmat,lda)
+!fl
+      write(6,*) 'emmat **1/2'
+      call prtmat(ldu,lda,emmat,1)
+!
+!     assemble emmat ** 1/2 * epmat * emmat ** 1/2
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,emmat,lda,epmat,lda,zero,u_r,lda)
+      call dgemm('n','n',ldu,ldu,ldu,one,u_r,lda,emmat,lda,zero,u_l,lda)
+!
+      write(6,*) 'eptil'
+      call prtmat(ldu,lda,u_l,1)
+!
+!     diagonalize:
+!
+      call dsyev('v','u',ldu,u_l,lda,e_red,work,lwork,info)
+      write(6,*) 'info diag:', info
+!
+!     gather the eigenvectors:
+!
+      do i_eig = 1, n_max
+        eig(i_eig) = sqrt(e_red(i_eig))
+        write(6,*) 'eigs:', i_eig, eig(i_eig)
+      end do
+!
+!     assemble the right eigenvectors:
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,emmat,lda,u_l,lda,zero,u_r,lda)
+!
+!     assemble the left eigenvectors as 1/w * epmat * u_r 
+!
+      call dgemm('n','n',ldu,ldu,ldu,one,epmat,lda,u_r,lda,zero,u_l,lda)
+!
+      write(6,*) 'right eigen:'
+      call prtmat(ldu,lda,u_r,1)
+      do i = 1, ldu
+        write(6,'(3f16.8)') u_r(i,1), evr(i,1), u_r(i,1)/evr(i,1)
+      end do
+      do i = 1, ldu
+        u_l(:,i) = u_l(:,i) / sqrt(e_red(i))
+      end do
+      write(6,*) 'left eigen:'
+      call prtmat(ldu,lda,u_l,1)
+      do i = 1, ldu
+        write(6,'(3f16.8)') u_l(i,1), evl(i,1), u_l(i,1)/evl(i,1)
+      end do
+!fl
+      u_l(1:ldu,1:ldu) = evl
+      u_r(1:ldu,1:ldu) = evr
+      deallocate (matab,evl,evr,wr,wi)
+!
+!     compute the ritz approximation to the eigenvectors:
+!
+      call dgemm('n','n',n,n_max,ldu,one,v,n,u_r,lda,zero,evec,n)
+      call dgemm('n','n',n,n_max,ldu,one,v,n,u_l,lda,zero,evec(:,:,2),n)
+      write(6,*) 'ritz right:'
+      write(6,'(10f12.6)') evec(:,:,1)
+      write(6,*) 'ritz left:'
+      write(6,'(10f12.6)') evec(:,:,2)
+!
+!     compute the residuals. 
+!       r_m = (a+b) x_p - w x_m
+!       r_p = (a-b) x_m - w x_p
+!
+      call dgemm('n','n',n,n_max,ldu,one,apbv,n,u_r,lda,zero,r_l,n)
+      call dgemm('n','n',n,n_max,ldu,one,ambv,n,u_l,lda,zero,r_r,n)
+      write(6,*) 'apb * space:'
+      write(6,'(10f12.6)') apbv
+      write(6,*) 'amb * space:'
+      write(6,'(10f12.6)') ambv
+      write(6,*) 'apb * ritz right:'
+      write(6,'(10f12.6)') r_l
+      write(6,*) 'amb * ritz left:'
+      write(6,'(10f12.6)') r_r
+      do i_eig = 1, n_max
+        r_l(:,i_eig) = r_l(:,i_eig) - eig(i_eig) * evec(:,i_eig,2)
+        r_r(:,i_eig) = r_r(:,i_eig) - eig(i_eig) * evec(:,i_eig,1)
+        r_norm(1,i_eig) = dnrm2(n,r_l(:,i_eig),1) + dnrm2(n,r_r(:,i_eig),1)
+        r_norm(2,i_eig) = maxval(abs(r_l(:,i_eig))) + maxval(abs(r_r(:,i_eig)))
+      end do
+!
+!     check convergence. lock the first contiguous converged eigenvalues
+!     by setting the logical array "done" to true.
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        write(6,*) r_norm(:,i_eig)
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!
+!     print some information:
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        exit
+      end if
+!
+!     check whether an update is required. 
+!     if not, perform a davidson restart.
+!
+      if (m_dim .lt. dim_dav - 1) then
+!
+!       add 2*n_act new vectors to the expansion subspace:
+!
+        m_dim = m_dim + 2
+        i_beg = i_beg + 2 * n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        write(6,*) 'ldu = ', ldu
+        write(6,*) 'ibeg = ', i_beg
+        write(6,*) 'n_act = ', n_act
+        write(6,*) 'ind = ', ind
+        pause
+        write(6,*) 'r_r:'
+        write(6,'(10f12.6)') r_r
+        write(6,*) 'r_l:'
+        write(6,'(10f12.6)') r_l
+        call precnd(n,n_act,eig(ind),r_r(1,ind),v(1,i_beg))
+        call precnd(n,n_act,eig(ind),r_l(1,ind),v(1,i_beg+n_act))
+!fll
+        call ortho_cd(.false.,n,2*n_act,v(:,i_beg),xx,ok)
+        write(6,*) 'old vectors before ortho:'
+        write(6,'(10f12.6)') v(:,1:i_beg-1)
+        write(6,*) 'new vectors before ortho:'
+        write(6,'(10f12.6)') v(:,i_beg:i_beg+2*n_act-1)
+!
+        call ortho_vs_x(.false.,n,ldu,2*n_act,v,v(1,i_beg),xx,xx)
+        write(6,*) 'new vectors after ortho:'
+        write(6,'(10f12.6)') v(:,i_beg:i_beg+2*n_act-1)
+!
+!       call ortho_vs_x(.false.,n,ldu,2*n_act,v,v(1,i_beg),xx,xx)
+      else
+        stop 'nyi.'
+      end if
+    end do
+    return
+  end subroutine ssf_driver
+  subroutine caslr_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
+                          apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
+    use utils
+    implicit none
+    logical, intent(in)                          :: verbose
+    integer,                       intent(in)    :: n, n2, n_targ, n_max
+    integer,                       intent(in)    :: max_iter, max_dav
+    real(dp),                      intent(in)    :: tol
+    real(dp), dimension(n_max),    intent(inout) :: eig
+    real(dp), dimension(n2,n_max), intent(inout) :: evec
+    logical,                       intent(inout) :: ok
+    external                                     :: apbmul, ambmul, spdmul, smdmul, &
+                                                    lrprec
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda, lda2
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: i, j, k, it, i_eig
+!
+    integer               :: lwork_svd
+!
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: xx(1), lw_svd(1)
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+    real(dp), allocatable :: vp(:,:), vm(:,:), lvp(:,:), lvm(:,:), bvp(:,:), bvm(:,:)
+    real(dp), allocatable :: rp(:,:), rm(:,:), rr(:,:), r_norm(:,:)
+!
+!   eigenvectors of the reduced problem and components of the ritz vectors:
+!
+    real(dp), allocatable :: up(:,:), um(:,:), eigp(:,:), eigm(:,:), bp(:,:), bm(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: a_red(:,:), a_copy(:,:), s_red(:,:), s_copy(:,:), e_red(:)
+    real(dp), allocatable :: epmat(:,:), emmat(:,:), smat(:,:)
+!
+!   auxiliary quantities for the helmich-paris algorithm
+!
+    real(dp), allocatable :: u_1(:,:), sv_1(:), vt_1(:,:), u_2(:,:), sv_2(:), vt_2(:,:), &
+                             ept(:,:), emt(:,:), cmat(:,:), xpt(:,:), xmt(:,:), scr(:,:)
+    real(dp), allocatable :: work_svd(:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dcopy, dnrm2, dgemm, dsyev
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+    lda2    = 2 * lda
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (vp(n,lda), vm(n,lda), lvp(n,lda), lvm(n,lda), bvp(n,lda), bvm(n,lda), &
+              rp(n,n_max), rm(n,n_max), rr(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues:
+!
+    allocate (a_red(lda2,lda2), a_copy(lda2,lda2), s_red(lda2,lda2), s_copy(lda2,lda2), &
+      e_red(lda2), epmat(lda,lda), emmat(lda,lda), smat(lda,lda), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the plus and minus eigenvector components:
+!
+    allocate (up(lda,n_max), um(lda,n_max), eigp(n,n_max), eigm(n,n_max), bp(n,n_max), bm(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate additional memory for the helmich-paris algorithm:
+!
+    if (i_alg.eq.1) then
+      allocate (u_1(lda,lda), sv_1(lda), vt_1(lda,lda), u_2(lda,lda), sv_2(lda), vt_2(lda,lda), &
+                ept(lda,lda), emt(lda,lda), cmat(lda,lda), xpt(lda,lda), xmt(lda,lda), scr(lda,lda), stat = istat)
+      call check_mem(istat)
+!
+      call dgesvd('a','a',lda,lda,u_1,lda,sv_1,u_1,lda,vt_1,lda,lw_svd,-1,info)
+      lwork_svd = int(lw_svd(1))
+      allocate (work_svd(lwork_svd))
+    end if
+!
+!   set the tolerances and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+!
+!   clean out various quantities
+!
+    t_diag  = zero
+    t_ortho = zero
+    t_mv    = zero
+    t_tot   = zero
+    vp      = zero
+    vm      = zero
+    bvp     = zero
+    bvm     = zero
+    lvp     = zero
+    lvm     = zero
+    a_red   = zero
+    ok      = .false.
+    done    = .false.
+!
+    call get_time(t_tot)
+!
+!   move the guess into the expansion space.
+!
+    do i_eig = 1, n_max
+      vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+      vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+    end do
+!
+    call ortho_cd(.false.,n,n_max,vp,xx,ok)
+    call ortho_cd(.false.,n,n_max,vm,xx,ok)
+!
+    n_act = n_max
+    ind   = 1
+    i_beg = 1
+!
+!   initialize the counter for the expansion of the subspace
+!
+    m_dim = 1
+    ldu   = 0
+!
+!   initialize to false the restart
+!
+    restart = .false.
+!
+!   main loop:
+!
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu = ldu + n_act
+!
+!     perform this iteration's matrix-vector multiplication:
+!
+      call get_time(t1)
+      call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+      call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+      call spdmul(n,n_act,vp(1,i_beg),bvm(1,i_beg))
+      call smdmul(n,n_act,vm(1,i_beg),bvp(1,i_beg))
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!
+!     update the reduced matrix 
+!
+      call dgemm('t','n',ldu,ldu,n,one,vp,n,lvp,n,zero,epmat,lda)
+      call dgemm('t','n',ldu,ldu,n,one,vm,n,lvm,n,zero,emmat,lda)
+      call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)
+!
+      a_red = zero
+      s_red = zero
+      a_red(1:ldu,1:ldu)             = epmat(1:ldu,1:ldu)
+      a_red(ldu+1:2*ldu,ldu+1:2*ldu) = emmat(1:ldu,1:ldu)
+      s_red(1:ldu,ldu+1:2*ldu)       = transpose(smat(1:ldu,1:ldu))
+      s_red(ldu+1:2*ldu,1:ldu)       = smat(1:ldu,1:ldu)
+!
+      call get_time(t1)
+      if (i_alg.eq.0) then
+!
+!       default algorithm: solve the 2n-dimensional inverse problem.
+!
+        call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
+!
+!       extract the eigenvalues and compute the ritz approximation to the
+!       eigenvectors 
+!
+        do i_eig = 1, n_max
+          eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
+          up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
+          um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
+!fl
+!         write(6,*) 'eig: ', eig(i_eig)
+!         write(6,*) 'up ', i_eig
+!         write(6,'(10f12.6)') up(1:ldu,i_eig)
+!         write(6,*) 'um ', i_eig
+!         write(6,'(10f12.6)') um(1:ldu,i_eig)
+        end do
+!
+      else if (i_alg.eq.1) then
+!     
+!       helmich-paris algorithm
+!
+        scr = smat
+!
+!       compute the svd of smat
+!
+        call dgesvd('a','a',ldu,ldu,scr,lda,sv_1,u_1,lda,vt_1,lda,work_svd,lwork_svd,info)
+!
+!       divide the columns of u_1 and the rows of v_1 by the square root of the singular values
+!
+        do i = 1, ldu
+          u_1(:,i) = u_1(:,i) / sqrt(sv_1(i))
+          vt_1(i,:) = vt_1(i,:) / sqrt(sv_1(i))
+        end do
+!
+!       for the projected ep and em matrices:
+!
+        call dgemm('n','t',ldu,ldu,ldu,one,epmat,lda,vt_1,lda,zero,scr,lda)
+        call dgemm('n','n',ldu,ldu,ldu,one,vt_1,lda,scr,lda,zero,ept,lda)
+        call dgemm('n','n',ldu,ldu,ldu,one,emmat,lda,u_1,lda,zero,scr,lda)
+        call dgemm('t','n',ldu,ldu,ldu,one,u_1,lda,scr,lda,zero,emt,lda)
+!
+!       compute their cholesky decomposition:
+!
+        call dpotrf('l',ldu,ept,lda,info)
+        call dpotrf('l',ldu,emt,lda,info)
+!
+!       assemble c = (l^-)^t l^+
+!
+        do j = 1, ldu
+          do i = 1, ldu 
+            cmat(i,j) = zero
+            do k = max(i,j), ldu
+              cmat(i,j) = cmat(i,j) + emt(k,i) * ept(k,j)
+            end do
+          end do
+        end do
+!
+!       compute its svd:
+!
+        call dgesvd('a','a',ldu,ldu,cmat,lda,sv_2,u_2,lda,vt_2,lda,work_svd,lwork_svd,info)
+!
+!       assemble xpt and xmt
+!
+        do i = 2, ldu
+          do j = 1, i-1
+            ept(j,i) = zero
+            emt(j,i) = zero
+          end do
+        end do
+        call dgemm('n','n',ldu,ldu,ldu,one,emt,lda,u_2,lda,zero,scr,lda)
+        call dgemm('t','n',ldu,ldu,ldu,one,vt_1,lda,scr,lda,zero,xpt,lda)
+        call dgemm('n','t',ldu,ldu,ldu,one,ept,lda,vt_2,lda,zero,scr,lda)
+        call dgemm('n','n',ldu,ldu,ldu,one,u_1,lda,scr,lda,zero,xmt,lda)
+!
+!       normalize and gather the eigenvalues and eigenvectors:
+!
+        do i_eig = 1, n_max
+          eig(i_eig)  = sv_2(ldu - i_eig + 1)
+          up(1:ldu,i_eig) = xpt(1:ldu,ldu - i_eig + 1)/(sqrt(two) * sv_2(ldu - i_eig + 1))
+          um(1:ldu,i_eig) = xmt(1:ldu,ldu - i_eig + 1)/(sqrt(two) * sv_2(ldu - i_eig + 1))
+!fl
+!         write(6,*) 'eig: ', eig(i_eig)
+!         write(6,*) 'up ', i_eig
+!         write(6,'(10f12.6)') up(1:ldu,i_eig)
+!         write(6,*) 'um ', i_eig
+!         write(6,'(10f12.6)') um(1:ldu,i_eig)
+        end do
+!
+!       gather the eigenvalues
+!
+      end if
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
+      call dgemm('n','n',n,n_max,ldu,one,vp,n,up,lda,zero,eigp,n)
+      call dgemm('n','n',n,n_max,ldu,one,vm,n,um,lda,zero,eigm,n)
+!
+      do i_eig = 1, n_max
+        evec(1:n,i_eig)    = eigp(:,i_eig) + eigm(:,i_eig)
+        evec(n+1:n2,i_eig) = eigp(:,i_eig) - eigm(:,i_eig)
+      end do
+!
+!     compute the residuals, and their rms and sup norms:
+!
+      call dgemm('n','n',n,n_max,ldu,one,lvp,n,up,lda,zero,rp,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvm,n,um,lda,zero,rm,n)
+      call dgemm('n','n',n,n_max,ldu,one,bvp,n,um,lda,zero,bp,n)
+      call dgemm('n','n',n,n_max,ldu,one,bvm,n,up,lda,zero,bm,n)
+      
+      do i_eig = 1, n_targ
+!
+!       if the eigenvalue is already converged, skip it.
+!
+        if (done(i_eig)) cycle
+!
+        call daxpy(n,-eig(i_eig),bp(:,i_eig),1,rp(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),bm(:,i_eig),1,rm(:,i_eig),1)
+        r_norm(1,i_eig) = dnrm2(n,rp(:,i_eig),1)/sqrtn + dnrm2(n,rm(:,i_eig),1)/sqrtn
+        r_norm(2,i_eig) = maxval(abs(rp(:,i_eig))) + maxval(abs(rm(:,i_eig)))
+      end do
+!
+!     check convergence. lock the first contiguous converged eigenvalues
+!     by setting the logical array "done" to true.
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information:
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, eig(i_eig), r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        exit
+      end if
+!
+!     check whether an update is required. 
+!     if not, perform a davidson restart.
+!
+      if (m_dim .lt. dim_dav) then
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
+!
+!       orthogonalize the new vectors to the existing ones and then
+!       orthonormalize them.
+!
+        call get_time(t1)
+        call ortho_vs_x(.false.,n,ldu,n_act,vp,vp(1,i_beg),xx,xx)
+        call ortho_vs_x(.false.,n,ldu,n_act,vm,vm(1,i_beg),xx,xx)
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+      else
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        restart = .true.
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+!
+        n_act = n_max 
+        vp = zero
+        vm = zero
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        do i_eig = 1, n_max
+          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+        end do
+!
+        call ortho_cd(.false.,n,n_max,vp,xx,ok)
+        call ortho_cd(.false.,n,n_max,vm,xx,ok)
+!
+        lvp   = zero
+        lvm   = zero
+        bvp   = zero
+        bvm   = zero
+        a_red = zero
+        s_red = zero
+        epmat = zero
+        emmat = zero
+        smat  = zero
+!
+      end if
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
+    end do
+!
+    call get_time(t1)
+    t_tot = t1 - t_tot
+    1000 format(t3,'timings for caslr (cpu/wall):   ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+    deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,a_red,a_copy,s_red,s_copy,e_red, &
+               epmat,emmat,smat,up,um,eigp,eigm,bp,bm)
+!
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
+    return
+  end subroutine caslr_driver
+!
+  subroutine caslr_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
+                              apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
+!
+!   main driver for the efficient solution to the following generalized 
+!   eigenvalue problem:
+!
+!   / A  B \ / Y \     /  S  D \ / Y \ 
+!   |      | |   | = w |       | |   |
+!   \ B  A / \ Z /     \ -D -S / \ Z /
+!
+!   where A, B, S are symmetric matrices and D is antysimmetric.
+!
+!   If (w, Y, Z) are a solution, then (-w, Z, Y) is also a solution. 
+!   Following J. Chem. Phys., 118, 522 (2003), we enforce this property in 
+!   the iterative procedure by expanding the eigenvector as
+!
+!   (Y, Z) = (b+, b+) + (b-, - b-)
+!
+!   This routine solves the associate problem 
+!
+!   /  S  D \ / Y \   1 / A  B \ / Y \ 
+!   |       | |   | = - |      | |   |
+!   \ -D -S / \ Z /   w \ B  A / \ Z /
+!
+!   using the casida matrix, which is symmetric and positive definite, as 
+!   the metric. This allows us to use expansion vectors that are orthogonal
+!   with respect to the dot product defined by the metric, which in turn
+!   results in a Rayleigh-Ritz procedure that requires the solution of a 
+!   symmetric standard eigenvalue problem
+!
+!   / 0  s^T \ / u+ \   1 / u+ \
+!   |        | |    | = - |    |
+!   \ S   0  / \ u- /   w \ u- /
+!
+!   which can be reduced to a half-sized eigenvalue problem
+!
+!   s^T s u+ = (1/w)^2 u+
+!   u- = 1/w Su+
+!
+!   input variables
+!   ===============
+!
+!   verbose:  logical, whether to print various information at each 
+!             iteration (eigenvalues, residuals...).
+!
+!   n:        integer, size of the A, B, S, D matrices
+!
+!   n2:       integer, n2 = 2*n, size of the generalized eigenvalue
+!             problem
+!
+!   n_targ:   integer, number of required eigenpairs.
+!
+!   n_max:    integer, maximum size of the search space. should be 
+!             >= n_targ. note that eig and evec should be allocated 
+!             n_max and (n,n_max) rather than n_targ and (n,n_targ). 
+!             for better convergence, a value larger than n_targ (eg.,
+!             n_targ + 10) is recommended.
+!   
+!   max_iter: integer, maximum allowed number of iterations.
+!
+!   tol:      double precision real, the convergence threshold.
+!
+!   maxdav:   maximum size of the expansion subspace
+!
+!   apbmul:   external subroutine to apply (A+B) to a vector
+!
+!   ambmul:   external subroutine to apply (A-B) to a vector
+!
+!   spdmul:   external subroutine to apply (S+D) to a vector
+!
+!   smdmul:   external subroutine to apply (S-D) to a vector
+!
+!   lrprec:   external subroutine that applies a preconditioner.
+!
+!   output variables:
+!   =================
+!
+!   eig:      double precision real array of size n_max. 
+!             if ok is true, contains the positive eigenvalues
+!             of the generalized problem in ascending order.
+!
+!   evec:     double precision real array of size (n2,n_max).
+!             in input, a guess for the eigenvectors.
+!             if ok is true, in output the computed eigenvectors.
+!
+!   ok:       logical, true if caslr_eff_driver converged.
+!
+    use utils
+    implicit none
+    logical, intent(in)                          :: verbose
+    integer,                       intent(in)    :: n, n2, n_targ, n_max
+    integer,                       intent(in)    :: max_iter, max_dav
+    real(dp),                      intent(in)    :: tol
+    real(dp), dimension(n_max),    intent(inout) :: eig
+    real(dp), dimension(n2,n_max), intent(inout) :: evec
+    logical,                       intent(inout) :: ok
+    external                                     :: apbmul, ambmul, spdmul, smdmul, &
+                                                    lrprec
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda, lda2
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: it, i_eig
+!
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: xx(1)
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+    real(dp), allocatable :: vp(:,:), vm(:,:), lvp(:,:), lvm(:,:), bvp(:,:), bvm(:,:)
+    real(dp), allocatable :: rp(:,:), rm(:,:), rr(:,:), r_norm(:,:)
+!
+!   eigenvectors of the reduced problem and components of the ritz vectors:
+!
+    real(dp), allocatable :: up(:,:), um(:,:), eigp(:,:), eigm(:,:), bp(:,:), bm(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: s_red(:,:), s_copy(:,:), e_red(:)
+    real(dp), allocatable :: smat(:,:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dcopy, dnrm2, dgemm, dsyev
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+    lda2    = 2 * lda
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (vp(n,lda), vm(n,lda), lvp(n,lda), lvm(n,lda), bvp(n,lda), bvm(n,lda), &
+              rp(n,n_max), rm(n,n_max), rr(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues:
+!
+    allocate (s_red(lda,lda), s_copy(lda,lda), e_red(lda2), smat(lda,lda), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the plus and minus eigenvector components:
+!
+    allocate (up(lda,n_max), um(lda,n_max), eigp(n,n_max), eigm(n,n_max), bp(n,n_max), bm(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   set the tolerances and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+!
+!   clean out various quantities
+!
+    t_diag  = zero
+    t_ortho = zero
+    t_mv    = zero
+    t_tot   = zero
+    vp      = zero
+    vm      = zero
+    bvp     = zero
+    bvm     = zero
+    lvp     = zero
+    lvm     = zero
+    ok      = .false.
+    done    = .false.
+!
+    call get_time(t_tot)
+!
+!   move the guess into the expansion space.
+!
+    do i_eig = 1, n_max
+      vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+      vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+    end do
+!
+!   orthogonalize the expansion space to the metric.
+!
+    call apbmul(n,n_max,vp,lvp)
+    call b_ortho(n,n_max,vp,lvp)
+    call ambmul(n,n_max,vm,lvm)
+    call b_ortho(n,n_max,vm,lvm)
+!
+    n_act = n_max
+    ind   = 1
+    i_beg = 1
+!
+!   initialize the counter for the expansion of the subspace
+!
+    m_dim = 1
+    ldu   = 0
+!
+!   initialize to false the restart
+!
+    restart = .false.
+!
+!   main loop:
+!
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu = ldu + n_act
+!
+!     perform this iteration's matrix-vector multiplications:
+!
+      call get_time(t1)
+      call spdmul(n,n_act,vp(1,i_beg),bvm(1,i_beg))
+      call smdmul(n,n_act,vm(1,i_beg),bvp(1,i_beg))
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!
+!     update the reduced matrix 
+!
+      call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)
+!
+!     save s, and assemble s^t s:
+!
+      s_red  = smat
+      s_copy = zero
+      call dgemm('t','n',ldu,ldu,ldu,one,s_red,lda,s_red,lda,zero,s_copy,lda)
+!
+!     diagonalize s^t s
+!
+      call get_time(t1)
+      call dsyev('v','u',ldu,s_copy,lda,e_red,work,lwork,info)
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
+!
+!     extract the eigenvalues and compute the ritz approximation to the
+!     eigenvectors 
+!
+      do i_eig = 1, n_max
+        eig(i_eig)      = sqrt(e_red(ldu - i_eig + 1))
+        up(1:ldu,i_eig) = s_copy(1:ldu,ldu - i_eig + 1)
+      end do
+!
+!     compute the u_- eigenvectors:
+!
+      call dgemm('n','n',ldu,n_max,ldu,one,s_red,lda,up,lda,zero,um,lda)
+      do i_eig = 1, n_max
+        um(1:ldu,i_eig) = um(1:ldu,i_eig)/eig(i_eig)
+      end do
+!
+!     asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
+!
+      call dgemm('n','n',n,n_max,ldu,one,vp,n,up,lda,zero,eigp,n)
+      call dgemm('n','n',n,n_max,ldu,one,vm,n,um,lda,zero,eigm,n)
+!
+!     assemble the current approximation to the eigenvectors
+!
+      do i_eig = 1, n_max
+        evec(1:n,i_eig)    = eigp(:,i_eig) + eigm(:,i_eig)
+        evec(n+1:n2,i_eig) = eigp(:,i_eig) - eigm(:,i_eig)
+      end do
+!
+!     compute the residuals, and their rms and sup norms:
+!
+      call dgemm('n','n',n,n_max,ldu,one,bvp,n,um,lda,zero,rp,n)
+      call dgemm('n','n',n,n_max,ldu,one,bvm,n,up,lda,zero,rm,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvp,n,up,lda,zero,bp,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvm,n,um,lda,zero,bm,n)
+      
+      do i_eig = 1, n_targ
+!
+!       if the eigenvalue is already converged, skip it.
+!
+        if (done(i_eig)) cycle
+!
+        call daxpy(n,-eig(i_eig),bp(:,i_eig),1,rp(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),bm(:,i_eig),1,rm(:,i_eig),1)
+        r_norm(1,i_eig) = (dnrm2(n,rp(:,i_eig),1) + dnrm2(n,rm(:,i_eig),1))/(eig(i_eig)*sqrt(two)*sqrtn)
+        r_norm(2,i_eig) = (maxval(abs(rp(:,i_eig))) + maxval(abs(rm(:,i_eig))))/(sqrt(two)*eig(i_eig))
+      end do
+!
+!     check convergence. lock the first contiguous converged eigenvalues
+!     by setting the logical array "done" to true.
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information:
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        do i_eig = 1, n_targ
+          eig(i_eig) = one/eig(i_eig)
+        end do
+        exit
+      end if
+!
+!     check whether an update is required. 
+!     if not, perform a davidson restart.
+!
+      if (m_dim .lt. dim_dav) then
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
+!
+!       orthogonalize the new vectors to the existing ones and then
+!       orthonormalize them.
+!
+        call get_time(t1)
+        call b_ortho_vs_x(n,ldu,n_act,vp,lvp,vp(1,i_beg))
+        call apbvec(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+        call b_ortho(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+        call b_ortho_vs_x(n,ldu,n_act,vm,lvm,vm(1,i_beg))
+        call ambvec(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+        call b_ortho(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+      else
+!
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        restart = .true.
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+!        
+        n_act = n_max 
+        vp = zero
+        vm = zero
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        do i_eig = 1, n_max
+          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+        end do
+!
+        lvp   = zero
+        lvm   = zero
+!
+        call apbvec(n,n_max,vp,lvp)
+        call b_ortho(n,n_max,vp,lvp)
+        call ambvec(n,n_max,vm,lvm)
+        call b_ortho(n,n_max,vm,lvm)
+!
+        bvp   = zero
+        bvm   = zero
+        s_red = zero
+        smat  = zero
+!        
+      end if
+!      
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
+!      
+    end do
+!
+    call get_time(t1)
+    t_tot = t1 - t_tot
+    1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+    deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,s_red,s_copy,e_red,smat,up,um,eigp,eigm,bp,bm)
+!
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
+    return
+  end subroutine caslr_eff_driver
 !
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
                              shift,matvec,precnd,eig,evec,ok)
@@ -921,6 +2214,404 @@ module diaglib
     return
   end subroutine davidson_driver
 !
+  subroutine gen_david_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
+                              shift,matvec,precnd,bvec,eig,evec,ok)
+!
+!   main driver for davidson-liu.
+!
+!   input variables:
+!   ================
+!
+!   verbose:  logical, whether to print various information at each 
+!             iteration (eigenvalues, residuals...).
+!
+!   n:        integer, size of the matrix to be diagonalized.
+!
+!   n_targ:   integer, number of required eigenpairs.
+!
+!   n_max:    integer, maximum size of the search space. should be 
+!             >= n_targ. note that eig and evec should be allocated 
+!             n_max and (n,n_max) rather than n_targ and (n,n_targ). 
+!             for better convergence, a value larger than n_targ (eg.,
+!             n_targ + 10) is recommended.
+!   
+!   max_iter: integer, maximum allowed number of iterations.
+!
+!   tol:      double precision real, the convergence threshold.
+!
+!   max_dav:  integer. maximum allowed number of iterations before a 
+!             restart is forced. 
+!             when n_max eigenvalues are searched, this implies a maximum
+!             dimension of the expansion subspace of n_max * max_dav.
+!
+!   shift:    double precision real, a diagonal level shifting parameter
+!
+!   matvec:   external subroutine that performs the matrix-vector
+!             multiplication
+!
+!   precnd:   external subroutine that applies a preconditioner.
+!
+!   bvec:     external subroutine that applies the metric.
+!
+!   output variables:
+!   =================
+!
+!   eig:      double precision array of size n_max. if ok is true, 
+!             the computed eigenvalues in asceding order.
+!
+!   evec:     double precision array of size (n,n_max). 
+!             in input, a guess for the eigenvectors.
+!             if ok is true, in output the computed eigenvectors.
+!
+!   ok:       logical, true if davidson converged.
+!
+    logical,                      intent(in)    :: verbose
+    integer,                      intent(in)    :: n, n_targ, n_max
+    integer,                      intent(in)    :: max_iter, max_dav
+    real(dp),                     intent(in)    :: tol, shift
+    real(dp), dimension(n_max),   intent(inout) :: eig
+    real(dp), dimension(n,n_max), intent(inout) :: evec
+    logical,                      intent(inout) :: ok
+    external                                    :: matvec, precnd, bvec
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: it, i_eig
+!
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: xx(1)
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), r(:,:), r_norm(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: a_red(:,:), a_copy(:,:), s_red(:,:), s_copy(:,:), e_red(:)
+!
+!   scratch:
+!
+    real(dp), allocatable :: b_evec(:,:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dcopy, dnrm2, dgemm, dsyev
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (space(n,lda), aspace(n,lda), bspace(n,lda), r(n,n_max), &
+              b_evec(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues:
+!
+    allocate (a_red(lda,lda), a_copy(lda,lda), e_red(lda), s_red(lda,lda), &
+              s_copy(lda,lda), stat=istat)
+    call check_mem(istat)
+!
+!   set the tolerances and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+!
+!   clean out various quantities
+!
+    t_diag   = zero
+    t_ortho  = zero
+    t_mv     = zero
+    t_tot    = zero
+    space   = zero
+    aspace  = zero
+    bspace  = zero
+    a_red   = zero
+    s_red   = zero
+    ok      = .false.
+    done    = .false.
+!
+    call get_time(t_tot)
+!
+!   check whether we have a guess for the eigenvectors in evec, and
+!   whether it is orthonormal.
+!   if evec is zero, create a random guess.
+!
+    call check_guess(n,n_max,evec)
+!
+!   move the guess into the expansion space.
+!
+    call dcopy(n*n_max,evec,1,space,1)
+!
+!   apply the b matrix and b-orthogonalize the guess:
+!
+    call bvec(n,n_max,space,bspace)
+    call b_ortho(n,n_max,space,bspace)
+!
+!   initialize the number of active vectors and the associated indices.
+!
+    n_act = n_max
+    ind   = 1
+    i_beg = 1
+!
+!   initialize the counter for the expansion of the subspace
+!
+    m_dim = 1
+    ldu   = 0
+!
+!   initialize to false the restart
+!
+    restart = .false.
+!
+!   main loop:
+!
+    1030 format(t5,'Generalized Davidson-Liu iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu = ldu + n_act
+!
+!     perform this iteration's matrix-vector multiplication:
+!
+      call get_time(t1)
+      call matvec(n,n_act,space(1,i_beg+n_rst),aspace(1,i_beg+n_rst))
+!     call bvec(n,n_act,space(1,i_beg+n_rst),bspace(1,i_beg+n_rst))
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!
+!     update the reduced matrices 
+!
+      call dgemm('t','n',ldu,n_act,n,one,space,n,aspace(1,i_beg+n_rst),n,zero,a_red(1,i_beg+n_rst),lda)
+!     call dgemm('t','n',ldu,n_act,n,one,space,n,bspace(1,i_beg+n_rst),n,zero,s_red(1,i_beg+n_rst),lda)
+!
+!     explicitly putting the first block of 
+!     converged eigenvalues in the reduced matrix
+!
+      if (restart) then
+        do i_eig = 1, n_rst
+          a_red(i_eig,i_eig) = e_red(i_eig)
+        end do
+        restart = .false.
+        n_rst   = 0
+      end if
+      a_copy = a_red
+!     s_copy = s_red
+!
+!     diagonalize the reduced matrix
+!
+      call get_time(t1)
+!     call dsygv(1,'v','u',ldu,a_copy,lda,s_copy,lda,e_red,work,lwork,info)
+      call dsyev('v','u',ldu,a_copy,lda,e_red,work,lwork,info)
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
+!
+!     extract the eigenvalues and compute the ritz approximation to the
+!     eigenvectors 
+!
+      eig = e_red(1:n_max)
+!
+      call dgemm('n','n',n,n_max,ldu,one,space,n,a_copy,lda,zero,evec,n)
+!
+!     compute the residuals, and their rms and sup norms:
+!
+      call dgemm('n','n',n,n_max,ldu,one,aspace,n,a_copy,lda,zero,r,n)
+      call dgemm('n','n',n,n_max,ldu,one,bspace,n,a_copy,lda,zero,b_evec,n)
+!
+      do i_eig = 1, n_targ
+!
+!       if the eigenvalue is already converged, skip it.
+!
+        if (done(i_eig)) cycle
+!
+        call daxpy(n,-eig(i_eig),b_evec(:,i_eig),1,r(:,i_eig),1)
+        r_norm(1,i_eig) = dnrm2(n,r(:,i_eig),1)/sqrtn
+        r_norm(2,i_eig) = maxval(abs(r(:,i_eig)))
+      end do
+!
+!     check convergence. lock the first contiguous converged eigenvalues
+!     by setting the logical array "done" to true.
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information:
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        exit
+      end if
+!
+!     check whether an update is required. 
+!     if not, perform a davidson restart.
+!
+      if (m_dim .lt. dim_dav) then
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        call precnd(n,n_act,-eig(ind),r(1,ind),space(1,i_beg))
+!
+!       orthogonalize the new vectors to the existing ones and then
+!       orthonormalize them.
+!
+        call get_time(t1)
+        call b_ortho_vs_x(n,ldu,n_act,space,bspace,space(1,i_beg))
+        call bvec(n,n_act,space(1,i_beg),bspace(1,i_beg))
+        call b_ortho(n,n_act,space(1,i_beg),bspace(1,i_beg))
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+      else
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        n_act = n_max
+        space = zero
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        call dcopy(n_max*n,evec,1,space,1)
+        call dcopy(n_max*n,b_evec,1,bspace,1)
+        call b_ortho(n,n_max,space,bspace)
+        aspace = zero
+        bspace = zero
+        a_red  = zero
+        s_red  = zero
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1 
+        m_dim = 1
+        n_rst = 0
+!
+!       counting how many matvec we can skip at the next
+!       iteration
+!
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_rst = n_rst + 1
+          else
+            exit
+          end if
+        end do
+        restart = .true.
+      end if
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
+!
+    end do
+!
+    call get_time(t2)
+    t_tot = t2 - t_tot
+!
+!   if required, print timings
+!
+    1000 format(t3,'timings for davidson (cpu/wall): ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+!      
+!   deallocate memory
+!
+    deallocate (work, tau, space, aspace, r, done, r_norm, a_red, a_copy, e_red)
+!
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
+    return
+  end subroutine gen_david_driver
+!
 ! orthogonalization routines:
 ! ===========================
 !
@@ -1229,7 +2920,7 @@ module diaglib
     external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
-    logical, parameter     :: useqr = .true.
+    logical, parameter     :: useqr = .false.
 !
 !   allocate space for the overlap between x and u.
 !
@@ -1266,6 +2957,7 @@ module diaglib
       call dgemm('t','n',m,k,n,one,x,n,u,n,zero,xu,m)
       xu_norm = dnrm2(m*k,xu,1)
       done    = xu_norm.lt.tol_ortho
+      write(6,*) it, xu_norm
 !
 !     if things went really wrong, abort.
 !
@@ -1501,6 +3193,8 @@ module diaglib
     integer, intent(in)    :: n, n_max
 !
     integer           :: lwork1, lwork2, len_rr, len_qr, nb
+!fl
+    integer           :: lwork3
     integer, external :: ilaenv
 !
 !   maximum size of the rayleigh-ritz matrix:
@@ -1520,7 +3214,10 @@ module diaglib
     nb     = ilaenv( 1, 'DGEQRF', 'l', n, len_qr, -1, -1 )
     lwork2 = len_qr*nb
 !
-    get_mem_lapack = max(lwork1,lwork2)
+    nb     = ilaenv( 1, 'DSYTRD', 'l', len_rr, -1, -1, -1)
+    lwork3 = len_rr * nb
+!
+    get_mem_lapack = max(lwork1,lwork2,lwork3)
     return
   end function get_mem_lapack
 ! 
@@ -1534,8 +3231,8 @@ module diaglib
     200 format(t3,20d12.4)
 !
     do i = 1, n
-      if (iform.eq.1) write(6,100) mat(i,:)
-      if (iform.eq.2) write(6,200) mat(i,:)
+      if (iform.eq.1) write(6,100) mat(i,1:n)
+      if (iform.eq.2) write(6,200) mat(i,1:n)
     end do
     return
   end subroutine prtmat
