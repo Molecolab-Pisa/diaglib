@@ -2,8 +2,7 @@
 #   Makefile
 #
 FC = gfortran
-#FFLAGS = -fopenmp -Wall -std=f95 --pedantic -ftrapv -fbacktrace -g -fdefault-integer-8
-FFLAGS = -O0 -fimplicit-none  -Wall  -Wline-truncation  -Wcharacter-truncation  -Wsurprising  -Waliasing  -Wunused-parameter  -fwhole-file  -fcheck=all -g -fbacktrace 
+FFLAGS = -O2 -fopenmp -std=f95 --pedantic -ftrapv 
 LIBS = -lblas -llapack 
 #LIBS = -L/opt/OpenBLAS/lib -lopenblas
 

@@ -6,13 +6,13 @@ program main
 ! simple minded test program to call the lobpcg routine
 !
   implicit none
-  integer  :: n, itmax, m_max, n_want
+  integer  :: n, itmax, m_max, n_want, iwhat
   real(dp) :: tol
 !
 ! initialize:
 !
-  n      = 2000
-  n_want = 100
+  n      = 1000
+  n_want = 20
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 20
@@ -20,12 +20,52 @@ program main
   tdscf  = .false.
   i_alg  = 0
 !
-! call test_symm(.true.,n,n_want,tol,itmax,m_max)
-! call test_geneig(.true.,n,n_want,tol,itmax,m_max)
-! call test_scflr(.true.,n,n_want,tol,itmax,m_max)
-  call test_caslr(.false.,n,n_want,tol,itmax,m_max)
+  call print_header
+! 
+  write(6,*)
+  1000 format(t3,' simple-minded test driver. select ',/, &
+              t3,'   1 for symmetric eigenvalue problems ',/, &
+              t3,'   2 for symmetric generalized eigenvalue problems ',/, &
+              t3,'   3 for linear-response equations (SCF-like)',/, &
+              t3,'   4 for linear-response equations (CASSCF-like).')
+  write(6,1000)
+  read(5,*) iwhat
+  write(6,*)
+!
+  if (iwhat.eq.1) then 
+    call test_symm(.true.,n,n_want,tol,itmax,m_max)
+  else if (iwhat.eq.2) then 
+    call test_geneig(.true.,n,n_want,tol,itmax,m_max)
+  else if (iwhat.eq.3) then 
+    call test_scflr(.true.,n,n_want,tol,itmax,m_max)
+  else if (iwhat.eq.4) then 
+    call test_caslr(.true.,n,n_want,tol,itmax,m_max)
+  else 
+    write(6,*) ' invalid selectrion. aborting ...'
+  end if
 !
 end program main
+!
+  subroutine print_header
+    implicit none
+!
+    1000 format( &
+  ' diaglib - a fortran library of matrix-free iterative algorithms to ',/, &
+  ' compute a few eigenvalues and eigenvectors of large matrices.',/, &
+  ' ==================================================================',/, &
+  /, &
+  ' Implementation by',/, &
+  /, &
+  '   Ivan Giannì, Tommaso Nottoli, Federica Pes, Antoine Levitt ',/, &
+  '   and Filippo Lipparini',/, &
+  '   MoLECoLab Pisa',/, &
+  '   Department of Chemistry and Industrial Chemistry',/, &
+  '   University of Pisa',/, &
+  '   Via G. Moruzzi 13, I-56124, Pisa, Italy')
+    write(6,1000)
+    return
+  end subroutine print_header
+!
   subroutine mmult(n,m,x,ax)
     use utils
     implicit none
@@ -265,7 +305,7 @@ end program main
 !       fix the phase so that the first element of the eigenvector is positive.
 !
         if (a_copy(1,i) .lt. 0.0_dp) a_copy(:,i) = - a_copy(:,i)
-        write(10,'(10f12.6)') s(:,i)
+        write(10,'(10f12.6)') a_copy(:,i)
         write(10,*)
       end do
       close (10)
