@@ -139,6 +139,8 @@ module diaglib
 ! shared variables:
 ! =================
 !
+  private
+!
 ! useful constants
 !
   real(dp), parameter    :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
@@ -159,6 +161,9 @@ module diaglib
 !
 ! subroutines:
 ! ============
+!
+  public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, caslr_eff_driver, &
+            ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
 !
   contains
 !
@@ -1400,10 +1405,10 @@ module diaglib
 !
         call get_time(t1)
         call b_ortho_vs_x(n,ldu,n_act,vp,lvp,vp(1,i_beg))
-        call apbvec(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+        call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
         call b_ortho(n,n_act,vp(1,i_beg),lvp(1,i_beg))
         call b_ortho_vs_x(n,ldu,n_act,vm,lvm,vm(1,i_beg))
-        call ambvec(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+        call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
         call b_ortho(n,n_act,vm(1,i_beg),lvm(1,i_beg))
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
@@ -1434,9 +1439,9 @@ module diaglib
         lvp   = zero
         lvm   = zero
 !
-        call apbvec(n,n_max,vp,lvp)
+        call apbmul(n,n_max,vp,lvp)
         call b_ortho(n,n_max,vp,lvp)
-        call ambvec(n,n_max,vm,lvm)
+        call ambmul(n,n_max,vm,lvm)
         call b_ortho(n,n_max,vm,lvm)
 !
         bvp   = zero
