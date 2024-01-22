@@ -139,6 +139,8 @@ module diaglib
 ! shared variables:
 ! =================
 !
+  private
+!
 ! useful constants
 !
   real(dp), parameter    :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
@@ -159,6 +161,9 @@ module diaglib
 !
 ! subroutines:
 ! ============
+!
+  public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, caslr_eff_driver, &
+            ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
 !
   contains
 !
