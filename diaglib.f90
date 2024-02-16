@@ -2450,6 +2450,7 @@ module diaglib
         return
       end if
       call dgemm('t','n',m,m,n,one,u,n,u,n,zero,metric,m)
+      msave = metric
 !
 !   compute the cholesky factorization of the metric.
 !
