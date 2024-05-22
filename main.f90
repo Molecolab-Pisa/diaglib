@@ -11,9 +11,9 @@ program main
 !
 ! initialize:
 !
-  n      = 100
-  n_want = 4
-  tol    = 1.0e-6_dp
+  n      = 200
+  n_want = 10
+  tol    = 1.0e-8_dp
   itmax  = 1000
   m_max  = 10
   nmult  = 0
@@ -23,7 +23,7 @@ program main
   if ((m_max*n_want) .gt. n) then 
      write(6,*) 
      write(6,*) 'WARNING' 
-     write(6,*) 'Rouché-Capelli is encountered, please change your parameters (and your life, trust me)'
+     write(6,*) 'Rouché-Capelli is encountered! Please, change your parameters.' 
      write(6,*) 
      stop
    end if
@@ -641,7 +641,33 @@ end program main
     return
   end subroutine lrprec_2
 !
-  subroutine lrprec_1_newcomplex(reim,n,m,fac,xp,xm,yp,ym)
+  subroutine lrprec_2_newcomplex(n,m,fac,xp,xm,yp,ym)
+    use utils
+    implicit none
+    integer,                  intent(in)    :: n, m
+    real(dp),                 intent(in)    :: fac
+    real(dp), dimension(n,m), intent(in)    :: xp, xm
+    real(dp), dimension(n,m), intent(inout) :: yp, ym
+!
+    integer  :: i, icol
+    real(dp) :: denom
+!
+    yp = 0.0_dp
+    ym = 0.0_dp
+!
+    do icol = 1, m
+      do i = 1, n
+        denom = fac * fac * aare(i,i) * aare(i,i) - sigmare(i,i) * sigmare(i,i)
+        denom = 1.0_dp/denom
+        yp(i,icol) = denom * (fac * aare(i,i) * xp(i,icol) + sigmare(i,i) * xm(i,icol))
+        ym(i,icol) = denom * (fac * aare(i,i) * xm(i,icol) + sigmare(i,i) * xp(i,icol))
+      end do
+    end do
+!
+    return
+  end subroutine lrprec_2_newcomplex
+!
+  subroutine lrprec_1_newcomplex(n,m,fac,xp,xm,yp,ym)
     use utils
     implicit none
     integer,                  intent(in)    :: n, m
@@ -650,41 +676,19 @@ end program main
     real(dp), dimension(n,m), intent(inout) :: yp, ym
     real(dp)                                :: denom, denom1
 !
-!   if reim = 0, use smdre; if reim = 1 use smdim
-!
-    integer                                 :: reim
-!
     integer :: i, icol
 !
     yp = 0.0_dp
     ym = 0.0_dp
 !
-    !write(6,*) 'xp', xp
-    !write(6,*) 'xm', xm
-    if (reim.eq.0) then
-      do icol = 1, m
-        do i = 1, n
-          denom1     = (aare(i,i)**2 - fac**2 * sigmare(i,i)**2)
-          denom      = 1.0_dp/denom1
-          yp(i,icol) = - denom * (aare(i,i) * xp(i,icol) + fac * sigmare(i,i) * xm(i,icol))
-          ym(i,icol) = - denom * (aare(i,i) * xm(i,icol) + fac * sigmare(i,i) * xp(i,icol))
-        end do
+    do icol = 1, m
+      do i = 1, n
+        denom1     = (aare(i,i)**2 - fac**2 * sigmare(i,i)**2)
+        denom      = 1.0_dp/denom1
+        yp(i,icol) = - denom * (aare(i,i) * xp(i,icol) + fac * sigmare(i,i) * xm(i,icol))
+        ym(i,icol) = - denom * (aare(i,i) * xm(i,icol) + fac * sigmare(i,i) * xp(i,icol))
       end do
-      !write(6,*) 'denom', denom
-      !write(6,*) 'yp', yp
-      !write(6,*) 'ym', ym
-    else if (reim.eq.1) then
-      do icol = 1, m
-        do i = 1, n
-          denom1     = (aaim(i,i)**2 - fac**2 * sigmaim(i,i)**2)
-          denom      = 1.0_dp/denom1
-          yp(i,icol) = - denom * (aaim(i,i) * xp(i,icol) + fac * sigmaim(i,i) * xm(i,icol))
-          ym(i,icol) = - denom * (aaim(i,i) * xm(i,icol) + fac * sigmaim(i,i) * xp(i,icol))
-        end do
-      end do
-    else
-      write(6,*) 'invalid entry: first position of spdvec_newcomplex subroutine must be either 0 or 1'
-    end if
+    end do
     return
   end subroutine lrprec_1_newcomplex
 !
@@ -1421,7 +1425,7 @@ end program main
   subroutine test_caslr_newcomplex(check_lapack,n,n_want,tol,itmax,m_max)
     use real_precision
     use utils
-    use diaglib!, only : caslr_driver, caslr_eff_driver
+    use diaglib
     implicit none
     logical,  intent(in) :: check_lapack
     integer,  intent(in) :: n, n_want, itmax, m_max
@@ -1655,27 +1659,6 @@ end program main
        call dsygv(1,'V','L',n4,omega4,n4,lambda4,n4,w,work,lwork,info)
        print *, 'info2 lapack', info
 !
-!     real part
-!DC      call dsygv(1,'V','L',n2,sre,n2,are,n2,wre,lw,-1,info)
-!DC      print *, 'info1re', info
-!DC      lwork = int(lw(1))
-!DC      allocate (work(lwork))
-!DC      call dsygv(1,'V','L',n2,sre,n2,are,n2,wre,work,lwork,info)
-!DC      print *, 'info2re', info
-!DC!     imaginary part
-!DC      deallocate(work)
-!DC      call dsygv(1,'V','L',n2,sim,n2,aim,n2,wim,lw,-1,info)
-!DC      print *, 'info1im', info
-!DC      lwork = int(lw(1))
-!DC      allocate (work(lwork))
-!DC      call dsygv(1,'V','L',n2,sim,n2,aim,n2,wim,work,lwork,info)
-!DC      print *, 'info2im', info
-!DC!
-!DC      do i = 1, n2
-!DC        w(i)   = wre(i)
-!DC        w(i+n) = wim(i) 
-!DC      end do
-!
 !     write the results on a file for comparison.
 !
       open (unit = 10, file = 'lapack_newcomplex.txt', form = 'formatted', access = 'sequential')
@@ -1686,8 +1669,6 @@ end program main
 !
         if (omega4(1,n4-i+1) .lt. 0.0_dp) omega4(:,n4-i+1) = - omega4(:,n4-i+1)
         write(10,'(10f15.6)') omega4(:,n4-i+1)
-!        if (sim(1,n2-i+1) .lt. 0.0_dp) sim(:,n2-i+1) = - sim(:,n2-i+1)
-!        write(10,'(10f12.6)') sim(:,n2-i+1)
         write(10,*)
       end do
       close (10)
@@ -1738,51 +1719,59 @@ end program main
 !     3: maxloc for both evecre and evecim
 ! 
       !call guess_evec_newcomplex(1,n2,n_eig,diagonal,evecre,evecim)
-      call guess_evec(1,n4,n_eig,diagonal,evec)
+      call guess_evec(4,n4,n_eig,diagonal,evec)
+!      do i = 1, n_eig, 2
+!        evec(1:n2,i+1)    = -evec(n2+1:n4,i)
+!        evec(1:n,i+1)     = -evec(n2+1:n*3,i)
+!        evec(n+1:n2,i+1)  =  evec(n*3+1:n4,i)
+!        evec(n2+1:n4,i+1) =  evec(1:n2,i)
+!      end do
 !
 !     evec structure: X = (Yr Zr Yi -Zi) 
 !
       evecre = evec(1:n2,:)
       evecim = evec(n2+1:n4,:)
 !
-!     call the traditional fake solver:
+!     call the traditional fake solver which uses the whole expansion vectors and matrices:
 !
-      write(6,*)
-      write(6,*) ' traditional implementation - complex fake Olsen'
-      write(6,*)
-      !call caslr_newcomplex_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_newcomplex, &
-      !                             ambvec_newcomplex,spdvec_newcomplex,smdvec_newcomplex, &
-      !                             lrprec_1_newcomplex,eig,evecre,evecim,ok)
-      call caslr_2x2_driver(.true.,n2,n4,n_want,n_eig,itmax,tol,m_max, &
-                            lambdavec,omegavec,lrprec_2f,eig,evec,ok)
-      !call caslr_4x4_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec, &
-      !                             ambvec,spdvec,smdvec, &
-      !                             lrprec_1,eig,evec,ok)
-!
-!     write the converged results on file for comparison:
-!
-      sqrttwo = sqrt(2.0_dp)
-      open (unit = 10, file = 'caslr_fake_cOlsen.txt', form = 'formatted', access = 'sequential')
-      do i = 1, n_want
-        write(10,1000) i, eig(i)
-        if (evec(1,i) .lt. 0.0_dp) evec(:,i) = - evec(:,i)
-        write(10,'(10f12.6)') evec(:,i)/sqrttwo
-        write(10,*)
-      end do
-      close (10)
+!2x2      write(6,*)
+!2x2      write(6,*) ' traditional implementation - complex fake Olsen'
+!2x2      write(6,*)
+!2x2      !call caslr_newcomplex_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_newcomplex, &
+!2x2      !                             ambvec_newcomplex,spdvec_newcomplex,smdvec_newcomplex, &
+!2x2      !                             lrprec_1_newcomplex,eig,evecre,evecim,ok)
+!2x2      call caslr_2x2_driver(.true.,n2,n4,n_want,n_eig,itmax,tol,m_max, &
+!2x2                            lambdavec,omegavec,lrprec_2f,eig,evec,ok)
+!2x2      !call caslr_4x4_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec, &
+!2x2      !                             ambvec,spdvec,smdvec, &
+!2x2      !                             lrprec_1,eig,evec,ok)
+!2x2!
+!2x2!     write the converged results on file for comparison:
+!2x2!
+!2x2      sqrttwo = sqrt(2.0_dp)
+!2x2      open (unit = 10, file = 'caslr_fake_cOlsen.txt', form = 'formatted', access = 'sequential')
+!2x2      do i = 1, n_want
+!2x2        write(10,1000) i, eig(i)
+!2x2        !if (evec(1,i) .lt. 0.0_dp) evec(:,i) = - evec(:,i)
+!2x2        write(10,'(10f12.6)') evec(:,i)/sqrttwo
+!2x2        write(10,*)
+!2x2      end do
+!2x2      close (10)
 !      
 !     test A x=lambda S x
 !
-!test    do i_eig = 1, n_want
-!test      write(6,*) 'TEST AX=LAMBDASX', eig(i_eig)
-!test      write(6,*) 'eigenval n_', i_eig
-!test      call dgemv('n',n4,n4,1.0_dp,lambdafull,n4,evec(:,i_eig),1,0.0_dp,prod,1)
-!test      call dgemv('n',n4,n4,1.0_dp,omegafull,n4,evec(:,i_eig),1,0.0_dp,prod2,1)
-!test      write(6,'(2a15)') 'AX', 'LAMBDA SX'
-!test      do i = 1, n4
-!test        write(6,'(2f15.8)') prod(i), eig(i_eig)*prod2(i)
+!test      do i_eig = 1, n_want
+!test        write(6,*) 'TEST AX=LAMBDASX', eig(i_eig)
+!test        write(6,*) 'eigenval n_', i_eig
+!test        call dgemv('n',n4,n4,1.0_dp,lambdafull,n4,evec(:,i_eig),1,0.0_dp,prod,1)
+!test        call dgemv('n',n4,n4,1.0_dp,omegafull,n4,evec(:,i_eig),1,0.0_dp,prod2,1)
+!test        !write(6,'(2a15)') 'AX', 'LAMBDA SX'
+!test        write(6,'(2a15)') 'AX - LAMBDA SX'
+!test        do i = 1, n4
+!test          !write(6,'(2f15.8)') prod(i), eig(i_eig)*prod2(i)
+!test          write(6,'(f15.8)') prod(i) - eig(i_eig)*prod2(i)
+!test        end do
 !test      end do
-!test    end do
 !
 !     call the traditional solver:
 !
@@ -1790,8 +1779,6 @@ end program main
       write(6,*) ' traditional implementation - complex Olsen'
       write(6,*)
 !
-!      n_eig = n4
-!      
       call caslr_newcomplex_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_newcomplex, &
                                    ambvec_newcomplex,spdvec_newcomplex,smdvec_newcomplex, &
                                    lrprec_1_newcomplex,eig,evecre,evecim,ok)
@@ -1809,31 +1796,96 @@ end program main
         write(10,*)
       end do
       close (10)
+!      
+!     test A x=lambda S x
+!
+!test      evec(1:n2,:)    = evecre
+!test      evec(n2+1:n4,:) = evecim 
+!test      do i_eig = 1, n_want
+!test        write(6,*) 'TEST AX=LAMBDASX', eig(i_eig)
+!test        write(6,*) 'eigenval n_', i_eig
+!test        call dgemv('n',n4,n4,1.0_dp,lambdafull,n4,evec(:,i_eig),1,0.0_dp,prod,1)
+!test        call dgemv('n',n4,n4,1.0_dp,omegafull,n4,evec(:,i_eig),1,0.0_dp,prod2,1)
+!test        !write(6,'(2a15)') 'AX', 'LAMBDA SX'
+!test        write(6,'(a15)') 'AX - LAMBDA SX'
+!test        do i = 1, n4
+!test          !write(6,'(2f15.8)') prod(i), eig(i_eig)*prod2(i)
+!test          write(6,'(f15.8)') prod(i) - eig(i_eig)*prod2(i)
+!test        end do
+!test      end do
+!
     else
-!dc!
-!dc!     make a guess for the eigenvector (see guess_evec_newcomplex for more information)
-!dc!
-!dc!     1: minloc for both evecre and evecim     
-!dc!
-!dc      call guess_evec_newcomplex(1,n2,n_eig,diagonal,evecre,evecim)
-!dc!
-!dc!     call the modified solver:
-!dc!
-!dc      write(6,*) ' new implementation - complex SMO-GD'
-!dc      write(6,*)
-!dc      call caslr_newcomplex_eff_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec,ambvec, &
-!dc                            spdvec,smdvec,lrprec_2,eig,evec,ok)
-!dc!
-!dc!     write the converged results on file for comparison:
-!dc!
-!dc      open (unit = 10, file = 'caslr_newcomplex_eff.txt', form = 'formatted', access = 'sequential')
-!dc      do i = 1, n_want
-!dc        write(10,1000) i, eig(i)
-!dc        if (evec(1,i) .lt. 0.0_dp) evec(:,i) = - evec(:,i)
-!dc        write(10,'(10f12.6)') evec(:,i)/2.0_dp
-!dc        write(10,*)
-!dc      end do
-!dc      close (10)
+!
+!     make a guess for the eigenvector (see guess_evec_newcomplex for more information)
+!
+      call guess_evec(1,n4,n_eig,diagonal,evec)
+!
+!     evec structure: X = (Yr Zr Yi -Zi) 
+!
+      evecre = evec(1:n2,:)
+      evecim = evec(n2+1:n4,:)
+!      
+!     1: minloc for both evecre and evecim     
+!
+!
+!     call the traditional solver:
+!
+      write(6,*)
+      write(6,*) ' traditional implementation - complex Olsen'
+      write(6,*)
+!
+      call caslr_newcomplex_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_newcomplex, &
+                                   ambvec_newcomplex,spdvec_newcomplex,smdvec_newcomplex, &
+                                   lrprec_1_newcomplex,eig,evecre,evecim,ok)
+!
+!     write the converged results on file for comparison:
+!
+      sqrttwo = sqrt(2.0_dp)
+      open (unit = 10, file = 'caslr_trad_newcomplex.txt', form = 'formatted', access = 'sequential')
+      do i = 1, n_want
+        write(10,1000) i, eig(i)
+        if (evecre(1,i) .lt. 0.0_dp) evecre(:,i) = - evecre(:,i)
+        if (evecim(1,i) .lt. 0.0_dp) evecim(:,i) = - evecim(:,i)
+        write(10,'(10f12.6)') evecre(:,i)/sqrttwo
+        write(10,'(10f12.6)') evecim(:,i)/sqrttwo
+        write(10,*)
+      end do
+      close (10)
+!
+!     make a guess for the eigenvector
+!
+      call guess_evec(1,n4,n_eig,diagonal,evec)
+!
+!     evec structure: X = (Yr Zr Yi -Zi) 
+!
+      evecre = evec(1:n2,:)
+      evecim = evec(n2+1:n4,:)
+!
+!      call guess_evec_newcomplex(1,n2,n_eig,diagonal,evecre,evecim)
+!
+!     call the modified solver:
+!
+      write(6,*)
+      write(6,*) ' efficient implementation - complex SMO-GD'
+      write(6,*)
+!
+      call caslr_newcomplex_eff_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_newcomplex,ambvec_newcomplex, &
+                                       spdvec_newcomplex,smdvec_newcomplex, & 
+                                       lrprec_2_newcomplex,eig,evecre,evecim,ok)
+!
+!     write the converged results on file for comparison:
+!
+      sqrttwo = sqrt(2.0_dp)
+      open (unit = 10, file = 'caslr_newcomplex_eff.txt', form = 'formatted', access = 'sequential')
+      do i = 1, n_want
+        write(10,1000) i, eig(i)
+        if (evecre(1,i) .lt. 0.0_dp) evecre(:,i) = - evecre(:,i)
+        if (evecim(1,i) .lt. 0.0_dp) evecim(:,i) = - evecim(:,i)
+        write(10,'(10f12.6)') evecre(:,i)/sqrttwo
+        write(10,'(10f12.6)') evecim(:,i)/sqrttwo
+        write(10,*)
+      end do
+      close (10)
     end if
 !
     return
@@ -1876,8 +1928,6 @@ end program main
 !
     1000 format(t3,' eigenvalue # ',i6,': ',f20.10,/,t3,' eigenvector: ')
 !
-    write(6,*) 'Luca Melega main fucking stupid!'
-!    
 !   the actual size of the problem is 2*n:
 !
     n2 = 2 * n

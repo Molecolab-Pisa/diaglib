@@ -166,8 +166,8 @@ module diaglib
 ! ============
 !
   public :: lobpcg_driver, davidson_driver, davidson_complex_driver, davidson_newcomplex_driver, gen_david_driver, & 
-            caslr_driver, caslr_complex_driver, caslr_eff_driver, caslr_complex_eff_driver, caslr_newcomplex_driver, & ! caslr_newcomplex_eff_driver, &
-            caslr_2x2_driver, ortho, b_ortho, ortho_cd, ortho_vs_x, ortho_vs_x_complex, &
+            caslr_driver, caslr_complex_driver, caslr_eff_driver, caslr_complex_eff_driver, caslr_newcomplex_driver, & 
+            caslr_newcomplex_eff_driver, caslr_2x2_driver, ortho, b_ortho, ortho_cd, ortho_vs_x, ortho_vs_x_complex, &
             b_ortho_vs_x, b_ortho_vs_x_complex, b_ortho_complex, ortho_cd_complex, diag_shift_complex, & 
             ortho_complex, prtmat, prtmat_complex, check_sym_4n, ortho_vs_x_4n, ortho_cd_newcomplex
   contains
@@ -1089,8 +1089,8 @@ module diaglib
 ! 
 !   test full 4x4 problem
 !
-    real(dp), allocatable :: bp_r(:,:), bp_i(:,:), bm_r(:,:), bm_i(:,:), evec_old(:,:)
-    real(dp), allocatable :: overlap(:,:), vp_old(:,:), overlap_vp(:,:)
+!    real(dp), allocatable :: bp_r(:,:), bp_i(:,:), bm_r(:,:), bm_i(:,:), evec_old(:,:)
+!    real(dp), allocatable :: overlap(:,:), vp_old(:,:), overlap_vp(:,:)
 !
 !   restarting variables
 !
@@ -1108,7 +1108,6 @@ module diaglib
 !   no expansion space smaller than max_dav = 10 is deemed acceptable.
 !
     dim_dav = max(min_dav,max_dav)
-    !dim_dav = 5
     lda     = dim_dav*n_max
     lda2    = 2 * lda
 !
@@ -1140,8 +1139,8 @@ module diaglib
 !
 !   allocate memory for the plus and minus eigenvector components:
 !
-    allocate (up(lda,n_max), um(lda,n_max), eigp2(n2,n_max), eigm2(n2,n_max), bp2(n2,n_max), bm2(n2,n_max), & 
-              evec_old(n2,n_max), overlap(n_max,n_max), vp_old(n2,lda), overlap_vp(lda,lda), stat = istat)
+    allocate (up(lda,n_max), um(lda,n_max), eigp2(n2,n_max), eigm2(n2,n_max), &
+              bp2(n2,n_max), bm2(n2,n_max), stat = istat)
     call check_mem(istat)
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
@@ -1152,29 +1151,25 @@ module diaglib
 !
 !   clean out various quantities
 !
-    t_diag   = zero
-    t_ortho  = zero
-    t_mv     = zero
-    t_tot    = zero
-    vp       = zero
-    vm       = zero
-    bvp      = zero
-    bvm      = zero
-    lvp      = zero
-    lvm      = zero
-    vp2      = zero
-    vm2      = zero
-    bvp2     = zero
-    bvm2     = zero
-    lvp2     = zero
-    lvm2     = zero
-    a_red    = zero
-    evec_old = zero 
-    overlap  = zero
-    overlap_vp = zero
-    vp_old   = zero
-    ok       = .false.
-    done     = .false.
+    t_diag     = zero
+    t_ortho    = zero
+    t_mv       = zero
+    t_tot      = zero
+    vp         = zero
+    vm         = zero
+    bvp        = zero
+    bvm        = zero
+    lvp        = zero
+    lvm        = zero
+    vp2        = zero
+    vm2        = zero
+    bvp2       = zero
+    bvm2       = zero
+    lvp2       = zero
+    lvm2       = zero
+    a_red      = zero
+    ok         = .false.
+    done       = .false.
 !
     call get_time(t_tot)
 !
@@ -1187,26 +1182,9 @@ module diaglib
       vp(:,i_eig)   = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
       vm(:,i_eig)   = (evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
       !eig i+1
-      vp(:,i_eig+1) = (-evec(n+1:(3*n/2),i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
-      vm(:,i_eig+1) = (-evec(n+1:(3*n/2),i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
+      vp(:,i_eig+1) = (+evec(n+1:(3*n/2),i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
+      vm(:,i_eig+1) = (+evec(n+1:(3*n/2),i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
     end do
-!
-!   build b(+) = (br+ br+ bi+ -bi+) and b(-) = (br- -br- bi- bi-)
-!
-!    vp2(1:n,:)    = vp
-!    vp2(n+1:n2,:) = vp
-!    vm2(1:n,:)    = vm
-!    vm2(n+1:n2,:) = -vm
-!
-!    allocate(bp_r(n/2,lda), bp_i(n/2,lda), bm_r(n/2,lda), bm_i(n/2,lda))
-!    bp_r = zero
-!    bp_i = zero
-!    bm_r = zero
-!    bm_i = zero
-!    bp_r(1,1) = 0.5_dp
-!    bp_i(1,1) = 0.5_dp 
-!    bm_r(1,1) = 0.5_dp 
-!    bm_i(1,1) = 0.5_dp 
 !
     vp2(1:n/2,:)         = vp
     vp2(n/2+1:n,:)       = vp
@@ -1218,101 +1196,28 @@ module diaglib
     !
     do i_eig = 1, n_max, 2
       !eig
-      vp(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
-      vm(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
+      vp(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
+      vm(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
       !eig i+1
-      vp(:,i_eig+1) = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
-      vm(:,i_eig+1) = (evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
+      vp(:,i_eig+1) = (-evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
+      vm(:,i_eig+1) = (-evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
     end do
     !
     vp2(n+1:(3*n2)/4,:)  = vp
     vp2((3*n2)/4+1:n2,:) = -vp
     vm2(n+1:(3*n2)/4,:)  = vm
     vm2((3*n2)/4+1:n2,:) = vm
-    !deallocate(bp_r, bp_i, bm_r, bm_i)
-    !write(6,*) 'vpfake 1 = r+ r+ i+ -i+'
-    !do i = 1, n/2
-    !  write(6,'(4f8.4)') vp2(i,1), vp2(n/2+i,1), vp2(n+i,1), vp2(3*n/2+i,1) 
-    !end do
-    !write(6,*) 'vmfake 2 = -i+ i+ r+ r+'
-    !do i = 1, n/2
-    !  write(6,'(4f8.4)') vm2(i,2), vm2(n/2+i,2), vm2(n+i,2), vm2(3*n/2+i,2) 
-    !end do
-    
 !
-!   new proposal:
-!
-!np    vp2 = zero
-!np    vm2 = zero
-!np    vp  = zero
-!np    vm  = zero
-!np    do i_eig = 1, n_max, 2
-!np      !eig i
-!np      vp(:,i_eig)   = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
-!np      vm(:,i_eig)   = (evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
-!np      !eig i+1
-!np      vp(:,i_eig+1) = (evec(n+1:(3*n/2),i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
-!np      vm(:,i_eig+1) = (evec(n+1:(3*n/2),i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
-!np    end do
-!np    vp2(1:n/2,:)         = vp
-!np    vp2(n/2+1:n,:)       = vp
-!np    vm2(1:n/2,:)         = vm
-!np    vm2(n/2+1:n,:)       = -vm
-!np    vp = zero
-!np    vm = zero
-!np    do i_eig = 1, n_max, 2
-!np      !eig
-!np      vp(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
-!np      vm(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
-!np      !eig i+1
-!np      vp(:,i_eig+1) = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
-!np      vm(:,i_eig+1) = (evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
-!np    end do
-!np    vp2(n+1:(3*n2)/4,:)  = vp
-!np    vp2((3*n2)/4+1:n2,:) = -vp
-!np    vm2(n+1:(3*n2)/4,:)  = vm
-!np    vm2((3*n2)/4+1:n2,:) = vm
-!
-    !write(6,*) 'before ortho'
     !call check_sym_4n(1,n2,n_max,vp2)
     !call check_sym_4n(2,n2,n_max,vm2)
     call ortho_cd(.false.,n2,n_max,vp2,xx,ok)
     call ortho_cd(.false.,n2,n_max,vm2,xx,ok)
-    do i_eig = 1, n_max
-      write(6,*) 'vpfake 1 = r+ r+ i+ -i+', i_eig
-      do i = 1, n/2
-        write(6,'(4f8.4)') vp2(i,i_eig), vp2(n/2+i,i_eig), vp2(n+i,i_eig), vp2(3*n/2+i,i_eig) 
-      end do
-      write(6,*) 'vmfake 2 = -i+ i+ r+ r+'
-      do i = 1, n/2
-        write(6,'(4f8.4)') vm2(i,i_eig), vm2(n/2+i,i_eig), vm2(n+i,i_eig), vm2(3*n/2+i,i_eig) 
-      end do
-    end do
-    !write(6,*) 'after ortho'
     !call check_sym_4n(1,n2,n_max,vp2)
     !call check_sym_4n(2,n2,n_max,vm2)
 !
     n_act = n_max
     ind   = 1
     i_beg = 1
-    !do i_eig = 1, n_act, 2
-    ! print *, 'V(+) good #', i_eig
-    !  do i = 1, n/2
-    !    print '(4f15.8)', vp2(i,i_beg+i_eig-1), vp2(n/2+i,i_beg+i_eig-1), vp2(n+i,i_beg+i_eig-1), vp2(3*n/2+i,i_beg+i_eig-1)
-    !  end do
-    !  print *, 'V(-) bad #', i_eig+1
-    !  do i = 1, n/2
-    !    print '(4f15.8)', vm2(i,i_beg+i_eig), vm2(n/2+i,i_beg+i_eig), vm2(n+i,i_beg+i_eig), vm2(3*n/2+i,i_beg+i_eig)
-    !  end do
-    !  print *, 'V(-) good #', i_eig+1
-    !  do i = 1, n/2
-    !    print '(4f15.8)', vm2(i,i_beg+i_eig-1), vm2(n/2+i,i_beg+i_eig-1), vm2(n+i,i_beg+i_eig-1), vm2(3*n/2+i,i_beg+i_eig-1)
-    !  end do
-    !  print *, 'V(+) bad #', i_eig
-    !  do i = 1, n/2
-    !    print '(4f15.8)', vp2(i,i_beg+i_eig), vp2(n/2+i,i_beg+i_eig), vp2(n+i,i_beg+i_eig), vp2(3*n/2+i,i_beg+i_eig)
-    !  end do
-    !end do
 !
 !   initialize the counter for the expansion of the subspace
 !
@@ -1344,14 +1249,6 @@ module diaglib
 !
       call get_time(t1)
       call lambdamul(n2,n_act,vp2(1,i_beg),lvp2(1,i_beg))
-      !write(6,*) 'lvp2re'
-      !do j = 1, ldu
-      !  write(6,*) 'column #', j
-      !  do i = 1, n/2 
-      !    write(6,'(f8.4)') lvp2(i,j) !vpre(i,j), vpim(i,j), -vpim(i,j) 
-      !  end do
-      !end do
-      !exit
       call lambdamul(n2,n_act,vm2(1,i_beg),lvm2(1,i_beg))
       call omegamul(n2,n_act,vp2(1,i_beg),bvm2(1,i_beg))
       call omegamul(n2,n_act,vm2(1,i_beg),bvp2(1,i_beg))
@@ -1363,15 +1260,6 @@ module diaglib
       call dgemm('t','n',ldu,ldu,n2,one,vp2,n2,lvp2,n2,zero,epmat,lda)
       call dgemm('t','n',ldu,ldu,n2,one,vm2,n2,lvm2,n2,zero,emmat,lda)
       call dgemm('t','n',ldu,ldu,n2,one,vm2,n2,bvm2,n2,zero,smat,lda)
-      !print *, 'vp'
-      !print '(20f8.4)', vp2(:,1)
-      !print *, 'vm'
-      !print '(20f8.4)', vm2(:,1)
-      !print *, 'lvp'
-      !print '(20f8.4)', lvp2(:,1)
-      !print *, 'bvm'
-      !print '(20f8.4)', bvm2(:,1)
-      !stop
 !
       e_red = zero
       a_red = zero
@@ -1380,58 +1268,21 @@ module diaglib
       a_red(ldu+1:2*ldu,ldu+1:2*ldu) = emmat(1:ldu,1:ldu)
       s_red(1:ldu,ldu+1:2*ldu)       = transpose(smat(1:ldu,1:ldu))
       s_red(ldu+1:2*ldu,1:ldu)       = smat(1:ldu,1:ldu)
-      print *, 'E red'
-      print '(8f20.15)', transpose(a_red(1:8,1:8))
-      print *, 'S red'
-      print '(8f20.15)', transpose(s_red(1:8,1:8))
-      !exit
 !
       call get_time(t1)
 !
 !     default algorithm: solve the 2n-dimensional inverse problem.
 !
-      write(6,'(a,i8)') 'ldu:               ', ldu
-      write(6,'(a,i8)') 'lda:               ', lda
-      write(6,'(a,i8)') 'lwork:             ', lwork
-      write(6,'(a,l4,i4)') 'all?, size work:   ', allocated(work), size(work)
-      write(6,'(a,2i4,2i4)') 'shape s_red, e_red:', shape(s_red), shape(a_red)
-      write(6,'(a,i8)') 'all?, size eig:    ', size(e_red)
       call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
-      print *, 'S red'
-      print '(8f20.15)', transpose(s_red(1:8,1:8))
-      !exit
-      write(6,*) 'info dsygv', info
-      !write(6,*) 'a_red'
-      !write(6,*) a_red
-      !write(6,*) 'eigenvectors of reduced problem'
-      !write(6,'(16f8.4)') transpose(s_red(1:2*ldu,1:2*ldu))
 !
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
 !
-      print *, "eigenvalues:"
       do i_eig = 1, n_max
         eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
-        !write(6,*) 'eigen it', eig(i_eig), it
         up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
         um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
-!fl
-       write(6,*) 'eig: ', eig(i_eig)
-       write(6,*) 'up ', i_eig
-       write(6,'(4f12.6)') up(1:ldu,i_eig)
-       write(6,*) 'um ', i_eig
-       write(6,'(4f12.6)') um(1:ldu,i_eig)
-       !exit
       end do
-      !write(6,*) 's_red'
-      !write(6,*) s_red
-      exit
-      !do i_eig = 1, n_max, 2
-      !  print '(2i15)', i_eig, i_eig+1
-      !  do i = 1, ldu
-      !    print '(2f15.8)', up(i,i_eig), up(i,i_eig+1)
-      !  end do
-      !end do
 !
       call get_time(t2)
       t_diag = t_diag + t2 - t1
@@ -1441,42 +1292,14 @@ module diaglib
       do i_eig = 1, n_max
         evec(:,i_eig) = eigp2(:,i_eig) + eigm2(:,i_eig)
       end do
-      !if (it .gt. 1) then
-      !  overlap = matmul(transpose(evec),evec_old)  
-      !end if
-      !print *, 'la mia bella matrice di overlap'
-      !print '(16f8.4)', transpose(overlap)
-      !evec_old = evec
-!      do i_eig = 1, n_max, 2
-!        write(6,*) 'eigenvector i i+1'
-!        do i = 1, 10
-!          write(6,'(2f12.6)') evec(i,i_eig), evec(n+i,i_eig+1)
-!        end do
-!      end do
 !
 !     compute the residuals, and their rms and sup norms:
 !
       call dgemm('n','n',n2,n_max,ldu,one,lvp2,n2,up,lda,zero,rp2,n2)
-      write(6,*) 'rp2re'
-      do j = 1, ldu
-        write(6,*) 'column #', j
-        do i = 1, n/2 
-          write(6,'(f8.4)') rp2(i,j) 
-        end do
-      end do
-      !exit
-      !
       call dgemm('n','n',n2,n_max,ldu,one,lvm2,n2,um,lda,zero,rm2,n2)
       call dgemm('n','n',n2,n_max,ldu,one,bvp2,n2,um,lda,zero,bp2,n2)
       call dgemm('n','n',n2,n_max,ldu,one,bvm2,n2,up,lda,zero,bm2,n2)
-!      do i_eig = 1, n_targ, 2
-!        write(6,'(4(a3,i1,11x))') 'R+_', i_eig, 'R+_', i_eig+1, 'R-_', i_eig, 'R-_', i_eig+1
-!        do i = 1, n2
-!          write(6,'(4f15.8)') rp2(i,i_eig), rp2(i,i_eig+1), rm2(i,i_eig), rm2(i,i_eig+1)
-!          !write(6,'(2f15.8)') rp2(i,i_eig)+rm2(i,i_eig), rp2(n+i,i_eig+1)+rm2(n+i,i_eig+1)
-!        end do
-!      end do
-      
+!      
       do i_eig = 1, n_targ
 !
 !       if the eigenvalue is already converged, skip it.
@@ -1485,8 +1308,6 @@ module diaglib
 !
         call daxpy(n2,-eig(i_eig),bp2(:,i_eig),1,rp2(:,i_eig),1)
         call daxpy(n2,-eig(i_eig),bm2(:,i_eig),1,rm2(:,i_eig),1)
-        !r_norm(1,i_eig) = dnrm2(n2,rp2(:,i_eig),1)/sqrtn + dnrm2(n2,rm2(:,i_eig),1)/sqrtn
-        !r_norm(2,i_eig) = maxval(abs(rp2(:,i_eig))) + maxval(abs(rm2(:,i_eig)))
         r_norm(1,i_eig) = sqrt(dot_product(rp2(:,i_eig),rp2(:,i_eig)) + &
                                dot_product(rm2(:,i_eig),rm2(:,i_eig)))/sqrtn
         r_norm(2,i_eig) = maxval(abs(rp2(:,i_eig) + rm2(:,i_eig)))
@@ -1509,14 +1330,14 @@ module diaglib
 !          rp2(:,i_eig+1) = temp
 !        end if 
 !      end do
-      !
-      !do i_eig = 1, n_targ, 2
-      !  write(6,'(4(a3,i1,11x))') 'R+_', i_eig, 'R+_', i_eig+1, 'R-_', i_eig, 'R-_', i_eig+1
-      !  do i = 1, 10
-      !    !write(6,'(4f15.8)') rp2(i,i_eig), rp2(n+i,i_eig+1), rm2(i,i_eig), rm2(n+i,i_eig+1)
-      !    write(6,'(2f15.8)') rp2(i,i_eig)+rm2(i,i_eig), rp2(n+i,i_eig+1)+rm2(n+i,i_eig+1)
-      !  end do
-      !end do
+!      
+!      do i_eig = 1, n_targ, 2
+!        write(6,'(4(a3,i1,11x))') 'R+_', i_eig, 'R+_', i_eig+1, 'R-_', i_eig, 'R-_', i_eig+1
+!        do i = 1, 10
+!          !write(6,'(4f15.8)') rp2(i,i_eig), rp2(n+i,i_eig+1), rm2(i,i_eig), rm2(n+i,i_eig+1)
+!          write(6,'(2f15.8)') rp2(i,i_eig)+rm2(i,i_eig), rp2(n+i,i_eig+1)+rm2(n+i,i_eig+1)
+!        end do
+!      end do
 !
 !     check convergence. lock the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true.
@@ -1582,97 +1403,13 @@ module diaglib
         end do
         ind   = n_max - n_act + 1
         call lrprec(n2,n_act,eig(ind),rp2(1,ind),rm2(1,ind),vp2(1,i_beg),vm2(1,i_beg))
-        !do i_eig = 1, n_act, 2
-        !  print *, 'R(+) good #', i_eig
-        !  do i = 1, n/2
-        !    print '(4f15.8)', rp2(i,ind+i_eig-1), rp2(n/2+i,ind+i_eig-1), rp2(n+i,ind+i_eig-1), rp2(3*n/2+i,ind+i_eig-1)
-        !  end do
-        !  print *, 'R(-) bad #', i_eig+1
-        !  do i = 1, n/2
-        !    print '(4f15.8)', rm2(i,ind+i_eig), rm2(n/2+i,ind+i_eig), rm2(n+i,ind+i_eig), rm2(3*n/2+i,ind+i_eig)
-        !  end do
-        !  print *, 'R(-) good #', i_eig+1
-        !  do i = 1, n/2
-        !    print '(4f15.8)', rm2(i,ind+i_eig-1), rm2(n/2+i,ind+i_eig-1), rm2(n+i,ind+i_eig-1), rm2(3*n/2+i,ind+i_eig-1)
-        !  end do
-        !  print *, 'R(+) bad #', i_eig
-        !  do i = 1, n/2
-        !    print '(4f15.8)', rp2(i,ind+i_eig), rp2(n/2+i,ind+i_eig), rp2(n+i,ind+i_eig), rp2(3*n/2+i,ind+i_eig)
-        !  end do
-        !end do
-        !do i_eig = 1, n_act, 2
-        !  print *, 'V(+) good #', i_eig
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vp2(i,i_beg+i_eig-1), vp2(n/2+i,i_beg+i_eig-1), vp2(n+i,i_beg+i_eig-1), vp2(3*n/2+i,i_beg+i_eig-1)
-        !  end do
-        !  print *, 'V(-) bad #', i_eig+1
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vm2(i,i_beg+i_eig), vm2(n/2+i,i_beg+i_eig), vm2(n+i,i_beg+i_eig), vm2(3*n/2+i,i_beg+i_eig)
-        !  end do
-        !  print *, 'V(-) good #', i_eig+1
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vm2(i,i_beg+i_eig-1), vm2(n/2+i,i_beg+i_eig-1), vm2(n+i,i_beg+i_eig-1), vm2(3*n/2+i,i_beg+i_eig-1)
-        !  end do
-        !  print *, 'V(+) bad #', i_eig
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vp2(i,i_beg+i_eig), vp2(n/2+i,i_beg+i_eig), vp2(n+i,i_beg+i_eig), vp2(3*n/2+i,i_beg+i_eig)
-        !  end do
-        !end do
-        !pause
 !
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
-        print *, 'vp2re'
-        print *, vp2(1:n/2,i_beg)
-        print *, 'vp2im'
-        print *, vp2(n+1:3*n/2,i_beg)
-        exit
         call get_time(t1)
         call ortho_vs_x_4n(.false.,n2,ldu,n_act,vp2,vp2(1,i_beg),xx,xx,1)
         call ortho_vs_x_4n(.false.,n2,ldu,n_act,vm2,vm2(1,i_beg),xx,xx,2)
-        !if (it.gt.1) then
-        !  print *, norm2(abs(vp_old(:,1:ldu)-vp2(:,1:ldu)))
-        !end if
-        !vp_old = vp2
-        !do i_eig = 1, n_act, 2
-        !  print *, 'V(+) good #', i_eig
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vp2(i,i_beg+i_eig-1), vp2(n/2+i,i_beg+i_eig-1), vp2(n+i,i_beg+i_eig-1), vp2(3*n/2+i,i_beg+i_eig-1)
-        !  end do
-        !  print *, 'V(-) bad #', i_eig+1
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vm2(i,i_beg+i_eig), vm2(n/2+i,i_beg+i_eig), vm2(n+i,i_beg+i_eig), vm2(3*n/2+i,i_beg+i_eig)
-        !  end do
-        !  print *, 'V(-) good #', i_eig+1
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vm2(i,i_beg+i_eig-1), vm2(n/2+i,i_beg+i_eig-1), vm2(n+i,i_beg+i_eig-1), vm2(3*n/2+i,i_beg+i_eig-1)
-        !  end do
-        !  print *, 'V(+) bad #', i_eig
-        !  do i = 1, n/2
-        !    print '(4f15.8)', vp2(i,i_beg+i_eig), vp2(n/2+i,i_beg+i_eig), vp2(n+i,i_beg+i_eig), vp2(3*n/2+i,i_beg+i_eig)
-        !  end do
-        !end do
-        !overlap_vp = 0.0d0
-        !do i = 1, ldu+n_act
-        !  overlap_vp(i,i) = 1.0d0
-        !end do
-        print *, 'L2 norm <Vp,Vp> - I:', norm2(abs(matmul(transpose(vp2),vp2))-overlap_vp)
-        print *, 'L2 norm <Vm,Vm> - I:', norm2(abs(matmul(transpose(vm2),vm2))-overlap_vp)
-        print *, 'L2 norm <Vp,Vm>:    ', norm2(abs(matmul(transpose(vp2),vm2)))
-        !overlap_vp =  matmul(transpose(vp2),vp2)
-        !print *, '<vp,vp>', ldu + n_act
-        !print '(16f8.4)', overlap_vp(1:16,1:16)
-        !overlap_vp =  matmul(transpose(vm2),vm2)
-        !print *, '<vm,vm>', ldu + n_act
-        !print '(16f8.4)', overlap_vp(1:16,1:16)
-        !pause
-        !if (it .gt. 1) then
-        !  overlap_vp = matmul(transpose(vp2),vp_old)
-        !end if
-        !vp_old = vp2
-        !print *, 'ovlp vp'
-        !print '(32f8.4)', transpose(overlap_vp)
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
       else
@@ -1697,18 +1434,18 @@ module diaglib
 !
         do i_eig = 1, n_max, 2
           !eig i
-          vp(:,i_eig)   = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
-          vm(:,i_eig)   = (evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
+          vp(:,i_eig)    = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
+          vm(:,i_eig)    = (evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
           !eig i+1
-          vp(:,i_eig+1) = (evec(n+1:(3*n/2),i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
-          vm(:,i_eig+1) = (-evec(n+1:(3*n/2),i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
+          vp(:,i_eig+1) = (+evec(n+1:(3*n/2),i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
+          vm(:,i_eig+1) = (+evec(n+1:(3*n/2),i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
         end do
 !
 !       build b(+) and b(-)
 !    
-        vp2(1:n/2,:)         = vp
-        vp2(n/2+1:n,:)       = vp
-        vm2(1:n/2,:)         = vm
+        vp2(1:n/2,:)         =  vp
+        vp2(n/2+1:n,:)       =  vp
+        vm2(1:n/2,:)         =  vm
         vm2(n/2+1:n,:)       = -vm
         !
         vp = zero
@@ -1716,22 +1453,28 @@ module diaglib
         !
         do i_eig = 1, n_max, 2
           !eig
-          vp(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
-          vm(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
+          vp(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) - evec((3*n/2)+1:n2,i_eig))/2.0_dp
+          vm(:,i_eig)   = (evec(n+1:(3*n)/2,i_eig) + evec((3*n/2)+1:n2,i_eig))/2.0_dp
           !eig i+1
-          vp(:,i_eig+1) = (evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
-          vm(:,i_eig+1) = (-evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
+          vp(:,i_eig+1) = (-evec(1:n/2,i_eig) + evec(n/2+1:n,i_eig))/2.0_dp
+          vm(:,i_eig+1) = (-evec(1:n/2,i_eig) - evec(n/2+1:n,i_eig))/2.0_dp
         end do
         !
-        vp2(n+1:(3*n2)/4,:)  = vp
+        vp2(n+1:(3*n2)/4,:)  =  vp
         vp2((3*n2)/4+1:n2,:) = -vp
-        vm2(n+1:(3*n2)/4,:)  = vm
-        vm2((3*n2)/4+1:n2,:) = vm
+        vm2(n+1:(3*n2)/4,:)  =  vm
+        vm2((3*n2)/4+1:n2,:) =  vm
 !        
-        !vp2(1:n,:)    = vp
-        !vp2(n+1:n2,:) = vp
-        !vm2(1:n,:)    = vm
-        !vm2(n+1:n2,:) = -vm
+!test        do i_eig = 1, n_max, 2
+!test          write(6,*) 'evec-vp-vm; i_eig: ', i_eig
+!test          do i = 1, n2
+!test            if (i == n/2+1)   write(6,*) '50'
+!test            if (i == n+1)     write(6,*) '100'
+!test            if (i == 3*n/2+1) write(6,*) '150'
+!test            write(6,'(2f20.16)') evec(i,i_eig) - vp2(i,i_eig) - vm2(i,i_eig), evec(i,i_eig+1) - vp2(i,i_eig+1) - vm2(i,i_eig+1)
+!test            if (i == n2)      write(6,*) '200'
+!test          end do
+!test        end do
 !    
         call ortho_cd(.false.,n2,n_max,vp2,xx,ok)
         call ortho_cd(.false.,n2,n_max,vm2,xx,ok)
@@ -1792,7 +1535,7 @@ module diaglib
 !   local variables:
 !   ================
 !
-    integer, parameter    :: min_dav = 10
+    integer, parameter    :: min_dav = 10 
     integer               :: istat
 !
 !   actual expansion space size and total dimension
@@ -1816,6 +1559,7 @@ module diaglib
     integer               :: lwork_svd
 !
     real(dp)              :: sqrtn, sqrt2n, tol_rms, tol_max
+    real(dp)              :: full_norm
     real(dp)              :: xx(1), lw_svd(1)
 !
 !   arrays to control convergence and orthogonalization
@@ -1839,8 +1583,10 @@ module diaglib
 !
 !   real
     real(dp), allocatable :: up(:,:), um(:,:), eigpre(:,:), eigmre(:,:), bpre(:,:), bmre(:,:)
+    real(dp), allocatable :: eigpre_(:,:), eigmre_(:,:)
 !   imaginary
     real(dp), allocatable :: eigpim(:,:), eigmim(:,:), bpim(:,:), bmim(:,:)
+    real(dp), allocatable :: eigpim_(:,:), eigmim_(:,:)
 !
 !   subspace matrix and eigenvalues.
 !
@@ -1857,11 +1603,11 @@ module diaglib
 !   reduced 4nx4n problem matrices: 
 !   p stands for ++, m stands for --, r stands for real, i stand for imaginary
 !
-    real(dp), allocatable :: ep_rr(:,:), ep_ri(:,:), ep_ir(:,:), ep_ii(:,:)
-    real(dp), allocatable :: em_rr(:,:), em_ri(:,:), em_ir(:,:), em_ii(:,:)
-    real(dp), allocatable :: smp_rr(:,:), smp_ri(:,:), smp_ir(:,:), smp_ii(:,:)
-    real(dp), allocatable :: spm_rr(:,:), spm_ri(:,:), spm_ir(:,:), spm_ii(:,:)
-    real(dp), allocatable :: emat4(:,:), smat4(:,:), eigen4(:) 
+!    real(dp), allocatable :: ep_rr(:,:), ep_ri(:,:), ep_ir(:,:), ep_ii(:,:)
+!    real(dp), allocatable :: em_rr(:,:), em_ri(:,:), em_ir(:,:), em_ii(:,:)
+!    real(dp), allocatable :: smp_rr(:,:), smp_ri(:,:), smp_ir(:,:), smp_ii(:,:)
+!    real(dp), allocatable :: spm_rr(:,:), spm_ri(:,:), spm_ir(:,:), spm_ii(:,:)
+!    real(dp), allocatable :: emat4(:,:), smat4(:,:), eigen4(:) 
     
 !
 !   restarting variables
@@ -1880,6 +1626,7 @@ module diaglib
 !   no expansion space smaller than max_dav = 10 is deemed acceptable.
 !
     dim_dav = max(min_dav,max_dav)
+    !dim_dav = 5
     lda     = dim_dav*n_max
     lda2    = 2 * lda
 !
@@ -1915,23 +1662,24 @@ module diaglib
 !
 !     reduced 4nx4n problem allocation
 !
-              ep_rr(lda,lda), ep_ri(lda,lda), ep_ir(lda,lda), ep_ii(lda,lda), &
-              em_rr(lda,lda), em_ri(lda,lda), em_ir(lda,lda), em_ii(lda,lda), &
-              spm_rr(lda,lda), spm_ri(lda,lda), spm_ir(lda,lda), spm_ii(lda,lda), &
-              smp_rr(lda,lda), smp_ri(lda,lda), smp_ir(lda,lda), smp_ii(lda,lda), & 
-              emat4(4*lda,4*lda), smat4(4*lda,4*lda), eigen4(4*lda), stat=istat)
+!              ep_rr(lda,lda), ep_ri(lda,lda), ep_ir(lda,lda), ep_ii(lda,lda), &
+!              em_rr(lda,lda), em_ri(lda,lda), em_ir(lda,lda), em_ii(lda,lda), &
+!              spm_rr(lda,lda), spm_ri(lda,lda), spm_ir(lda,lda), spm_ii(lda,lda), &
+!              smp_rr(lda,lda), smp_ri(lda,lda), smp_ir(lda,lda), smp_ii(lda,lda), & 
+!              emat4(4*lda,4*lda), smat4(4*lda,4*lda), eigen4(4*lda), & 
+               stat = istat) 
     call check_mem(istat)
 !
 !   allocate memory for the plus and minus eigenvector components:
 !
     allocate (up(lda,n_max), um(lda,n_max), eigpre(n,n_max), eigpim(n,n_max), eigmre(n,n_max), eigmim(n,n_max), & 
-              bpre(n,n_max), bpim(n,n_max), bmre(n,n_max), bmim(n,n_max), stat = istat)
+              bpre(n,n_max), bpim(n,n_max), bmre(n,n_max), bmim(n,n_max), & 
+              eigpre_(n,n_max), eigmre_(n,n_max), eigpim_(n,n_max), eigmim_(n,n_max),stat = istat)
     call check_mem(istat)
 !
 !   debug
 !
     allocate (vpp(2*n,lda), vmm(2*n,lda), stat = istat)
-!torna    allocate (vpp(4*n,lda), vmm(4*n,lda), stat = istat)
     call check_mem(istat)
 !
     write(6,*) 'EFFICIENT COMPLEX OLSEN IMPLEMENTATION'
@@ -1961,8 +1709,8 @@ module diaglib
     lvpim     = zero
     lvmre     = zero
     lvmim     = zero
-    emat4     = zero
-    smat4     = zero
+!    emat4     = zero
+!    smat4     = zero
     a_red     = zero
     ok        = .false.
     done      = .false.
@@ -1976,83 +1724,28 @@ module diaglib
 !
 !   move the guess into the expansion space.
 !
-!    print *, shape(evecre), 'nmax', n_max
-!    evecre = zero
-!    evecim = zero
-!    do i = 1, n_max/2
-!      evecre(i,i) = one
-!      evecim(i,n_max/2+i) = one
-!    end do
-!
 !
 !   keep in mind that: X_eig   = (Yr  Zr  Yi -Zi)
 !                      X_eig+1 = (-Yi Zi Yr Zr)
-!                      evecre  = (Yr Zr)
-!                      evecim  = (Yi -Zi) 
+!                      evecre  = (Yr Zr), (-Yi Zi)
+!                      evecim  = (Yi -Zi), (Yr Zr) 
 !
     do i_eig = 1, n_max, 2
 !     real 
       vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
       vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-      vpre(:,i_eig+1) = (-evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-      vmre(:,i_eig+1) = (-evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vpre(:,i_eig+1) = (+evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vmre(:,i_eig+1) = (+evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
 !     imaginary 
-      vpim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-      vmim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-      vpim(:,i_eig+1) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-      vmim(:,i_eig+1) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+      vpim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
     end do
-    !do i_eig = 1, n_max
-    !  write(6,*) 'vp 1 = r+ r+ i+ -i+', i_eig
-    !  do i = 1, n
-    !    write(6,'(4f8.4)') vpre(i,i_eig), vpre(i,i_eig), vpim(i,i_eig), -vpim(i,i_eig) 
-    !  end do
-    !  write(6,*) 'vm 2 = -i+ i+ r+ r+', i_eig
-    !  do i = 1, n
-    !    write(6,'(4f8.4)') vmre(i,i_eig), -vmre(i,i_eig), vmim(i,i_eig), vmim(i,i_eig) 
-    !  end do
-    !end do 
-!    print *, 'evec'
-!    print '(8f8.4)',  transpose(evecre)
-!    print '(8f8.4)',  transpose(evecim)
-!    print *, 'V(+)'
-!    print '(8f8.4)',  transpose(vpre(1:n,1:n_max))
-!    print '(8f8.4)',  transpose(vpre(1:n,1:n_max))
-!    print '(8f8.4)',  transpose(vpim(1:n,1:n_max))
-!    print '(8f8.4)', -transpose(vpim(1:n,1:n_max))
 !
-!   To obtain a canonical basis 
-!
-!    vpre      = zero
-!    vpim      = zero
-!    vmre      = zero
-!    vmim      = zero
-!    do i = 1, n_max
-!      vpre(i,i) = 1.0_dp
-!      vmre(i,i) = 1.0_dp
-!      vpim(i,i) = 1.0_dp
-!      vmim(i,i) = 1.0_dp
-!    end do
-!    vmim = vmre
-!
-    !torna vpp(1:n,:)       = vpre
-    !torna vpp(n+1:n2,:)    = vpre
-    !torna vpp(n2+1:3*n,:)  = vpim
-    !torna vpp(3*n+1:4*n,:) = -vpim
-    !torna vmm(1:n,:)       = vmre
-    !torna vmm(n+1:n2,:)    = -vmre
-    !torna vmm(n2+1:3*n,:)  = vmim
-    !torna vmm(3*n+1:4*n,:) = vmim
-    !torna call ortho_cd(.false.,n*4,n_max,vpp,xx,ok)
-    !torna call ortho_cd(.false.,n*4,n_max,vmm,xx,ok)
-    !torna vpre = vpp(1:n,:)
-    !torna vpim = vpp(n2+1:3*n,:)
-    !torna vmre = vmm(1:n,:)
-    !torna vmim = vmm(n2+1:3*n,:)
-!
-    vpp(1:n,:)       = vpre
+    vpp(1:n,:)     = vpre
     vpp(n+1:n2,:)  = vpim
-    vmm(1:n,:)       = vmre
+    vmm(1:n,:)     = vmre
     vmm(n+1:n2,:)  = vmim
     call ortho_cd_newcomplex(.false.,n2,n_max,vpp,xx,ok)
     call ortho_cd_newcomplex(.false.,n2,n_max,vmm,xx,ok)
@@ -2066,16 +1759,16 @@ module diaglib
 !   imaginary
 !    call ortho_cd(.false.,n,n_max,vpim,xx,ok)
 !    call ortho_cd(.false.,n,n_max,vmim,xx,ok)
-    do i_eig = 1, n_max
-      write(6,*) 'vp 1 = r+ r+ i+ -i+', i_eig
-      do i = 1, n
-        write(6,'(4f8.4)') vpre(i,i_eig), vpre(i,i_eig), vpim(i,i_eig), -vpim(i,i_eig) 
-      end do
-      write(6,*) 'vm 2 = -i+ i+ r+ r+'
-      do i = 1, n
-        write(6,'(4f8.4)') vmre(i,i_eig), -vmre(i,i_eig), vmim(i,i_eig), vmim(i,i_eig) 
-      end do
-    end do
+!    do i_eig = 1, n_max
+!      write(6,*) 'vp 1 = r+ r+ i+ -i+', i_eig
+!      do i = 1, n
+!        write(6,'(4f8.4)') vpre(i,i_eig), vpre(i,i_eig), vpim(i,i_eig), -vpim(i,i_eig) 
+!      end do
+!      write(6,*) 'vm 2 = -i+ i+ r+ r+'
+!      do i = 1, n
+!        write(6,'(4f8.4)') vmre(i,i_eig), -vmre(i,i_eig), vmim(i,i_eig), vmim(i,i_eig) 
+!      end do
+!    end do
 !
 !    vpp(1:n,:)    = vpre 
 !    vpp(n+1:n2,:) = vpim 
@@ -2122,73 +1815,18 @@ module diaglib
 !
 !     compute the matrix-vector products
 !
-      !write(6,*) 'vprepre', vpre
-      !write(6,*) 'vpimpre', vpim
       call apbmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg))   !sigma_re+
-      !write(6,*) 'vprepost', vpre
-      !write(6,*) 'vpimpost', vpim
-      !write(6,*) 'lvpre', lvpre
-      !write(6,*) 'lvpre'
-      !do j = 1, ldu
-      !  write(6,*) 'column #', j
-      !  do i = 1, n 
-      !    write(6,'(f8.4)') lvpre(i,j) !vpre(i,j), vpim(i,j), -vpim(i,j) 
-      !  end do
-      !end do
-      !exit
-      !
       call apbmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpim(1,i_beg))   !sigma_im+
-      !write(6,*) 'vprepost', vpre
-      !write(6,*) 'vpimpost', vpim
-      !write(6,*) 'lvpim', lvpim
-!
-      !write(6,*) 'vmrepre', vmre
-      !write(6,*) 'vmimpre', vmim
       call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))   !sigma_re-
-      !write(6,*) 'vmrepost', vmre
-      !write(6,*) 'vmimpost', vmim
-      !write(6,*) 'lvmre', lvmre
-      !
-      !write(6,*) 'vmrepre', vmre
-      !write(6,*) 'vmimpre', vmim
       call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))   !sigma_im-
-      !write(6,*) 'vmrepost', vmre
-      !write(6,*) 'vmimpost', vmim
-      !write(6,*) 'lvmim', lvmim
-!
-      !write(6,*) 'vprepre', vpre
-      !write(6,*) 'vpimpre', vpim
       call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))   !tau_re-
-      !write(6,*) 'vprepost', vpre
-      !write(6,*) 'vpimpost', vpim
-      !write(6,*) 'bvmre', bvmre
-      !
-      !write(6,*) 'vprepre', vpre
-      !write(6,*) 'vpimpre', vpim
       call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmim(1,i_beg))   !tau_im-
-      !write(6,*) 'vprepost', vpre
-      !write(6,*) 'vpimpost', vpim
-      !write(6,*) 'bvmim', bvmim
-!
-      !write(6,*) 'vmrepre', vmre
-      !write(6,*) 'vmimpre', vmim
       call smdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))   !tau_re+
-      !write(6,*) 'vmprepost', vmre
-      !write(6,*) 'vmpimpost', vmim
-      !write(6,*) 'bvpre', bvpre
-      !
-      !write(6,*) 'vmrepre', vmre
-      !write(6,*) 'vmimpre', vmim
       call smdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpim(1,i_beg))   !tau_im+
-      !write(6,*) 'vmprepost', vmre
-      !write(6,*) 'vmpimpost', vmim
-      !write(6,*) 'bvpim', bvpim
-      !
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrix 
-!
 !
 !     reduced 4nx4n problem implementation 
 !
@@ -2274,38 +1912,17 @@ module diaglib
 !dc      smmat = smmatre + smmatim
 !dc      write(6,*) 'S--', smmat
 !dc      stop
-      !write(6,*) 'vpre', vpre
-      !write(6,*) 'lvpre', lvpre
+!
       call dgemm('t','n',ldu,ldu,n,one,vpre,n,lvpre,n,zero,epmatre,lda)   !Ere+=(Vre+)^T*sigma_re+
-      !write(6,*) 'E+_re', epmatre
-      !
-      !write(6,*) 'vpim', vpim
-      !write(6,*) 'lvpim', lvpim
       call dgemm('t','n',ldu,ldu,n,one,vpim,n,lvpim,n,zero,epmatim,lda)   !Eim+=(Vim+)^T*sigma_im+
-      !write(6,*) 'E+_im', epmatim
       epmat = two*(epmatre + epmatim)
-      !write(6,*) 'epmatnew', epmat
-!      
-      !write(6,*) 'lvmre', lvmre
       call dgemm('t','n',ldu,ldu,n,one,vmre,n,lvmre,n,zero,emmatre,lda)   !Ere-=(Vre-)^T*sigma_re-
-      !write(6,*) 'E-_re', emmatre
-      !
-      !write(6,*) 'lvmim', lvmim
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,lvmim,n,zero,emmatim,lda)   !Eim-=(Vim-)^T*sigma_im-
-      !write(6,*) 'E-_im', emmatim
       emmat = two*(emmatre + emmatim)
-      !write(6,*) 'emmatnew', emmat
-!      
-      !write(6,*) 'bvmre', bvmre
       call dgemm('t','n',ldu,ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda)    !Sre=(Vre-)^T*tau_re-
-      !write(6,*) 'smatre', smatre
-      !
-      !write(6,*) 'bvmim', bvmim
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvmim,n,zero,smatim,lda)    !Sim=(Vim-)^T*tau_im-
-      !write(6,*) 'smatim', smatim
       smat = two*(smatre + smatim)
-      !write(6,*) 'smatnew', smat
-
+!
       e_red = zero
       a_red = zero
       s_red = zero
@@ -2313,37 +1930,13 @@ module diaglib
       a_red(ldu+1:2*ldu,ldu+1:2*ldu) = emmat(1:ldu,1:ldu)
       s_red(1:ldu,ldu+1:2*ldu)       = transpose(smat(1:ldu,1:ldu))
       s_red(ldu+1:2*ldu,1:ldu)       = smat(1:ldu,1:ldu)
-!      a_red                          = sqrt(two)*a_red
-      print *, 'E red'
-      print '(8f20.15)', transpose(a_red(1:8,1:8))
-      print *, 'S red'
-      print '(8f20.15)', transpose(s_red(1:8,1:8))
-      open(unit=99, file='Ered', form='formatted', status='replace')
-      write(99,'(8f20.15)') transpose(a_red(1:8,1:8))
-      close(99)
-      open(unit=99, file='Sred', form='formatted', status='replace')
-      write(99,'(8f20.15)') transpose(s_red(1:8,1:8))
-      close(99)
-      !exit
 !
       call get_time(t1)
 !
 !     default algorithm: solve the 2n-dimensional inverse problem.
 !
-      write(6,'(a,i8)')    'ldu:               ', ldu
-      write(6,'(a,i8)')    'lda:               ', lda
-      write(6,'(a,i8)')    'lwork:             ', lwork
-      write(6,'(a,l4,i4)') 'all?, size work:   ', allocated(work), size(work)
-      write(6,'(a,2i4,2i4)') 'shape s_red, e_red:', shape(s_red), shape(a_red)
-      write(6,'(a,i8)')      'all?, size eig:    ', size(e_red)
       call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
-      print *, 'S red'
-      print '(8f20.15)', transpose(s_red(1:8,1:8))
-      !exit
       print *, 'info dsygv', info
-      !write(6,*) 'a_red'
-      !write(6,*) a_red
-      !exit
 !
 !     Olsen algorithm: solve the whole inverse problem (4nx4n) 
 !
@@ -2353,26 +1946,14 @@ module diaglib
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
 !
-!      write(6,*) eigen4
-      print *, "eigenvalues:"
       do i_eig = 1, n_max
         eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
         up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
         um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
 !new        print *, one/eigen4(i_eig)
 !new        eig(i_eig)      = one/eigen4(4*ldu - i_eig + 1)
-        print *, i_eig, eig(i_eig)
-!fl
-!       write(6,*) 'eig: ', eig(i_eig)
-        write(6,*) 'up ', i_eig
-        write(6,'(4f12.6)') up(1:ldu,i_eig)
-        write(6,*) 'um ', i_eig
-        write(6,'(4f12.6)') um(1:ldu,i_eig)
-      !exit
+        !print *, i_eig, eig(i_eig)
       end do
-      !write(6,*) 's_red'
-      !write(6,*) s_red
-      !exit
 !
       call get_time(t2)
       t_diag = t_diag + t2 - t1
@@ -2380,21 +1961,35 @@ module diaglib
 !     real part 
 !
       call dgemm('n','n',n,n_max,ldu,one,vpre,n,up,lda,zero,eigpre,n)
-      call dgemm('n','n',n,n_max,ldu,one,vpim,n,up,lda,zero,eigpim,n)
+      call dgemm('n','n',n,n_max,ldu,one,vmre,n,um,lda,zero,eigmre,n)
 !
 !     imaginary part
 !
-      call dgemm('n','n',n,n_max,ldu,one,vmre,n,um,lda,zero,eigmre,n)
+      call dgemm('n','n',n,n_max,ldu,one,vpim,n,up,lda,zero,eigpim,n)
       call dgemm('n','n',n,n_max,ldu,one,vmim,n,um,lda,zero,eigmim,n)
 !
-      do i_eig = 1, n_max
+!     normalize 
 !
-!       being the evec defined as X = (Yre Zre Yim -Zim)
+!      do i_eig = 1, n_max
+!        full_norm = sqrt(two*(dot_product(eigpre(:,i_eig),eigpre(:,i_eig)) + & 
+!                              dot_product(eigpim(:,i_eig),eigpim(:,i_eig))))
+!        eigpre(:,i_eig) = eigpre(:,i_eig)/full_norm
+!        eigpim(:,i_eig) = eigpim(:,i_eig)/full_norm
+!        full_norm = sqrt(two*(dot_product(eigmre(:,i_eig),eigmre(:,i_eig)) + & 
+!                              dot_product(eigmim(:,i_eig),eigmim(:,i_eig))))
+!        eigmre(:,i_eig) = eigmre(:,i_eig)/full_norm
+!        eigmim(:,i_eig) = eigmim(:,i_eig)/full_norm
+!      end do
 !
-        evecre(1:n,i_eig)    = eigpre(:,i_eig) + eigmre(:,i_eig)   !Yre
-        evecre(n+1:n2,i_eig) = eigpre(:,i_eig) - eigmre(:,i_eig)   !Zre
-        evecim(1:n,i_eig)    = eigpim(:,i_eig) + eigmim(:,i_eig)   !Yim
-        evecim(n+1:n2,i_eig) = -eigpim(:,i_eig) + eigmim(:,i_eig)  !-Zim
+      do i_eig = 1, n_max!, 2
+!
+!       being the evec defined as Xeig   = (Yr Zr Yi -Zi)
+!                                 Xeig+1 = (-Yi Zi Yr Zr)
+!
+        evecre(1:n,i_eig)    =  eigpre(:,i_eig) + eigmre(:,i_eig)   !Yre
+        evecre(n+1:n2,i_eig) =  eigpre(:,i_eig) - eigmre(:,i_eig)   !Zre
+        evecim(1:n,i_eig)    =  eigpim(:,i_eig) + eigmim(:,i_eig)   !Yim
+        evecim(n+1:n2,i_eig) = -eigpim(:,i_eig) + eigmim(:,i_eig)   !-Zim
       end do
 !
 !     compute the residuals, and their rms and sup norms:
@@ -2402,33 +1997,16 @@ module diaglib
 !     real part 
 !
       call dgemm('n','n',n,n_max,ldu,one,lvpre,n,up,lda,zero,rpre,n)  
-      !write(6,*) 'rpre'
-      !do j = 1, ldu
-      !  write(6,*) 'column #', j
-      !  do i = 1, n 
-      !    write(6,'(f8.4)') rpre(i,j) 
-      !  end do
-      !end do
-      !exit
-      !
-      !write(6,*) 'rpre', rpre
       call dgemm('n','n',n,n_max,ldu,one,lvmre,n,um,lda,zero,rmre,n)
-      !write(6,*) 'rmre', rmre
       call dgemm('n','n',n,n_max,ldu,one,bvpre,n,um,lda,zero,bpre,n)
-      !write(6,*) 'bpre', bpre
       call dgemm('n','n',n,n_max,ldu,one,bvmre,n,up,lda,zero,bmre,n)
-      !write(6,*) 'bmre', bmre
 !
 !     imaginary part 
 !
       call dgemm('n','n',n,n_max,ldu,one,lvpim,n,up,lda,zero,rpim,n)
-      !write(6,*) 'rpim', rpim
       call dgemm('n','n',n,n_max,ldu,one,lvmim,n,um,lda,zero,rmim,n)
-      !write(6,*) 'rmim', rmim
       call dgemm('n','n',n,n_max,ldu,one,bvpim,n,um,lda,zero,bpim,n)
-      !write(6,*) 'bpim', bpim
       call dgemm('n','n',n,n_max,ldu,one,bvmim,n,up,lda,zero,bmim,n)
-      !write(6,*) 'bmim', bmim
       
       do i_eig = 1, n_targ
 !
@@ -2439,19 +2017,13 @@ module diaglib
 !       real part
 !
         call daxpy(n,-eig(i_eig),bpre(:,i_eig),1,rpre(:,i_eig),1)
-        !write(6,*) 'rpre', rpre
         call daxpy(n,-eig(i_eig),bmre(:,i_eig),1,rmre(:,i_eig),1)
-        !write(6,*) 'rmre', rmre
 !
 !       imaginary part
 !
         call daxpy(n,-eig(i_eig),bpim(:,i_eig),1,rpim(:,i_eig),1)
-        !write(6,*) 'rpim', rpim
         call daxpy(n,-eig(i_eig),bmim(:,i_eig),1,rmim(:,i_eig),1)
-        !write(6,*) 'rmim', rmim
 !        
-        !r_norm(1,i_eig) = dnrm2(n,rpre(:,i_eig) + rmre(:,i_eig),1) + & 
-        !                  dnrm2(n,rpim(:,i_eig) + rmim(:,i_eig),1)/sqrt2n
         r_norm(1,i_eig) = sqrt(dot_product(rpre(:,i_eig),rpre(:,i_eig)) + &
                                dot_product(rmre(:,i_eig),rmre(:,i_eig)) + &
                                dot_product(rpim(:,i_eig),rpim(:,i_eig)) + &
@@ -2524,49 +2096,18 @@ module diaglib
         end do
         ind   = n_max - n_act + 1
 !
-!       real part = 0
+!       real part 
 !
-        !write(6,*) 'vpre_pre', vpre
-        !write(6,*) 'vmre_pre', vmre
-        call lrprec(0,n,n_act,eig(ind),rpre(1,ind),rmre(1,ind),vpre(1,i_beg),vmre(1,i_beg))
-        !write(6,*) 'vpre_post', vpre
-        !write(6,*) 'vmre_post', vmre
+        call lrprec(n,n_act,eig(ind),rpre(1,ind),rmre(1,ind),vpre(1,i_beg),vmre(1,i_beg))
 !
-!       imaginary part = 1
+!       imaginary part 
 !
-        !write(6,*) 'vpim_pre', vpim
-        !write(6,*) 'vmim_pre', vmim
-        call lrprec(0,n,n_act,eig(ind),rpim(1,ind),rmim(1,ind),vpim(1,i_beg),vmim(1,i_beg))
-        !write(6,*) 'vpim_post', vpim
-        !write(6,*) 'vmim_post', vmim
+        call lrprec(n,n_act,eig(ind),rpim(1,ind),rmim(1,ind),vpim(1,i_beg),vmim(1,i_beg))
 !
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
-        !print *, 'vpre'
-        !print *, vpre(:,i_beg)
-        !print *, 'vpim'
-        !print *, vpim(:,i_beg)
-        !exit
         call get_time(t1)
-        !torna vpp(1:n,:)       = vpre
-        !torna vpp(n+1:n2,:)    = vpre
-        !torna vpp(n2+1:3*n,:)  = vpim
-        !torna vpp(3*n+1:4*n,:) = -vpim
-        !torna vmm(1:n,:)       = vmre
-        !torna vmm(n+1:n2,:)    = -vmre
-        !torna vmm(n2+1:3*n,:)  = vmim
-        !torna vmm(3*n+1:4*n,:) = vmim
-        !torna !vpp(1:n,:)    = vpre
-        !torna !vpp(n+1:n2,:) = vpim
-        !torna !vmm(1:n,:)    = vmre
-        !torna !vmm(n+1:n2,:) = vmim
-        !torna call ortho_vs_x_4n(.false.,n*4,ldu,n_act,vpp,vpp(1,i_beg),xx,xx,1)
-        !torna call ortho_vs_x_4n(.false.,n*4,ldu,n_act,vmm,vmm(1,i_beg),xx,xx,2)
-        !torna vpre = vpp(1:n,:)
-        !torna vpim = vpp(n2+1:3*n,:)
-        !torna vmre = vmm(1:n,:)
-        !torna vmim = vmm(n2+1:3*n,:)
 !        
         vpp(1:n,:)    = vpre
         vpp(n+1:n2,:) = vpim
@@ -2606,26 +2147,42 @@ module diaglib
         vmre = zero
         vpim = zero
         vmim = zero
-!
+        vpp  = zero
+        vmm  = zero
 !
 !       put current eigenvectors into the first position of the 
 !       expansion space
 !
-        do i_eig = 1, n_max
+        do i_eig = 1, n_max, 2
 !         real 
-          vpre(:,i_eig) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-          vmre(:,i_eig) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig)   = ( evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig)   = ( evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig+1) = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig+1) = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
 !         imaginary 
-          vpim(:,i_eig) = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-          vmim(:,i_eig) = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+          vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+          vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
         end do
 !
+        vpp(1:n,:)     = vpre
+        vpp(n+1:n2,:)  = vpim
+        vmm(1:n,:)     = vmre
+        vmm(n+1:n2,:)  = vmim
+        call ortho_cd_newcomplex(.false.,n2,n_max,vpp,xx,ok)
+        call ortho_cd_newcomplex(.false.,n2,n_max,vmm,xx,ok)
+        vpre = vpp(1:n,:)
+        vpim = vpp(n+1:n2,:)
+        vmre = vmm(1:n,:)
+        vmim = vmm(n+1:n2,:)
+!
 !       real 
-        call ortho_cd(.false.,n,n_max,vpre,xx,ok)
-        call ortho_cd(.false.,n,n_max,vmre,xx,ok)
+!        call ortho_cd(.false.,n,n_max,vpre,xx,ok)
+!        call ortho_cd(.false.,n,n_max,vmre,xx,ok)
 !       imaginary
-        call ortho_cd(.false.,n,n_max,vpim,xx,ok)
-        call ortho_cd(.false.,n,n_max,vmim,xx,ok)
+!        call ortho_cd(.false.,n,n_max,vpim,xx,ok)
+!        call ortho_cd(.false.,n,n_max,vmim,xx,ok)
 !
         lvpre   = zero
         lvpim   = zero
@@ -2663,7 +2220,8 @@ module diaglib
     deallocate(work,tau,vpre,vmre,lvpre,lvmre,bvpre,bvmre,rpre,rmre,rrre, & 
                vpim,vmim,lvpim,lvmim,bvpim,bvmim,rpim,rmim,rrim,done,r_norm, & 
                a_red,a_copy,s_red,s_copy,e_red,epmatre,epmatim,emmatre,emmatim, &
-               smatre,smatim,epmat,emmat,smat,up,um,eigpre,eigmre,eigpim,eigmim,bpre,bmre,bpim,bmim)
+               smatre,smatim,epmat,emmat,smat,up,um,eigpre,eigmre,eigpim,eigmim, & 
+               vpp,vmm,bpre,bmre,bpim,bmim)
 !
 1050 format(t5,'----------------------------------------',/,&
             t7,'# target vectors:    ',i4,/,&
@@ -3513,8 +3071,8 @@ module diaglib
     return
   end subroutine caslr_complex_driver
 !
-subroutine caslr_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
-                      apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
+  subroutine caslr_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
+                        apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
 !
 !   main driver for the efficient solution to the following generalized 
 !   eigenvalue problem:
@@ -3600,282 +3158,282 @@ subroutine caslr_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
 !
 !   ok:       logical, true if caslr_eff_driver converged.
 !
-use utils
-implicit none
-logical, intent(in)                          :: verbose
-integer,                       intent(in)    :: n, n2, n_targ, n_max
-integer,                       intent(in)    :: max_iter, max_dav
-real(dp),                      intent(in)    :: tol
-real(dp), dimension(n_max),    intent(inout) :: eig
-real(dp), dimension(n2,n_max), intent(inout) :: evec
-logical,                       intent(inout) :: ok
-external                                     :: apbmul, ambmul, spdmul, smdmul, &
-                                            lrprec
+    use utils
+    implicit none
+    logical, intent(in)                          :: verbose
+    integer,                       intent(in)    :: n, n2, n_targ, n_max
+    integer,                       intent(in)    :: max_iter, max_dav
+    real(dp),                      intent(in)    :: tol
+    real(dp), dimension(n_max),    intent(inout) :: eig
+    real(dp), dimension(n2,n_max), intent(inout) :: evec
+    logical,                       intent(inout) :: ok
+    external                                     :: apbmul, ambmul, spdmul, smdmul, &
+                                                lrprec
 !
 !   local variables:
 !   ================
 !
-integer, parameter    :: min_dav = 10
-integer               :: istat
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
 !
 !   actual expansion space size and total dimension
 !
-integer               :: dim_dav, lda, lda2
+    integer               :: dim_dav, lda, lda2
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
-integer               :: n_act, ind, i_beg
+    integer               :: n_act, ind, i_beg
 !
 !   current size and total dimension of the expansion space
 !
-integer               :: m_dim, ldu
+    integer               :: m_dim, ldu
 !
 !   number of frozen (i.e. converged) vectors
 !
-integer               :: n_frozen
+    integer               :: n_frozen
 !
-integer               :: it, i_eig
+    integer               :: it, i_eig
 !
-real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: sqrtn, tol_rms, tol_max
 !
 !   arrays to control convergence and orthogonalization
 !
-logical,  allocatable :: done(:)
+    logical,  allocatable :: done(:)
 !
 !   expansion spaces, residuals and their norms.
 !
-real(dp), allocatable :: vp(:,:), vm(:,:), lvp(:,:), lvm(:,:), bvp(:,:), bvm(:,:)
-real(dp), allocatable :: rp(:,:), rm(:,:), rr(:,:), r_norm(:,:)
+    real(dp), allocatable :: vp(:,:), vm(:,:), lvp(:,:), lvm(:,:), bvp(:,:), bvm(:,:)
+    real(dp), allocatable :: rp(:,:), rm(:,:), rr(:,:), r_norm(:,:)
 !
 !   eigenvectors of the reduced problem and components of the ritz vectors:
 !
-real(dp), allocatable :: up(:,:), um(:,:), eigp(:,:), eigm(:,:), bp(:,:), bm(:,:)
+    real(dp), allocatable :: up(:,:), um(:,:), eigp(:,:), eigm(:,:), bp(:,:), bm(:,:)
 !
 !   subspace matrix and eigenvalues.
 !
-real(dp), allocatable :: s_red(:,:), s_copy(:,:), e_red(:)
-real(dp), allocatable :: smat(:,:)
+    real(dp), allocatable :: s_red(:,:), s_copy(:,:), e_red(:)
+    real(dp), allocatable :: smat(:,:)
 !
 !   restarting variables
 !
-integer               :: n_rst
-logical               :: restart
+    integer               :: n_rst
+    logical               :: restart
 !
 !   external functions:
 !   ===================
 !
-real(dp)              :: dnrm2
-external              :: dcopy, dnrm2, dgemm, dsyev
+    real(dp)              :: dnrm2
+    external              :: dcopy, dnrm2, dgemm, dsyev
 !
 !   compute the actual size of the expansion space, checking that
 !   the input makes sense.
 !   no expansion space smaller than max_dav = 10 is deemed acceptable.
 !
-dim_dav = max(min_dav,max_dav)
-lda     = dim_dav*n_max
-lda2    = 2 * lda
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+    lda2    = 2 * lda
 !
 !   start by allocating memory for the various lapack routines
 !
-lwork = get_mem_lapack(n,n_max)
-allocate (work(lwork), tau(n_max), stat=istat)
-call check_mem(istat)
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
 !
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residual:
 !
-allocate (vp(n,lda), vm(n,lda), lvp(n,lda), lvm(n,lda), bvp(n,lda), bvm(n,lda), &
-      rp(n,n_max), rm(n,n_max), rr(n,n_max), stat = istat)
-call check_mem(istat)
+    allocate (vp(n,lda), vm(n,lda), lvp(n,lda), lvm(n,lda), bvp(n,lda), bvm(n,lda), &
+          rp(n,n_max), rm(n,n_max), rr(n,n_max), stat = istat)
+    call check_mem(istat)
 !
 !   allocate memory for convergence check
 !
-allocate (done(n_max), r_norm(2,n_max), stat=istat)
-call check_mem(istat)
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-allocate (s_red(lda,lda), s_copy(lda,lda), e_red(lda2), smat(lda,lda), stat=istat)
-call check_mem(istat)
+    allocate (s_red(lda,lda), s_copy(lda,lda), e_red(lda2), smat(lda,lda), stat=istat)
+    call check_mem(istat)
 !
 !   allocate memory for the plus and minus eigenvector components:
 !
-allocate (up(lda,n_max), um(lda,n_max), eigp(n,n_max), eigm(n,n_max), bp(n,n_max), bm(n,n_max), stat = istat)
-call check_mem(istat)
+    allocate (up(lda,n_max), um(lda,n_max), eigp(n,n_max), eigm(n,n_max), bp(n,n_max), bm(n,n_max), stat = istat)
+    call check_mem(istat)
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
 !
-sqrtn   = sqrt(real(n,dp))
-tol_rms = tol
-tol_max = 10.0_dp * tol
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
 !
 !   clean out various quantities
 !
-t_diag  = zero
-t_ortho = zero
-t_mv    = zero
-t_tot   = zero
-vp      = zero
-vm      = zero
-bvp     = zero
-bvm     = zero
-lvp     = zero
-lvm     = zero
-ok      = .false.
-done    = .false.
+    t_diag  = zero
+    t_ortho = zero
+    t_mv    = zero
+    t_tot   = zero
+    vp      = zero
+    vm      = zero
+    bvp     = zero
+    bvm     = zero
+    lvp     = zero
+    lvm     = zero
+    ok      = .false.
+    done    = .false.
 !
-call get_time(t_tot)
+    call get_time(t_tot)
 !
 !   move the guess into the expansion space.
 !
-do i_eig = 1, n_max
-vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
-vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
-end do
+    do i_eig = 1, n_max
+      vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+      vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+    end do
 !
 !   orthogonalize the expansion space to the metric.
 !
-call apbmul(n,n_max,vp,lvp)
-call b_ortho(n,n_max,vp,lvp)
-call ambmul(n,n_max,vm,lvm)
-call b_ortho(n,n_max,vm,lvm)
+    call apbmul(n,n_max,vp,lvp)
+    call b_ortho(n,n_max,vp,lvp)
+    call ambmul(n,n_max,vm,lvm)
+    call b_ortho(n,n_max,vm,lvm)
 !
-n_act = n_max
-ind   = 1
-i_beg = 1
+    n_act = n_max
+    ind   = 1
+    i_beg = 1
 !
 !   initialize the counter for the expansion of the subspace
 !
-m_dim = 1
-ldu   = 0
+    m_dim = 1
+    ldu   = 0
 !
 !   initialize to false the restart
 !
-restart = .false.
+    restart = .false.
 !
 !   main loop:
 !
-1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
-        t5,'------------------------------------------------------------------',/, &
-        t7,'  iter  root              eigenvalue','         rms         max ok',/, &
-        t5,'------------------------------------------------------------------')
-1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+            t5,'------------------------------------------------------------------',/, &
+            t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+            t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
 !
-if (verbose) write(6,1030) tol
+    if (verbose) write(6,1030) tol
 !
-n_rst   = 0
-do it = 1, max_iter
+    n_rst   = 0
+    do it = 1, max_iter
 !
 !     update the size of the expansion space.
 !
-ldu = ldu + n_act
+      ldu = ldu + n_act
 !
 !     perform this iteration's matrix-vector multiplications:
 !
-call get_time(t1)
-call spdmul(n,n_act,vp(1,i_beg),bvm(1,i_beg))
-call smdmul(n,n_act,vm(1,i_beg),bvp(1,i_beg))
-call get_time(t2)
-t_mv = t_mv + t2 - t1
+      call get_time(t1)
+      call spdmul(n,n_act,vp(1,i_beg),bvm(1,i_beg))
+      call smdmul(n,n_act,vm(1,i_beg),bvp(1,i_beg))
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrix 
 !
-call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)
+      call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)
 !
 !     save s, and assemble s^t s:
 !
-s_red  = smat
-s_copy = zero
-call dgemm('t','n',ldu,ldu,ldu,one,s_red,lda,s_red,lda,zero,s_copy,lda)
+      s_red  = smat
+      s_copy = zero
+      call dgemm('t','n',ldu,ldu,ldu,one,s_red,lda,s_red,lda,zero,s_copy,lda)
 !
 !     diagonalize s^t s
 !
-call get_time(t1)
-call dsyev('v','u',ldu,s_copy,lda,e_red,work,lwork,info)
-call get_time(t2)
-t_diag = t_diag + t2 - t1
+      call get_time(t1)
+      call dsyev('v','u',ldu,s_copy,lda,e_red,work,lwork,info)
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
 !
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
 !
-do i_eig = 1, n_max
-eig(i_eig)      = sqrt(e_red(ldu - i_eig + 1))
-up(1:ldu,i_eig) = s_copy(1:ldu,ldu - i_eig + 1)
-end do
+      do i_eig = 1, n_max
+        eig(i_eig)      = sqrt(e_red(ldu - i_eig + 1))
+        up(1:ldu,i_eig) = s_copy(1:ldu,ldu - i_eig + 1)
+      end do
 !
 !     compute the u_- eigenvectors:
 !
-call dgemm('n','n',ldu,n_max,ldu,one,s_red,lda,up,lda,zero,um,lda)
-do i_eig = 1, n_max
-um(1:ldu,i_eig) = um(1:ldu,i_eig)/eig(i_eig)
-end do
+      call dgemm('n','n',ldu,n_max,ldu,one,s_red,lda,up,lda,zero,um,lda)
+      do i_eig = 1, n_max
+        um(1:ldu,i_eig) = um(1:ldu,i_eig)/eig(i_eig)
+      end do
 !
 !     asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
 !
-call dgemm('n','n',n,n_max,ldu,one,vp,n,up,lda,zero,eigp,n)
-call dgemm('n','n',n,n_max,ldu,one,vm,n,um,lda,zero,eigm,n)
+      call dgemm('n','n',n,n_max,ldu,one,vp,n,up,lda,zero,eigp,n)
+      call dgemm('n','n',n,n_max,ldu,one,vm,n,um,lda,zero,eigm,n)
 !
 !     assemble the current approximation to the eigenvectors
 !
-do i_eig = 1, n_max
-evec(1:n,i_eig)    = eigp(:,i_eig) + eigm(:,i_eig)
-evec(n+1:n2,i_eig) = eigp(:,i_eig) - eigm(:,i_eig)
-end do
+      do i_eig = 1, n_max
+        evec(1:n,i_eig)    = eigp(:,i_eig) + eigm(:,i_eig)
+        evec(n+1:n2,i_eig) = eigp(:,i_eig) - eigm(:,i_eig)
+      end do
 !
 !     compute the residuals, and their rms and sup norms:
 !
-call dgemm('n','n',n,n_max,ldu,one,bvp,n,um,lda,zero,rp,n)
-call dgemm('n','n',n,n_max,ldu,one,bvm,n,up,lda,zero,rm,n)
-call dgemm('n','n',n,n_max,ldu,one,lvp,n,up,lda,zero,bp,n)
-call dgemm('n','n',n,n_max,ldu,one,lvm,n,um,lda,zero,bm,n)
-
-do i_eig = 1, n_targ
+      call dgemm('n','n',n,n_max,ldu,one,bvp,n,um,lda,zero,rp,n)
+      call dgemm('n','n',n,n_max,ldu,one,bvm,n,up,lda,zero,rm,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvp,n,up,lda,zero,bp,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvm,n,um,lda,zero,bm,n)
+!      
+      do i_eig = 1, n_targ
 !
 !       if the eigenvalue is already converged, skip it.
 !
-if (done(i_eig)) cycle
+        if (done(i_eig)) cycle
 !
-call daxpy(n,-eig(i_eig),bp(:,i_eig),1,rp(:,i_eig),1)
-call daxpy(n,-eig(i_eig),bm(:,i_eig),1,rm(:,i_eig),1)
-r_norm(1,i_eig) = (dnrm2(n,rp(:,i_eig),1) + dnrm2(n,rm(:,i_eig),1))/(eig(i_eig)*sqrt(two)*sqrtn)
-r_norm(2,i_eig) = (maxval(abs(rp(:,i_eig))) + maxval(abs(rm(:,i_eig))))/(sqrt(two)*eig(i_eig))
-end do
+        call daxpy(n,-eig(i_eig),bp(:,i_eig),1,rp(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),bm(:,i_eig),1,rm(:,i_eig),1)
+        r_norm(1,i_eig) = (dnrm2(n,rp(:,i_eig),1) + dnrm2(n,rm(:,i_eig),1))/(eig(i_eig)*sqrt(two)*sqrtn)
+        r_norm(2,i_eig) = (maxval(abs(rp(:,i_eig))) + maxval(abs(rm(:,i_eig))))/(sqrt(two)*eig(i_eig))
+      end do
 !
 !     check convergence. lock the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true.
 !
-do i_eig = 1, n_targ
-if (done(i_eig)) cycle
-done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
-                  r_norm(2,i_eig).lt.tol_max .and. &
-                  it.gt.1
-if (.not.done(i_eig)) then
-  done(i_eig+1:n_max) = .false.
-  exit
-end if
-end do
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
 !
 !     print some information:
 !
-if (verbose) then
-do i_eig = 1, n_targ
-  write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
-end do
-write(6,*) 
-end if
+      if (verbose) then
+      do i_eig = 1, n_targ
+        write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
+      end do
+      write(6,*) 
+      end if
 !
-if (all(done(1:n_targ))) then
-ok = .true.
-do i_eig = 1, n_targ
-  eig(i_eig) = one/eig(i_eig)
-end do
-exit
-end if
+      if (all(done(1:n_targ))) then
+      ok = .true.
+      do i_eig = 1, n_targ
+        eig(i_eig) = one/eig(i_eig)
+      end do
+      exit
+      end if
 !
 !     check whether an update is required. 
 !     if not, perform a davidson restart.
 !
-if (m_dim .lt. dim_dav) then
+      if (m_dim .lt. dim_dav) then
 !
 !       compute the preconditioned residuals using davidson's procedure
 !       note that this is done with a user-supplied subroutine, that can
@@ -3883,94 +3441,629 @@ if (m_dim .lt. dim_dav) then
 !       be more effective than the diagonal one, as in the original 
 !       algorithm.
 !
-m_dim = m_dim + 1
-i_beg = i_beg + n_act
-n_act = n_max
-n_frozen = 0
-do i_eig = 1, n_targ
-  if (done(i_eig)) then
-    n_act = n_act - 1
-    n_frozen = n_frozen + 1
-  else
-    exit
-  end if
-end do
-ind   = n_max - n_act + 1
-call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
 !
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
-call get_time(t1)
-call b_ortho_vs_x(n,ldu,n_act,vp,lvp,vp(1,i_beg))
-call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
-call b_ortho(n,n_act,vp(1,i_beg),lvp(1,i_beg))
-call b_ortho_vs_x(n,ldu,n_act,vm,lvm,vm(1,i_beg))
-call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
-call b_ortho(n,n_act,vm(1,i_beg),lvm(1,i_beg))
-call get_time(t2)
-t_ortho = t_ortho + t2 - t1
-else
+        call get_time(t1)
+        call b_ortho_vs_x(n,ldu,n_act,vp,lvp,vp(1,i_beg))
+        call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+        call b_ortho(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+        call b_ortho_vs_x(n,ldu,n_act,vm,lvm,vm(1,i_beg))
+        call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+        call b_ortho(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+      else
 !
-if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
-restart = .true.
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        restart = .true.
 !
 !       initialize indexes back to their starting values 
 !
-ldu   = 0
-i_beg = 1
-m_dim = 1
-n_rst = 0
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
 !        
-n_act = n_max 
-vp = zero
-vm = zero
+        n_act = n_max 
+        vp = zero
+        vm = zero
 !
 !       put current eigenvectors into the first position of the 
 !       expansion space
 !
-do i_eig = 1, n_max
-  vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
-  vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
-end do
+        do i_eig = 1, n_max
+          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+        end do
 !
-lvp   = zero
-lvm   = zero
+        lvp   = zero
+        lvm   = zero
 !
-call apbmul(n,n_max,vp,lvp)
-call b_ortho(n,n_max,vp,lvp)
-call ambmul(n,n_max,vm,lvm)
-call b_ortho(n,n_max,vm,lvm)
+        call apbmul(n,n_max,vp,lvp)
+        call b_ortho(n,n_max,vp,lvp)
+        call ambmul(n,n_max,vm,lvm)
+        call b_ortho(n,n_max,vm,lvm)
 !
-bvp   = zero
-bvm   = zero
-s_red = zero
-smat  = zero
+        bvp   = zero
+        bvm   = zero
+        s_red = zero
+        smat  = zero
 !        
-end if
+      end if
 !      
-if (verbose) write(6,1050) n_targ, n_act, n_frozen
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
 !      
-end do
+    end do
 !
-call get_time(t1)
-t_tot = t1 - t_tot
-1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
-        t3,'  matrix-vector multiplications: ',2f12.4,/, &
-        t3,'  diagonalization:               ',2f12.4,/, &
-        t3,'  orthogonalization:             ',2f12.4,/, &
-        t3,'                                 ',24('='),/,  &
-        t3,'  total:                         ',2f12.4)
-if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
-deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,s_red,s_copy,e_red,smat,up,um,eigp,eigm,bp,bm)
+    call get_time(t1)
+    t_tot = t1 - t_tot
+    1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
+            t3,'  matrix-vector multiplications: ',2f12.4,/, &
+            t3,'  diagonalization:               ',2f12.4,/, &
+            t3,'  orthogonalization:             ',2f12.4,/, &
+            t3,'                                 ',24('='),/,  &
+            t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+    deallocate(work,tau,vp,vm,lvp,lvm,bvp,bvm,rp,rm,rr,done,r_norm,s_red,s_copy,e_red,smat,up,um,eigp,eigm,bp,bm)
 !
-1050 format(t5,'----------------------------------------',/,&
-    t7,'# target vectors:    ',i4,/,&
-    t7,'# new vectors added: ',i4,/,&
-    t7,'# converged vectors: ',i4,/,&
-    t5,'----------------------------------------')
-return
+    1050 format(t5,'----------------------------------------',/,&
+        t7,'# target vectors:    ',i4,/,&
+        t7,'# new vectors added: ',i4,/,&
+        t7,'# converged vectors: ',i4,/,&
+        t5,'----------------------------------------')
+    return
 end subroutine caslr_eff_driver
+!
+subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
+                                       apbmul,ambmul,spdmul,smdmul,lrprec,eig,evecre,evecim,ok)
+!                               
+    use utils
+    implicit none
+    logical, intent(in)                          :: verbose
+    integer,                       intent(in)    :: n, n2, n_targ, n_max
+    integer,                       intent(in)    :: max_iter, max_dav
+    real(dp),                      intent(in)    :: tol
+    real(dp), dimension(n_max),    intent(inout) :: eig
+    real(dp), dimension(n2,n_max), intent(inout) :: evecre, evecim
+    logical,                       intent(inout) :: ok
+    external                                     :: apbmul, ambmul, spdmul, smdmul, &
+                                                    lrprec
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+    integer               :: i, j, k
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda, lda2
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: it, i_eig
+!
+    real(dp)              :: sqrtn, sqrt2n, tol_rms, tol_max
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+!   real
+    real(dp), allocatable :: vpre(:,:), vmre(:,:), lvpre(:,:), lvmre(:,:), bvpre(:,:), bvmre(:,:)
+    real(dp), allocatable :: rpre(:,:), rmre(:,:), rrre(:,:), r_norm(:,:)
+!   imaginary
+    real(dp), allocatable :: vpim(:,:), vmim(:,:), lvpim(:,:), lvmim(:,:), bvpim(:,:), bvmim(:,:)
+    real(dp), allocatable :: rpim(:,:), rmim(:,:), rrim(:,:)
+!
+!   debug
+!
+    real(dp), allocatable :: vpp(:,:), vmm(:,:) 
+!
+!   eigenvectors of the reduced problem and components of the ritz vectors:
+!
+!   real
+    real(dp), allocatable :: up(:,:), um(:,:), eigpre(:,:), eigmre(:,:), bpre(:,:), bmre(:,:)
+    real(dp), allocatable :: eigpre_(:,:), eigmre_(:,:)
+!   imaginary
+    real(dp), allocatable :: eigpim(:,:), eigmim(:,:), bpim(:,:), bmim(:,:)
+    real(dp), allocatable :: eigpim_(:,:), eigmim_(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: s_red(:,:), s_copy(:,:), e_red(:)
+    real(dp), allocatable :: smat(:,:), smatre(:,:), smatim(:,:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dcopy, dnrm2, dgemm, dsyev
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+    lda2    = 2 * lda
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (vpre(n,lda), vpim(n,lda), vmre(n,lda), vmim(n,lda), lvpre(n,lda), & 
+              lvpim(n,lda), lvmre(n,lda), lvmim(n,lda), bvpre(n,lda), bvpim(n,lda), & 
+              bvmre(n,lda), bvmim(n,lda), rpre(n,n_max), rpim(n,n_max), rmre(n,n_max), & 
+              rmim(n,n_max), rrre(n,n_max), rrim(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues:
+!
+    allocate (s_red(lda,lda), s_copy(lda,lda), e_red(lda2), smat(lda,lda), & 
+              smatre(lda,lda), smatim(lda,lda), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the plus and minus eigenvector components:
+!
+    allocate (up(lda,n_max), um(lda,n_max), eigpre(n,n_max), eigpim(n,n_max), &
+              eigmre(n,n_max), eigmim(n,n_max), bpre(n,n_max), bpim(n,n_max), &
+              bmre(n,n_max), bmim(n,n_max), eigpre_(n,n_max), eigmre_(n,n_max), & 
+              eigpim_(n,n_max), eigmim_(n,n_max),stat = istat)
+    call check_mem(istat)
+!
+!   debug
+!
+    allocate (vpp(n2,lda), vmm(n2,lda), stat = istat)
+    call check_mem(istat)
+!
+!   set the tolerances and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    sqrt2n  = sqrt(real(n2,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+!
+!   print something to understand we here in SMOGD
+!
+    write(6,*) 
+    write(6,*) 'COMPLEX SMO-GD WITH REAL ALGEBRA IS ENTERED'
+    write(6,*) 
+!
+!   clean out various quantities
+!
+    t_diag  = zero
+    t_ortho = zero
+    t_mv    = zero
+    t_tot   = zero
+    vpre    = zero
+    vpim    = zero
+    vmre    = zero
+    vmim    = zero
+    bvpre   = zero
+    bvpim   = zero
+    bvmre   = zero
+    bvmim   = zero
+    lvpre   = zero
+    lvpim   = zero
+    lvmre   = zero
+    lvmim   = zero
+    smat    = zero
+    ok      = .false.
+    done    = .false.
+!
+!   debug
+!
+    vpp = zero
+    vmm = zero
+!    
+    call get_time(t_tot)
+!
+!   move the guess into the expansion space.
+!
+    do i_eig = 1, n_max, 2
+!     real 
+      vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+      vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+      vpre(:,i_eig+1) = (-evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vmre(:,i_eig+1) = (-evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+!     imaginary 
+      vpim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vpim(:,i_eig+1) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig+1) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+    end do
+!    do i_eig = 1, n_max
+!      write(6,*) 'vp 1 = r+ r+ i+ -i+', i_eig
+!      do i = 1, n
+!        write(6,'(4f8.4)') vpre(i,i_eig), vpre(i,i_eig), vpim(i,i_eig), -vpim(i,i_eig) 
+!      end do
+!      write(6,*) 'vm 2 = -i+ i+ r+ r+', i_eig
+!      do i = 1, n
+!        write(6,'(4f8.4)') vmre(i,i_eig), -vmre(i,i_eig), vmim(i,i_eig), vmim(i,i_eig) 
+!      end do
+!    end do 
+!    stop
+!
+!   orthogonalize the expansion space to the metric.
+!
+    call apbmul(0,n,n_max,vpre,vpim,lvpre)
+    call apbmul(1,n,n_max,vpre,vpim,lvpim)
+    !
+    call b_ortho(n,n_max,vpre,lvpre)
+    call b_ortho(n,n_max,vpim,lvpim)
+    !
+    call ambmul(0,n,n_max,vmre,vmim,lvmre)
+    call ambmul(1,n,n_max,vmre,vmim,lvmim)
+    !
+    call b_ortho(n,n_max,vmre,lvmre)
+    call b_ortho(n,n_max,vmim,lvmim)
+!
+    n_act = n_max
+    ind   = 1
+    i_beg = 1
+!
+!   initialize the counter for the expansion of the subspace
+!
+    m_dim = 1
+    ldu   = 0
+!
+!   initialize to false the restart
+!
+    restart = .false.
+!
+!   main loop:
+!
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+            t5,'------------------------------------------------------------------',/, &
+            t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+            t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu = ldu + n_act
+!
+!     perform this iteration's matrix-vector multiplications:
+!
+      call get_time(t1)
+      call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))
+      call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))
+      call spdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))
+      call spdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))
+!
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!
+!     update the reduced matrix 
+!
+      call dgemm('t','n',ldu,ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda)
+      call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvmim,n,zero,smatim,lda)
+      smat = smatre + smatim
+      !smat = two*(smatre + smatim)
+!
+!     save s, and assemble s^t s:
+!
+      s_red  = smat
+      s_copy = zero
+      call dgemm('t','n',ldu,ldu,ldu,one,s_red,lda,s_red,lda,zero,s_copy,lda)
+!
+!     diagonalize s^t s
+!
+      call get_time(t1)
+      call dsyev('v','u',ldu,s_copy,lda,e_red,work,lwork,info)
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
+!
+!     extract the eigenvalues and compute the ritz approximation to the
+!     eigenvectors 
+!
+      do i_eig = 1, n_max
+        eig(i_eig)      = sqrt(e_red(ldu - i_eig + 1))
+        up(1:ldu,i_eig) = s_copy(1:ldu,ldu - i_eig + 1)
+      end do
+!
+!     compute the u_- eigenvectors:
+!
+      call dgemm('n','n',ldu,n_max,ldu,one,s_red,lda,up,lda,zero,um,lda)
+      do i_eig = 1, n_max
+        um(1:ldu,i_eig) = um(1:ldu,i_eig)/eig(i_eig)
+      end do
+!
+!     asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
+!
+! TODO 
+      call dgemm('n','n',n,n_max,ldu,one,vpre,n,up,lda,zero,eigpre,n)
+      call dgemm('n','n',n,n_max,ldu,one,vmre,n,um,lda,zero,eigmre,n)
+!
+!     assemble the current approximation to the eigenvectors
+!
+! TODO 
+      do i_eig = 1, n_max
+        evecre(1:n,i_eig)    = eigpre(:,i_eig) + eigmre(:,i_eig)
+        evecim(n+1:n2,i_eig) = eigpre(:,i_eig) - eigmre(:,i_eig)
+      end do
+!
+!     compute the residuals, and their rms and sup norms:
+!    
+!     real part
+!
+      call dgemm('n','n',n,n_max,ldu,one,bvpre,n,um,lda,zero,rpre,n)
+      call dgemm('n','n',n,n_max,ldu,one,bvmre,n,up,lda,zero,rmre,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvpre,n,up,lda,zero,bpre,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvmre,n,um,lda,zero,bmre,n)
+!    
+!     imaginary part
+!
+      call dgemm('n','n',n,n_max,ldu,one,bvpim,n,um,lda,zero,rpim,n)
+      call dgemm('n','n',n,n_max,ldu,one,bvmim,n,up,lda,zero,rmim,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvpim,n,up,lda,zero,bpim,n)
+      call dgemm('n','n',n,n_max,ldu,one,lvmim,n,um,lda,zero,bmim,n)
+!      
+      do i_eig = 1, n_targ
+!
+!       if the eigenvalue is already converged, skip it.
+!
+        if (done(i_eig)) cycle
+!
+!       real part 
+!
+        call daxpy(n,-eig(i_eig),bpre(:,i_eig),1,rpre(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),bmre(:,i_eig),1,rmre(:,i_eig),1)
+!
+!       imaginary part 
+!
+        call daxpy(n,-eig(i_eig),bpim(:,i_eig),1,rpim(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),bmim(:,i_eig),1,rmim(:,i_eig),1)
+!        
+!old        r_norm(1,i_eig) = (dnrm2(n,rp(:,i_eig),1) + dnrm2(n,rm(:,i_eig),1))/(eig(i_eig)*sqrt(two)*sqrtn)
+!old        r_norm(2,i_eig) = (maxval(abs(rp(:,i_eig))) + maxval(abs(rm(:,i_eig))))/(sqrt(two)*eig(i_eig))
+        r_norm(1,i_eig) = sqrt(dot_product(rpre(:,i_eig),rpre(:,i_eig)) + &
+                               dot_product(rmre(:,i_eig),rmre(:,i_eig)) + &
+                               dot_product(rpim(:,i_eig),rpim(:,i_eig)) + &
+                               dot_product(rmim(:,i_eig),rmim(:,i_eig)))/sqrt2n
+        r_norm(2,i_eig) = maxval(abs(rpre(:,i_eig) + rmre(:,i_eig) + & 
+                                     rpim(:,i_eig) + rmim(:,i_eig)))
+      end do
+!
+!     check convergence. lock the first contiguous converged eigenvalues
+!     by setting the logical array "done" to true.
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        done(i_eig+1)   = r_norm(1,i_eig+1).lt.tol_rms .and. &
+                          r_norm(2,i_eig+1).lt.tol_max .and. &
+                          it.gt.1
+!                  
+!     check coupled-eigenvalues convergece: if one eigval from the same couple
+!     is false, both need to be put false (even if the other was .true.)
+!
+        if (done(i_eig) .neqv. done(i_eig+1)) then 
+          done(i_eig)   = .false.
+          done(i_eig+1) = .false.
+        end if
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information:
+!
+      if (verbose) then
+      do i_eig = 1, n_targ
+        write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
+      end do
+      write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+      ok = .true.
+      do i_eig = 1, n_targ
+        eig(i_eig) = one/eig(i_eig)
+      end do
+      exit
+      end if
+!
+!     check whether an update is required. 
+!     if not, perform a davidson restart.
+!
+      if (m_dim .lt. dim_dav) then
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+!
+!       real part 
+!
+        call lrprec(n,n_act,eig(ind),rpre(1,ind),rmre(1,ind),vpre(1,i_beg),vmre(1,i_beg))
+!
+!       imaginary part 
+!
+        call lrprec(n,n_act,eig(ind),rpim(1,ind),rmim(1,ind),vpim(1,i_beg),vmim(1,i_beg))
+!
+!       orthogonalize the new vectors to the existing ones and then
+!       orthonormalize them.
+!
+        call get_time(t1)
+        !
+        call b_ortho_vs_x(n,ldu,n_act,vpre,lvpre,vpre(1,i_beg))
+        call b_ortho_vs_x(n,ldu,n_act,vpim,lvpim,vpim(1,i_beg))
+        !
+        call apbmul(0,n,n_max,vpre,vpim,lvpre)
+        call apbmul(1,n,n_max,vpre,vpim,lvpim)
+        !
+        call b_ortho(n,n_act,vpre(1,i_beg),lvpre(1,i_beg))
+        call b_ortho(n,n_act,vpim(1,i_beg),lvpim(1,i_beg))
+        !
+        call b_ortho_vs_x(n,ldu,n_act,vmre,lvmre,vmre(1,i_beg))
+        call b_ortho_vs_x(n,ldu,n_act,vmim,lvmim,vmim(1,i_beg))
+        !
+        call ambmul(0,n,n_max,vmre,vmim,lvmre)
+        call ambmul(1,n,n_max,vmre,vmim,lvmim)
+        !
+        call b_ortho(n,n_act,vmre(1,i_beg),lvmre(1,i_beg))
+        call b_ortho(n,n_act,vmim(1,i_beg),lvmim(1,i_beg))
+        !
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+      else
+!
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        restart = .true.
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+!        
+! TODO 
+        n_act = n_max 
+        vpre = zero
+        vmre = zero
+        vpim = zero
+        vmim = zero
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        do i_eig = 1, n_max, 2
+!         real 
+          vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig+1) = (-evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig+1) = (-evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+!         imaginary 
+          vpim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vmim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+          vpim(:,i_eig+1) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmim(:,i_eig+1) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+        end do
+!
+        lvpre   = zero
+        lvmre   = zero
+        lvpim   = zero
+        lvmim   = zero
+!
+!       orthogonalize the expansion space to the metric.
+!    
+        call apbmul(0,n,n_max,vpre,vpim,lvpre)
+        call apbmul(1,n,n_max,vpre,vpim,lvpim)
+        !
+        call b_ortho(n,n_max,vpre,lvpre)
+        call b_ortho(n,n_max,vpim,lvpim)
+        !
+        call ambmul(0,n,n_max,vmre,vmim,lvmre)
+        call ambmul(1,n,n_max,vmre,vmim,lvmim)
+        !
+        call b_ortho(n,n_max,vmre,lvmre)
+        call b_ortho(n,n_max,vmim,lvmim)
+!
+        bvpre   = zero
+        bvmre   = zero
+        bvpim   = zero
+        bvmim   = zero
+        s_red   = zero
+        smatre  = zero
+        smatim  = zero
+        smat    = zero
+!        
+      end if
+!      
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
+!      
+    end do
+!
+    call get_time(t1)
+    t_tot = t1 - t_tot
+    1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
+            t3,'  matrix-vector multiplications: ',2f12.4,/, &
+            t3,'  diagonalization:               ',2f12.4,/, &
+            t3,'  orthogonalization:             ',2f12.4,/, &
+            t3,'                                 ',24('='),/,  &
+            t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+    deallocate(work,tau,vpre,vpim,vmre,vmim,lvpre,lvpim,lvmre,lvmim,bvpre,bvpim,bvmre,bvmim, &
+               rpre,rpim,rmre,rmim,rrre,rrim,done,r_norm,s_red,s_copy,e_red,smatre,smatim,smat, &
+               up,um,eigpre,eigpim,eigmre,eigmim,bpre,bpim,bmre,bmim)
+!
+    1050 format(t5,'----------------------------------------',/,&
+        t7,'# target vectors:    ',i4,/,&
+        t7,'# new vectors added: ',i4,/,&
+        t7,'# converged vectors: ',i4,/,&
+        t5,'----------------------------------------')
+    return
+end subroutine caslr_newcomplex_eff_driver
 !
 subroutine caslr_complex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
                       apbmul_complex,ambmul_complex,spdmul_complex,smdmul_complex,lrprec_complex,eig,ceig,evec,ok)
@@ -4139,7 +4232,6 @@ subroutine caslr_complex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_d
 !   the input makes sense.
 !   no expansion space smaller than max_dav = 10 is deemed acceptable.
 !
-!    write(6,*) ' Luca Melega diaglib fucking stupid!'
     write(6,*) 'SMO-GD COMPLEX DIAGLIB '
 !
     dim_dav = max(min_dav,max_dav)
