@@ -11,9 +11,9 @@ program main
 !
 ! initialize:
 !
-  n      = 200
-  n_want = 10
-  tol    = 1.0e-8_dp
+  n      = 1000
+  n_want = 50
+  tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 10
   nmult  = 0
@@ -1513,7 +1513,7 @@ end program main
     !deltaim = matmul(transpose(sigmaim),sigmaim)
     sigmaim = (sigmaim - transpose(sigmaim))/2.0_dp
     do i = 1, n
-      sigmare(i,i) = sigmare(i,i) + 30.0_dp
+      sigmare(i,i) = sigmare(i,i) + 10.0_dp
     end do
 !  
 !   build antisymmetric delta:

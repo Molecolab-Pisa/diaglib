@@ -2155,10 +2155,10 @@ module diaglib
 !
         do i_eig = 1, n_max, 2
 !         real 
-          vpre(:,i_eig)   = ( evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-          vmre(:,i_eig)   = ( evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-          vpre(:,i_eig+1) = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-          vmre(:,i_eig+1) = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig+1) = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig+1) = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
 !         imaginary 
           vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
           vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
@@ -3587,7 +3587,7 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !
 !   debug
 !
-    real(dp), allocatable :: vpp(:,:), vmm(:,:) 
+    real(dp), allocatable :: vpp(:,:), vmm(:,:), lvpp(:,:), lvmm(:,:) 
 !
 !   eigenvectors of the reduced problem and components of the ritz vectors:
 !
@@ -3658,7 +3658,7 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !
 !   debug
 !
-    allocate (vpp(n2,lda), vmm(n2,lda), stat = istat)
+    allocate (vpp(n2,lda), vmm(n2,lda), lvpp(n2,lda), lvmm(n2,lda), stat = istat)
     call check_mem(istat)
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
@@ -3671,7 +3671,7 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !   print something to understand we here in SMOGD
 !
     write(6,*) 
-    write(6,*) 'COMPLEX SMO-GD WITH REAL ALGEBRA IS ENTERED'
+    write(6,*) '   COMPLEX SMO-GD WITH REAL ALGEBRA IS ENTERED'
     write(6,*) 
 !
 !   clean out various quantities
@@ -3709,13 +3709,13 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !     real 
       vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
       vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-      vpre(:,i_eig+1) = (-evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-      vmre(:,i_eig+1) = (-evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vpre(:,i_eig+1) = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vmre(:,i_eig+1) = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
 !     imaginary 
-      vpim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-      vmim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-      vpim(:,i_eig+1) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-      vmim(:,i_eig+1) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+      vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
     end do
 !    do i_eig = 1, n_max
 !      write(6,*) 'vp 1 = r+ r+ i+ -i+', i_eig
@@ -3733,15 +3733,44 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !
     call apbmul(0,n,n_max,vpre,vpim,lvpre)
     call apbmul(1,n,n_max,vpre,vpim,lvpim)
+    write(6,*) 'lvpre before'
+    write(6,'(4f15.8)') lvpre(1:4,1:4)
+    write(6,*) 'lvpim before'
+    write(6,'(4f15.8)') lvpim(1:4,1:4)
     !
-    call b_ortho(n,n_max,vpre,lvpre)
-    call b_ortho(n,n_max,vpim,lvpim)
+    vpp(1:n,:)      = vpre
+    vpp(n+1:n2,:)   = vpim
+    lvpp(1:n,:)     = lvpre
+    lvpp(n+1:n2,:)  = lvpim
+!    call b_ortho_newcomplex(n2,n_max,vpp,lvpre)
+!    call b_ortho_newcomplex(n2,n_max,vpp,lvpim)
+    call b_ortho_newcomplex(n2,n_max,vpp,lvpp)
+    vpre = vpp(1:n,:)
+    vpim = vpp(n+1:n2,:)
+    lvpre = lvpp(1:n,:)
+    lvpim = lvpp(n+1:n2,:)
+!    write(6,'(4f15.8)') lvpre(1:4,1:4)
+!    write(6,*) 'lvpim after'
+!    write(6,'(4f15.8)') lvpim(1:4,1:4)
     !
     call ambmul(0,n,n_max,vmre,vmim,lvmre)
     call ambmul(1,n,n_max,vmre,vmim,lvmim)
+!    write(6,*) 'lvmre'
+!    write(6,'(4f15.8)') lvmre(1:4,1:4)
+!    write(6,*) 'lvmim'
+!    write(6,'(4f15.8)') lvmim(1:4,1:4)
     !
-    call b_ortho(n,n_max,vmre,lvmre)
-    call b_ortho(n,n_max,vmim,lvmim)
+    vmm(1:n,:)      = vmre
+    vmm(n+1:n2,:)   = vmim
+    lvmm(1:n,:)     = lvmre
+    lvmm(n+1:n2,:)  = lvmim
+!    call b_ortho_newcomplex(n2,n_max,vmm,lvmre)
+!    call b_ortho_newcomplex(n2,n_max,vmm,lvmim)
+    call b_ortho_newcomplex(n2,n_max,vmm,lvmm)
+    vmre = vmm(1:n,:)
+    vmim = vmm(n+1:n2,:)
+    lvmre = lvmm(1:n,:)
+    lvmim = lvmm(n+1:n2,:)
 !
     n_act = n_max
     ind   = 1
@@ -3776,26 +3805,43 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !     perform this iteration's matrix-vector multiplications:
 !
       call get_time(t1)
-      call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))
-      call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))
-      call spdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))
-      call spdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))
+      call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))   !tau_re-
+      call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmim(1,i_beg))   !tau_im-
+      call smdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))   !tau_re+
+      call smdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpim(1,i_beg))   !tau_im+
+!      write(6,*) 'bvmre'
+!      write(6,'(4f15.8)') bvmre(1:4,1:4)
+!      write(6,*) 'bvmim'
+!      write(6,'(4f15.8)') bvmim(1:4,1:4)
+!      write(6,*) 'bvpre'
+!      write(6,'(4f15.8)') bvpre(1:4,1:4)
+!      write(6,*) 'bvpim'
+!      write(6,'(4f15.8)') bvpim(1:4,1:4)
+!      stop
 !
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrix 
 !
-      call dgemm('t','n',ldu,ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda)
-      call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvmim,n,zero,smatim,lda)
-      smat = smatre + smatim
-      !smat = two*(smatre + smatim)
+      call dgemm('t','n',ldu,ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda)    !Sre=(Vre-)^T*tau_re-
+      call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvmim,n,zero,smatim,lda)    !Sim=(Vim-)^T*tau_im-
+      smat = two*(smatre + smatim)
+!      write(6,*) 'smatre'
+!      write(6,'(4f15.8)') transpose(smatre(1:4,1:4))
+!      write(6,*) 'smatim'
+!      write(6,'(4f15.8)') transpose(smatim(1:4,1:4))
+      !smat = (smatre + smatim)
 !
 !     save s, and assemble s^t s:
 !
       s_red  = smat
       s_copy = zero
+!      write(6,*) 's_red'
+!      write(6,'(4f15.8)') s_red(1:4,1:4)
       call dgemm('t','n',ldu,ldu,ldu,one,s_red,lda,s_red,lda,zero,s_copy,lda)
+!      write(6,*) 's_copy'
+!      write(6,'(4f15.8)') s_copy(1:4,1:4)
 !
 !     diagonalize s^t s
 !
@@ -3803,6 +3849,10 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
       call dsyev('v','u',ldu,s_copy,lda,e_red,work,lwork,info)
       call get_time(t2)
       t_diag = t_diag + t2 - t1
+!      write(6,*) 'eig before'
+!      do i = 1, n_max
+!        write(6,'(f15.8)') e_red(i)
+!      end do
 !
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
@@ -3811,6 +3861,10 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
         eig(i_eig)      = sqrt(e_red(ldu - i_eig + 1))
         up(1:ldu,i_eig) = s_copy(1:ldu,ldu - i_eig + 1)
       end do
+!      write(6,*) 'eig after'
+!      do i = 1, n_max
+!        write(6,'(f15.8)') eig(i)
+!      end do
 !
 !     compute the u_- eigenvectors:
 !
@@ -3822,15 +3876,27 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !     asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
 !
 ! TODO 
+!
+!     real part 
+!
       call dgemm('n','n',n,n_max,ldu,one,vpre,n,up,lda,zero,eigpre,n)
       call dgemm('n','n',n,n_max,ldu,one,vmre,n,um,lda,zero,eigmre,n)
+!
+!     imaginary part
+!
+      call dgemm('n','n',n,n_max,ldu,one,vpim,n,up,lda,zero,eigpim,n)
+      call dgemm('n','n',n,n_max,ldu,one,vmim,n,um,lda,zero,eigmim,n)
 !
 !     assemble the current approximation to the eigenvectors
 !
 ! TODO 
       do i_eig = 1, n_max
-        evecre(1:n,i_eig)    = eigpre(:,i_eig) + eigmre(:,i_eig)
-        evecim(n+1:n2,i_eig) = eigpre(:,i_eig) - eigmre(:,i_eig)
+        evecre(1:n,i_eig)    =  eigpre(:,i_eig) + eigmre(:,i_eig)   !Yre
+        evecre(n+1:n2,i_eig) =  eigpre(:,i_eig) - eigmre(:,i_eig)   !Zre
+        evecim(1:n,i_eig)    =  eigpim(:,i_eig) + eigmim(:,i_eig)   !Yim
+        evecim(n+1:n2,i_eig) = -eigpim(:,i_eig) + eigmim(:,i_eig)   !-Zim
+!        evecre(1:n,i_eig)    = eigpre(:,i_eig) + eigmre(:,i_eig)
+!        evecim(n+1:n2,i_eig) = eigpre(:,i_eig) - eigmre(:,i_eig)
       end do
 !
 !     compute the residuals, and their rms and sup norms:
@@ -3955,23 +4021,63 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
 !
         call get_time(t1)
         !
-        call b_ortho_vs_x(n,ldu,n_act,vpre,lvpre,vpre(1,i_beg))
-        call b_ortho_vs_x(n,ldu,n_act,vpim,lvpim,vpim(1,i_beg))
+!        call b_ortho_vs_x(n,ldu,n_act,vpre,lvpre,vpre(1,i_beg))
+!        call b_ortho_vs_x(n,ldu,n_act,vpim,lvpim,vpim(1,i_beg))
+        vpp(1:n,:)      = vpre
+        vpp(n+1:n2,:)   = vpim
+        lvpp(1:n,:)     = lvpre
+        lvpp(n+1:n2,:)  = lvpim
+        call b_ortho_vs_x_newcomplex(n2,ldu,n_act,vpp,lvpp,vpp(1,i_beg))
+        vpre  = vpp(1:n,:)
+        vpim  = vpp(n+1:n2,:)
+        lvpre = lvpp(1:n,:)
+        lvpim = lvpp(n+1:n2,:)
         !
-        call apbmul(0,n,n_max,vpre,vpim,lvpre)
-        call apbmul(1,n,n_max,vpre,vpim,lvpim)
+        call apbmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg))
+        call apbmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpim(1,i_beg))
         !
-        call b_ortho(n,n_act,vpre(1,i_beg),lvpre(1,i_beg))
-        call b_ortho(n,n_act,vpim(1,i_beg),lvpim(1,i_beg))
+!        call b_ortho(n,n_act,vpre(1,i_beg),lvpre(1,i_beg))
+!        call b_ortho(n,n_act,vpim(1,i_beg),lvpim(1,i_beg))
+        vpp(1:n,:)      = vpre
+        vpp(n+1:n2,:)   = vpim
+        lvpp(1:n,:)     = lvpre
+        lvpp(n+1:n2,:)  = lvpim
+        !write(6,*) 'vpre', vpre
+        !write(6,*) 'vpim', vpim
+        call b_ortho_newcomplex(n2,n_act,vpp(1,i_beg),lvpp(1,i_beg))
+        vpre  = vpp(1:n,:)
+        vpim  = vpp(n+1:n2,:)
+        lvpre = lvpp(1:n,:)
+        lvpim = lvpp(n+1:n2,:)
+        !write(6,*) 'lvpre', lvpre
+        !write(6,*) 'lvpim', lvpim
         !
-        call b_ortho_vs_x(n,ldu,n_act,vmre,lvmre,vmre(1,i_beg))
-        call b_ortho_vs_x(n,ldu,n_act,vmim,lvmim,vmim(1,i_beg))
+!        call b_ortho_vs_x(n,ldu,n_act,vmre,lvmre,vmre(1,i_beg))
+!        call b_ortho_vs_x(n,ldu,n_act,vmim,lvmim,vmim(1,i_beg))
+        vmm(1:n,:)      = vmre
+        vmm(n+1:n2,:)   = vmim
+        lvmm(1:n,:)     = lvmre
+        lvmm(n+1:n2,:)  = lvmim
+        call b_ortho_vs_x_newcomplex(n2,ldu,n_act,vmm,lvmm,vmm(1,i_beg))
+        vmre = vmm(1:n,:)
+        vmim = vmm(n+1:n2,:)
+        lvmre = lvmm(1:n,:)
+        lvmim = lvmm(n+1:n2,:)
         !
-        call ambmul(0,n,n_max,vmre,vmim,lvmre)
-        call ambmul(1,n,n_max,vmre,vmim,lvmim)
+        call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))
+        call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))
         !
-        call b_ortho(n,n_act,vmre(1,i_beg),lvmre(1,i_beg))
-        call b_ortho(n,n_act,vmim(1,i_beg),lvmim(1,i_beg))
+!        call b_ortho(n,n_act,vmre(1,i_beg),lvmre(1,i_beg))
+!        call b_ortho(n,n_act,vmim(1,i_beg),lvmim(1,i_beg))
+        vmm(1:n,:)      = vmre
+        vmm(n+1:n2,:)   = vmim
+        lvmm(1:n,:)     = lvmre
+        lvmm(n+1:n2,:)  = lvmim
+        call b_ortho_newcomplex(n2,n_act,vmm(1,i_beg),lvmm(1,i_beg))
+        vmre = vmm(1:n,:)
+        vmim = vmm(n+1:n2,:)
+        lvmre = lvmm(1:n,:)
+        lvmim = lvmm(n+1:n2,:)
         !
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
@@ -3993,41 +4099,63 @@ subroutine caslr_newcomplex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,ma
         vmre = zero
         vpim = zero
         vmim = zero
+        vpp  = zero
+        vmm  = zero
 !
 !       put current eigenvectors into the first position of the 
 !       expansion space
 !
         do i_eig = 1, n_max, 2
 !         real 
-          vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-          vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-          vpre(:,i_eig+1) = (-evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-          vmre(:,i_eig+1) = (-evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig)   = ( evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig)   = ( evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+          vpre(:,i_eig+1) = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vmre(:,i_eig+1) = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
 !         imaginary 
-          vpim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-          vmim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-          vpim(:,i_eig+1) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-          vmim(:,i_eig+1) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
+          vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+          vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+          vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
+          vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
         end do
 !
         lvpre   = zero
         lvmre   = zero
         lvpim   = zero
         lvmim   = zero
+        lvpp    = zero
+        lvmm    = zero
 !
 !       orthogonalize the expansion space to the metric.
 !    
         call apbmul(0,n,n_max,vpre,vpim,lvpre)
         call apbmul(1,n,n_max,vpre,vpim,lvpim)
         !
-        call b_ortho(n,n_max,vpre,lvpre)
-        call b_ortho(n,n_max,vpim,lvpim)
+        vpp(1:n,:)      = vpre
+        vpp(n+1:n2,:)   = vpim
+        lvpp(1:n,:)     = lvpre
+        lvpp(n+1:n2,:)  = lvpim
+!        call b_ortho_newcomplex(n2,n_max,vpp,lvpre)
+!        call b_ortho_newcomplex(n2,n_max,vpp,lvpim)
+        call b_ortho_newcomplex(n2,n_max,vpp,lvpp)
+        vpre = vpp(1:n,:)
+        vpim = vpp(n+1:n2,:)
+        lvpre = lvpp(1:n,:)
+        lvpim = lvpp(n+1:n2,:)
         !
         call ambmul(0,n,n_max,vmre,vmim,lvmre)
         call ambmul(1,n,n_max,vmre,vmim,lvmim)
         !
-        call b_ortho(n,n_max,vmre,lvmre)
-        call b_ortho(n,n_max,vmim,lvmim)
+        vmm(1:n,:)      = vmre
+        vmm(n+1:n2,:)   = vmim
+        lvmm(1:n,:)     = lvmre
+        lvmm(n+1:n2,:)  = lvmim
+!        call b_ortho_newcomplex(n2,n_max,vmm,lvmre)
+!        call b_ortho_newcomplex(n2,n_max,vmm,lvmim)
+        call b_ortho_newcomplex(n2,n_max,vmm,lvmm)
+        vmre = vmm(1:n,:)
+        vmim = vmm(n+1:n2,:)
+        lvmre = lvmm(1:n,:)
+        lvmim = lvmm(n+1:n2,:)
 !
         bvpre   = zero
         bvmre   = zero
@@ -6200,7 +6328,7 @@ subroutine caslr_complex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_d
     real(dp), allocatable :: metric(:,:), sigma(:), u_svd(:,:), vt_svd(:,:), &
                              temp(:,:)
     real(dp), parameter   :: tol_svd = 1.0e-5_dp
-    logical,  parameter   :: use_svd = .true.
+    logical,  parameter   :: use_svd = .false.
 !
 !   external functions:
 !   ===================
@@ -6268,6 +6396,97 @@ subroutine caslr_complex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_d
     deallocate (metric)
     return
   end subroutine b_ortho
+!
+  subroutine b_ortho_newcomplex(n,m,u,bu)
+    implicit none
+!
+!   b-orthogonalize m vectors of lenght n using the cholesky decomposition
+!   of the overlap matrix.
+!   this is in principle not a good idea, as the u'bu matrix can be very
+!   ill-conditioned, independent of how bas is b, and only works if x is
+!   already orthonormal. 
+!
+!   arguments:
+!   ==========
+!
+    integer,                     intent(in)    :: n, m
+    real(dp),  dimension(n,m),   intent(inout) :: u, bu
+!
+!   local variables
+!   ===============
+!
+    integer               :: info, i, j
+    real(dp), allocatable :: metric(:,:), sigma(:), u_svd(:,:), vt_svd(:,:), &
+                             temp(:,:)
+    real(dp), parameter   :: tol_svd = 1.0e-5_dp
+    logical,  parameter   :: use_svd = .false.
+!
+!   external functions:
+!   ===================
+!
+    external dpotrf, dtrsm, dgemm
+!
+    allocate (metric(m,m))
+!
+    call dgemm('t','n',m,m,n,two,u,n,bu,n,zero,metric,m)
+!
+    if (use_svd) then
+!
+!     debug option: use svd to b-orthonormalize, by computing
+!     b**(-1/2)
+!
+      allocate (sigma(m), u_svd(m,m), vt_svd(m,m), temp(n,m))
+      call dgesvd('a','a',m,m,metric,m,sigma,u_svd,m,vt_svd,m,work,lwork,info)
+!
+!     compute sigma**(-1/2)
+!
+      do i = 1, m
+        if (sigma(i) .gt. tol_svd) then
+          sigma(i) = 1/sqrt(sigma(i))
+        else
+          sigma(i) = zero
+        end if
+      end do
+!
+!     compute metric ** (-1/2). first, compute sigma ** (-1/2) vt
+!
+      metric = zero
+      do i = 1, m
+        do j = 1, m
+          metric(j,i) = metric(j,i) + sigma(j)*vt_svd(j,i)
+        end do
+      end do
+!
+!     now, multiply for u:
+!
+      vt_svd = metric
+      call dgemm('n','n',m,m,m,one,u_svd,m,vt_svd,m,zero,metric,m)
+!
+!     metric contains s ** (-1/2), and projects out directions corresponding
+!     to pathological singular values. 
+!     orthogonalize u and bu:
+!
+      call dgemm('n','n',n,m,m,one,u,n,metric,m,zero,temp,n)
+      u = temp
+      call dgemm('n','n',n,m,m,one,bu,n,metric,m,zero,temp,n)
+      bu = temp
+!
+      deallocate (sigma, u_svd, vt_svd, temp)
+    else
+!
+!     compute the cholesky factorization of the metric.
+!
+      call dpotrf('l',m,metric,m,info)
+!
+!     get u * l^-T and bu * l^-T
+!
+      call dtrsm('r','l','t','n',n,m,one,metric,m,u,n)
+      call dtrsm('r','l','t','n',n,m,one,metric,m,bu,n)
+    end if
+!
+    deallocate (metric)
+    return
+  end subroutine b_ortho_newcomplex
 !
   subroutine b_ortho_complex(n,m,u,bu)
     implicit none
@@ -7461,6 +7680,87 @@ subroutine caslr_complex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_d
 !
     return
   end subroutine b_ortho_vs_x_complex
+!
+  subroutine b_ortho_vs_x_newcomplex(n,m,k,x,bx,u)
+    implicit none
+!
+!   given two sets x(n,m) and u(n,k) of vectors, where x 
+!   is assumed to be orthogonal, b-orthogonalize u against x.
+!   furthermore, orthonormalize u.
+!
+!   this routine performs the u vs x orthogonalization and the
+!   subsequent orthonormalization of u iteratively, until the
+!   overlap between x and the orthogonalized u is smaller than
+!   a (tight) threshold. 
+!
+!   arguments:
+!   ==========
+!
+    integer,                   intent(in)    :: n, m, k
+    real(dp),  dimension(n,m), intent(in)    :: x, bx
+    real(dp),  dimension(n,k), intent(inout) :: u
+!
+!   local variables:
+!   ================
+!
+    logical                :: done, ok
+    integer                :: it
+    real(dp)               :: xu_norm, xx(1)
+    real(dp),  allocatable :: xu(:,:)
+!
+!   external functions:
+!   ===================
+!
+    intrinsic              :: random_number
+    real(dp)               :: dnrm2
+    external               :: dnrm2, dgemm
+!   
+    integer, parameter     :: maxit = 10
+    logical, parameter     :: useqr = .false.
+!
+!   allocate space for the overlap between x and u.
+!
+    ok = .false.
+    allocate (xu(m,k))
+    done = .false.
+    it   = 0
+!
+!   start with an initial orthogonalization to improve conditioning.
+!
+    if (.not. useqr) call ortho_cd_newcomplex(.false.,n,k,u,xx,ok)
+    if (.not. ok .or. useqr) call ortho(.false.,n,k,u,xx)
+!
+!   iteratively orthogonalize u against x, and then orthonormalize u.
+!
+    do while (.not. done)
+      it = it + 1
+!
+!     u = u - x (bx^t u)
+!
+      call dgemm('t','n',m,k,n,two,bx,n,u,n,zero,xu,m)
+      call dgemm('n','n',n,k,m,-one,x,n,xu,m,one,u,n)
+!
+!     now, orthonormalize u.
+!
+      if (.not. useqr) call ortho_cd_newcomplex(.false.,n,k,u,xx,ok)
+      if (.not. ok .or. useqr) call ortho(.false.,n,k,u,xx)
+!
+!     compute the overlap between the orthonormalized u and x and decide
+!     whether the orthogonalization procedure converged.
+!
+      call dgemm('t','n',m,k,n,two,bx,n,u,n,zero,xu,m)
+      xu_norm = dnrm2(m*k,xu,1)
+      done    = xu_norm.lt.tol_ortho
+!
+!     if things went really wrong, abort.
+!
+      if (it.gt.maxit) stop ' catastrophic failure of b_ortho_vs_x'
+    end do
+!
+    deallocate(xu)
+!
+    return
+  end subroutine b_ortho_vs_x_newcomplex
 !
 ! utilities
 ! =========
