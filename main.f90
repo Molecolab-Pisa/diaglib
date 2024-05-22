@@ -42,7 +42,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(10, .false.)
+    call test_nonsym(.false.,10,1)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -880,19 +880,20 @@ end program main
     return
   end subroutine test_scflr
 !
-  subroutine test_nonsym(n, check_lapack)
+  subroutine test_nonsym(check_lapack,n,n_want)
     use real_precision
     use utils
-    !use diaglib, only : 
+    use diaglib, only : nonsym_driver
     implicit none
-    integer, intent(in) :: n
+    integer, intent(in) :: n, n_want
     logical, intent(in) :: check_lapack
 !
 !   test matrix
 !
     integer                     :: i, j, info, ipiv(n), lwork
     real(dp)                    ::  lw(1), zero, one
-    real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), p(:,:)
+    real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
+                                    p(:,:),eig(:), evec(:,:), diagonal(:)
 !
     zero = 0.d0
     one  = 1.d0
@@ -945,6 +946,25 @@ end program main
       deallocate (work)
       call dlasrt('i', n, wr, info)
     end if 
+!
+!   allocate and gather the diagonal
+!
+    allocate (diagonal(n))
+    do i = 1,n
+      diagonal(i) = a(i,i)
+    end do
+!
+!   allocate memory for the eigenvalues and eigenvectors
+!
+    allocate (eig(n), evec(n,n_want))
+!
+!   compute a guess for the eigenvector (see guess_evec for more information)
+!
+  call guess_evec(1,n,n_want,diagonal,evec)
+!
+!   call driver nonsym
+!
+  call nonsym_driver()
   end subroutine test_nonsym
 !
   subroutine printMatrix(mat, nrows, ncols) 

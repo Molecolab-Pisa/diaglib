@@ -163,7 +163,7 @@ module diaglib
 ! ============
 !
   public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, caslr_eff_driver, &
-            ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
+            nonsym_driver, ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
 !
   contains
 !
@@ -2242,6 +2242,10 @@ module diaglib
             t5,'----------------------------------------')
     return
   end subroutine gen_david_driver
+!
+  subroutine nonsym_driver()
+    print *,'Hello non symmetric world'
+  end subroutine nonsym_driver
 !
 ! orthogonalization routines:
 ! ===========================
