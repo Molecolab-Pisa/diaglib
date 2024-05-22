@@ -27,7 +27,8 @@ program main
               t3,'   1 for symmetric eigenvalue problems ',/, &
               t3,'   2 for symmetric generalized eigenvalue problems ',/, &
               t3,'   3 for linear-response equations (SCF-like)',/, &
-              t3,'   4 for linear-response equations (CASSCF-like).')
+              t3,'   4 for linear-response equations (CASSCF-like)',/, &
+              t3,'   5 for unsymmetric eigenvalue problems.')
   write(6,1000)
   read(5,*) iwhat
   write(6,*)
@@ -40,8 +41,10 @@ program main
     call test_scflr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
-  else 
-    write(6,*) ' invalid selectrion. aborting ...'
+  else if (iwhat.eq.5) then
+    call test_nonsym(10, .false.)
+  else
+    write(6,*) ' invalid selection. aborting ...'
   end if
 !
 end program main
@@ -876,6 +879,95 @@ end program main
 !
     return
   end subroutine test_scflr
+!
+  subroutine test_nonsym(n, check_lapack)
+    use real_precision
+    use utils
+    !use diaglib, only : 
+    implicit none
+    integer, intent(in) :: n
+    logical, intent(in) :: check_lapack
+!
+!   test matrix
+!
+    integer                     :: i, j, info, ipiv(n), lwork
+    real(dp)                    ::  lw(1), zero, one
+    real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), p(:,:)
+!
+    zero = 0.d0
+    one  = 1.d0
+!
+!   allocate memory to get the matrix
+!
+    allocate (a(n,n), diag(n,n), t(n,n), p(n,n))
+!    
+    diag = zero
+!
+!   build a nonsymmetric matrix 
+!
+!   generate diagonal matrix:   diag(i,i) = 2 + i
+!
+    forall(i = 1:n) diag(i, i) = real(2 + i, kind=dp)
+!
+!   generate random matrix:     t = random
+!   ensure positive definite:   p = t^T * t
+!
+    call random_number(t)
+    call dgemm('t','n',n,n,n,one,t,n,t,n,zero,p,n)
+    a = p
+!
+!   get it's invert by using lu decomposition
+!
+    call dgetrf(n,n,a,n,ipiv,info)
+    call dgetri(n,a,n,ipiv,lw,-1,info)
+    lwork = int(lw(1))
+    allocate(work(lwork))
+    call dgetri(n,a,n,ipiv,work,lwork,info)
+    deallocate(work)   
+!    
+!   get final matrix:           a = p * diag * p^-1
+!
+    call dgemm('n','n',n,n,n,one,p,n,diag,n,zero,t,n)
+    call dgemm('n','n',n,n,n,one,t,n,a,n,zero,p,n)
+    a = p
+!
+    deallocate (p, t, diag)
+!
+!  if required, solve the problem with a dense lapack routine:
+!
+    if (check_lapack) then
+      allocate (a_copy(n,n), wr(n), wi(n), r(n,n), l(n,n))
+      a_copy = a
+      call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,lw,-1,info)
+      lwork = int(lw(1))
+      allocate (work(lwork)) 
+      call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
+      deallocate (work)
+      call dlasrt('i', n, wr, info)
+    end if 
+  end subroutine test_nonsym
+!
+  subroutine printMatrix(mat, nrows, ncols) 
+!   
+! print formatted matrix
+!
+    use real_precision
+    use utils
+    real(dp), dimension(ncols, nrows), intent(in)  :: mat
+    integer , intent(in)  :: nrows, ncols
+    integer :: i,j 
+
+    do i = 1, ncols
+      do j = 1, nrows
+        write(*,'(F13.3)', advance='no') mat(i,j)
+        if (j .lt. nrows) then
+          write(*, '(A)', advance='no') ' '
+        end if
+      end do
+      print *
+    end do
+
+  end subroutine printMatrix
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)
     use real_precision
