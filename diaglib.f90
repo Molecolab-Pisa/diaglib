@@ -2276,10 +2276,10 @@ module diaglib
     real(dp), allocatable :: space_r(:,:), space_l(:,:), aspace_r(:,:), aspace_l(:,:), &
                               r_r(:,:), r_l(:,:), r_norm_r(:,:), r_norm_l(:,:)
 !
-!   subspace matrix and eigenvalues.
+!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues.
 !
-    real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_r(:), e_red_l(:), a_copy_r(:,:), &
-                              a_copy_l(:,:)
+    real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), a_copy_r(:,:), &
+                              a_copy_l(:,:), evec_r(:,:), evec_l(:,:)
 !
 !   restarting variables
 !
@@ -2296,16 +2296,23 @@ module diaglib
 !
     lda = n_max
 !
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (work(lwork), tau(n_max), stat=istat)
+    call check_mem(istat)
+!
 !   allocate memory for for expansion space, the corresponding
 !   matrix-multiplied vectors and the residuals
 !
     allocate (space_r(n,lda), space_l(n,lda), aspace_r(n,lda), aspace_l(n,lda), stat=istat)
     call check_mem(istat)
 !
-!   allocate memory for the reduced matrix and its eigenvalues
+!   allocate memory for the reduced matrix, its eigenvalues with real &
+!   imaginary parts, and left & right eigenvectors
 !
-    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_r(lda), e_red_l(lda), a_copy_r(lda,lda), &
-               a_copy_l(lda,lda), stat =istat)
+    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(lda), e_red_im(lda), a_copy_r(lda,lda), &
+               a_copy_l(lda,lda), evec_l(lda,lda), evec_r(lda,lda), stat =istat)
     call check_mem(istat)
 !
 !   clean out various quantities
@@ -2379,18 +2386,14 @@ module diaglib
 !
       call dgemm('t','n',ldu,n_act,n,one,space_r,n,aspace_r(1,i_beg+n_rst),n,zero,a_red_r(1,i_beg+n_rst),lda)
       call dgemm('t','n',ldu,n_act,n,one,space_l,n,aspace_l(1,i_beg+n_rst),n,zero,a_red_l(1,i_beg+n_rst),lda)
-      print*
-      call printMatrix(a_red_r, lda, lda)
-      print*
-      call printMatrix(a_red_l, lda, lda)
 !
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
 !
       if(restart) then !handle for right and left space!
         do i_eig = 1, n_rst
-          a_red_r(i_eig,i_eig) = e_red_r(i_eig)
-          a_red_l(i_eig,i_eig) = e_red_l(i_eig)
+          !a_red_r(i_eig,i_eig) = e_red_re(i_eig)
+          !a_red_l(i_eig,i_eig) = e_red_l(i_eig)
         end do
         restart = .false.
         n_rst   = 0
@@ -2401,13 +2404,27 @@ module diaglib
 !
 !   diagonalize the reduced matrix
 !
+    print *
+    print *, "print reduced spaces a_r, a_l:"
+    call printMatrix(a_red_r, lda, lda)
+    print *
+    call printMatrix(a_red_l, lda, lda)
+!
     call get_time(t1)
-    !call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,lw,-1,info)
-    !lwork = int(lw(1))
-    !allocate (work(lwork)) 
-    !call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
-    !deallocate (work)
-    !call get_time(t2)
+    call dgeev('v','v',ldu,a_copy_l,lda,e_red_re,e_red_im,evec_l,lda,evec_r,lda,work,lwork,info)
+    call get_time(t2)
+!
+    print*
+    print*, "Eigenvectors l and r:"
+    print*
+    call printMatrix(evec_l, lda, lda)
+    print*
+    call printMatrix(evec_r, lda, lda)
+    print*
+    print *, "print real part of eigenvalues"
+    print *
+    call printVector(e_red_re, lda)
+!  
     t_diag = t_diag + t2 - t1
 
   end subroutine nonsym_driver
@@ -2431,6 +2448,23 @@ module diaglib
     end do
 !
   end subroutine printMatrix
+!
+  subroutine printVector(vec, lenRow)
+!    
+! print formatted vector
+!
+    implicit none
+    intrinsic                 ::  selected_real_kind, abs
+    integer,  parameter       ::  wp = selected_real_kind(15)
+    real(wp), intent(in)  :: vec(:)
+    integer,  intent(in)  :: lenRow
+    integer               :: i
+
+    do i = 1, lenRow
+      write(*,'(F13.3)') vec(i)
+    end do
+
+  end subroutine printVector
 !
 ! orthogonalization routines:
 ! ===========================
