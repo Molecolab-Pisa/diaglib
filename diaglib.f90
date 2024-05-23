@@ -2243,9 +2243,194 @@ module diaglib
     return
   end subroutine gen_david_driver
 !
-  subroutine nonsym_driver()
-    print *,'Hello non symmetric world'
+  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,matvec,precnd,eig,evec)
+    logical,                        intent(in)    :: verbose
+    integer,                        intent(in)    :: n, n_targ, n_max
+    integer,                        intent(in)    :: max_iter
+    real(dp),                       intent(in)    :: tol
+    real(dp), dimension(n_max),     intent(inout) :: eig
+    real(dp), dimension(n,n_max),   intent(inout) :: evec
+    external                                      :: matvec, precnd
+!
+!   local variables:
+!   ================
+!
+    integer               :: istat
+!   
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+    integer               :: it, i_eig
+!
+!   expansion spaces, residuals and their norms
+!
+    real(dp), allocatable :: space_r(:,:), space_l(:,:), aspace_r(:,:), aspace_l(:,:), &
+                              r_r(:,:), r_l(:,:), r_norm_r(:,:), r_norm_l(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_r(:), e_red_l(:), a_copy_r(:,:), &
+                              a_copy_l(:,:)
+!
+!   restarting variables
+!
+    logical               :: restart
+    integer               :: n_rst
+!
+!   external functions:
+!   ===================
+!
+    external              :: dnrm2, dgemm, dcopy
+!
+!   computing actual size of the expansion space, checking that
+!   the input makes sense.
+!
+    lda = n_max
+!
+!   allocate memory for for expansion space, the corresponding
+!   matrix-multiplied vectors and the residuals
+!
+    allocate (space_r(n,lda), space_l(n,lda), aspace_r(n,lda), aspace_l(n,lda), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues
+!
+    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_r(lda), e_red_l(lda), a_copy_r(lda,lda), &
+               a_copy_l(lda,lda), stat =istat)
+    call check_mem(istat)
+!
+!   clean out various quantities
+!
+    t_diag    = zero
+    t_ortho   = zero
+    t_mv      = zero
+    t_tot     = zero
+    space_r   = zero
+    space_l   = zero
+    aspace_r  = zero
+    aspace_l  = zero
+    a_red_r   = zero
+    a_red_l   = zero
+!
+    call get_time(t_tot)
+!
+!   check weather we have a guess for the eigenvectors in evec, and
+!   weather it is orthonormal.
+!   if evec is zero, create a random guess
+!
+    call check_guess(n,n_targ,evec)
+!
+!   move guess into the expansion spaces
+!
+    call dcopy(n*n_max,evec,1,space_r,1)
+    call dcopy(n*n_max,evec,1,space_l,1)
+!
+!   initialize the number of active vectors and the associated indices.
+!
+    n_act = n_max
+    i_beg = 1
+!
+!   initialize the counter for the expansion of the subspace
+!
+    m_dim = 1
+    ldu   = 0
+    
+!
+!   initialize to false the restart
+!
+    restart = .false.
+!
+!   main loop
+!
+    1030 format(t5,'Davidson-nonsym iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+! 
+    if (verbose) write(6,1030) tol
+!   
+    n_rst = 0
+    do it = 1, 1 !max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu   = ldu + n_act
+!
+!     perform this iteration's matrix-vector multiplications for both 
+!     right and left spaces
+!
+      call get_time(t1)
+      call matvec(n,n_act,space_r(1,i_beg+n_rst),aspace_r(1,i_beg+n_rst))
+      call matvec(n,n_act,space_l(1,i_beg+n_rst),aspace_l(1,i_beg+n_rst))
+      call get_time(t2)
+      t_mv = t_mv + t2 -t1
+!
+!     update the reduced matrix
+!
+      call dgemm('t','n',ldu,n_act,n,one,space_r,n,aspace_r(1,i_beg+n_rst),n,zero,a_red_r(1,i_beg+n_rst),lda)
+      call dgemm('t','n',ldu,n_act,n,one,space_l,n,aspace_l(1,i_beg+n_rst),n,zero,a_red_l(1,i_beg+n_rst),lda)
+      print*
+      call printMatrix(a_red_r, lda, lda)
+      print*
+      call printMatrix(a_red_l, lda, lda)
+!
+!     explicitly putting the first block of 
+!     converged eigenvalues in the reduced matrix
+!
+      if(restart) then !handle for right and left space!
+        do i_eig = 1, n_rst
+          a_red_r(i_eig,i_eig) = e_red_r(i_eig)
+          a_red_l(i_eig,i_eig) = e_red_l(i_eig)
+        end do
+        restart = .false.
+        n_rst   = 0
+      end if
+    end do
+    a_copy_r = a_red_r
+    a_copy_l = a_red_l
+!
+!   diagonalize the reduced matrix
+!
+    call get_time(t1)
+    !call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,lw,-1,info)
+    !lwork = int(lw(1))
+    !allocate (work(lwork)) 
+    !call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
+    !deallocate (work)
+    !call get_time(t2)
+    t_diag = t_diag + t2 - t1
+
   end subroutine nonsym_driver
+!
+  subroutine printMatrix(mat, nrows, ncols) 
+!   
+! print formatted matrix
+!
+    real(dp), intent(in)  :: mat(:,:)
+    integer , intent(in)  :: nrows, ncols
+    integer :: i,j 
+!
+    do i = 1, nrows
+      do j = 1, ncols
+        write(*,'(F13.3)', advance='no') mat(i,j)
+        if (j .lt. nrows) then
+          write(*, '(A)', advance='no') ' '
+        end if
+      end do
+      print *
+    end do
+!
+  end subroutine printMatrix
 !
 ! orthogonalization routines:
 ! ===========================

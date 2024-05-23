@@ -42,7 +42,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.false.,10,1)
+    call test_nonsym(.false.,5,1,tol,5,10)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -880,13 +880,14 @@ end program main
     return
   end subroutine test_scflr
 !
-  subroutine test_nonsym(check_lapack,n,n_want)
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max)
     use real_precision
     use utils
     use diaglib, only : nonsym_driver
     implicit none
-    integer, intent(in) :: n, n_want
+    integer, intent(in) :: n, n_want, itmax, m_max
     logical, intent(in) :: check_lapack
+    real(dp), intent(in):: tol
 !
 !   test matrix
 !
@@ -894,6 +895,8 @@ end program main
     real(dp)                    ::  lw(1), zero, one
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec(:,:), diagonal(:)
+!
+    external :: mmult, mprec
 !
     zero = 0.d0
     one  = 1.d0
@@ -956,7 +959,7 @@ end program main
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
-    allocate (eig(n), evec(n,n_want))
+    allocate (eig(n), evec(n,m_max))
 !
 !   compute a guess for the eigenvector (see guess_evec for more information)
 !
@@ -964,30 +967,8 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver()
+  call nonsym_driver(.true.,n,n_want,m_max,itmax,tol,mmult,mprec,eig,evec)
   end subroutine test_nonsym
-!
-  subroutine printMatrix(mat, nrows, ncols) 
-!   
-! print formatted matrix
-!
-    use real_precision
-    use utils
-    real(dp), dimension(ncols, nrows), intent(in)  :: mat
-    integer , intent(in)  :: nrows, ncols
-    integer :: i,j 
-
-    do i = 1, ncols
-      do j = 1, nrows
-        write(*,'(F13.3)', advance='no') mat(i,j)
-        if (j .lt. nrows) then
-          write(*, '(A)', advance='no') ' '
-        end if
-      end do
-      print *
-    end do
-
-  end subroutine printMatrix
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)
     use real_precision
