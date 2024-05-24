@@ -891,13 +891,15 @@ end program main
 !
 !   test matrix
 !
-    integer                     :: i, j, info, ipiv(n), lwork
+    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size
+    integer, allocatable        :: seed(:)
     real(dp)                    ::  lw(1), zero, one
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
-                                    p(:,:),eig(:), evec(:,:), diagonal(:)
+                                    p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
 !
     external :: mmult, mprec
 !
+    i_seed = 1234
     zero = 0.d0
     one  = 1.d0
 !
@@ -914,9 +916,16 @@ end program main
     forall(i = 1:n) diag(i, i) = real(2 + i, kind=dp)
 !
 !   generate random matrix:     t = random
+!
+    call random_seed(size=seed_size)
+    allocate(seed(seed_size))
+    seed = i_seed
+    call random_seed(put=seed)
+    call random_number(t)
+    deallocate(seed)
+!
 !   ensure positive definite:   p = t^T * t
 !
-    call random_number(t)
     call dgemm('t','n',n,n,n,one,t,n,t,n,zero,p,n)
     a = p
 !
@@ -959,15 +968,16 @@ end program main
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
-    allocate (eig(n), evec(n,m_max))
+    allocate (eig(n), evec_r(n,m_max), evec_l(n,m_max))
 !
 !   compute a guess for the eigenvector (see guess_evec for more information)
 !
-  call guess_evec(1,n,n_want,diagonal,evec)
+  call guess_evec(1,n,n_want,diagonal,evec_r)
+  call dcopy(n*m_max,evec_r,1,evec_l,1)
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,m_max,itmax,tol,mmult,mprec,eig,evec)
+  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,mmult,mprec,eig,evec_r,evec_l)
   end subroutine test_nonsym
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)

@@ -2243,18 +2243,19 @@ module diaglib
     return
   end subroutine gen_david_driver
 !
-  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,matvec,precnd,eig,evec)
+  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,matvec,precnd,eig,evec_r,evec_l)
     logical,                        intent(in)    :: verbose
     integer,                        intent(in)    :: n, n_targ, n_max
-    integer,                        intent(in)    :: max_iter
+    integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol
     real(dp), dimension(n_max),     intent(inout) :: eig
-    real(dp), dimension(n,n_max),   intent(inout) :: evec
+    real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
     external                                      :: matvec, precnd
 !
 !   local variables:
 !   ================
 !
+    integer, parameter    :: min_dav = 10
     integer               :: istat
 !   
 !   actual expansion space size and total dimension
@@ -2279,7 +2280,7 @@ module diaglib
 !   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues.
 !
     real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), a_copy_r(:,:), &
-                              a_copy_l(:,:), evec_r(:,:), evec_l(:,:)
+                              a_copy_l(:,:)
 !
 !   restarting variables
 !
@@ -2294,7 +2295,8 @@ module diaglib
 !   computing actual size of the expansion space, checking that
 !   the input makes sense.
 !
-    lda = n_max
+    dim_dav =  max(min_dav,max_dav)
+    lda = dim_dav * n_max
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -2312,7 +2314,7 @@ module diaglib
 !   imaginary parts, and left & right eigenvectors
 !
     allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(lda), e_red_im(lda), a_copy_r(lda,lda), &
-               a_copy_l(lda,lda), evec_l(lda,lda), evec_r(lda,lda), stat =istat)
+               a_copy_l(lda,lda), stat =istat)
     call check_mem(istat)
 !
 !   clean out various quantities
@@ -2334,12 +2336,13 @@ module diaglib
 !   weather it is orthonormal.
 !   if evec is zero, create a random guess
 !
-    call check_guess(n,n_targ,evec)
+    call check_guess(n,n_targ,evec_r)
+    call check_guess(n,n_targ,evec_l)
 !
 !   move guess into the expansion spaces
 !
-    call dcopy(n*n_max,evec,1,space_r,1)
-    call dcopy(n*n_max,evec,1,space_l,1)
+    call dcopy(n*n_max,evec_r,1,space_r,1)
+    call dcopy(n*n_max,evec_l,1,space_l,1)
 !
 !   initialize the number of active vectors and the associated indices.
 !
