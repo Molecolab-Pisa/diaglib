@@ -42,7 +42,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.false.,5,1,tol,5,10)
+    call test_nonsym(.true.,5,5,tol,5,10)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -85,6 +85,7 @@ end program main
     nmult = nmult + m
     do icol = 1, m
       ax(:,icol) = matmul(a,x(:,icol))
+      print * , ax(:,icol)
     end do
     return
   end subroutine mmult
@@ -891,7 +892,7 @@ end program main
 !
 !   test matrix
 !
-    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size
+    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig
     integer, allocatable        :: seed(:)
     real(dp)                    ::  lw(1), zero, one
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
@@ -956,7 +957,7 @@ end program main
       allocate (work(lwork)) 
       call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
       deallocate (work)
-      call dlasrt('i', n, wr, info)
+      print *, wr
     end if 
 !
 !   allocate and gather the diagonal
@@ -965,15 +966,22 @@ end program main
     do i = 1,n
       diagonal(i) = a(i,i)
     end do
+    print *, diagonal
+!
+!   for better convergence, we seek more eigenpairs and stop the iterations when 
+!   the required ones are converged
+!
+    n_eig = n_want ! min(2*n_want, n_want + 5)
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
-    allocate (eig(n), evec_r(n,m_max), evec_l(n,m_max))
+    allocate (eig(n), evec_r(n,n_eig), evec_l(n,n_eig))
 !
 !   compute a guess for the eigenvector (see guess_evec for more information)
 !
-  call guess_evec(1,n,n_want,diagonal,evec_r)
-  call dcopy(n*m_max,evec_r,1,evec_l,1)
+  call guess_evec(1,n,n_eig,diagonal,evec_r)
+  call dcopy(n*n_eig,evec_r,1,evec_l,1)
+  print *, diagonal
 !
 !   call driver nonsym
 !

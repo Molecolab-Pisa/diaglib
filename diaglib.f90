@@ -2271,16 +2271,26 @@ module diaglib
     integer               :: m_dim, ldu
 !
     integer               :: it, i_eig
+!   
+    real(dp)              :: sqrtn
+!
+!   arrays to control convergence and orthoginalization
+!
+    logical, allocatable  :: done(:)
 !
 !   expansion spaces, residuals and their norms
 !
     real(dp), allocatable :: space_r(:,:), space_l(:,:), aspace_r(:,:), aspace_l(:,:), &
                               r_r(:,:), r_l(:,:), r_norm_r(:,:), r_norm_l(:,:)
 !
-!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues.
+!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
 !
-    real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), a_copy_r(:,:), &
-                              a_copy_l(:,:)
+    real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), &
+                             evec_red_r(:,:), evec_red_l(:,:), a_copy_r(:,:), a_copy_l(:,:)
+!
+!   ritz approximation.
+!
+    real(dp), allocatable :: ritz_r(:,:), ritz_l(:,:)
 !
 !   restarting variables
 !
@@ -2290,13 +2300,14 @@ module diaglib
 !   external functions:
 !   ===================
 !
+    real(dp)              :: dnrm2
     external              :: dnrm2, dgemm, dcopy
 !
 !   computing actual size of the expansion space, checking that
 !   the input makes sense.
 !
     dim_dav =  max(min_dav,max_dav)
-    lda = dim_dav * n_max
+    lda = dim_dav !* n_max
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -2307,15 +2318,24 @@ module diaglib
 !   allocate memory for for expansion space, the corresponding
 !   matrix-multiplied vectors and the residuals
 !
-    allocate (space_r(n,lda), space_l(n,lda), aspace_r(n,lda), aspace_l(n,lda), stat=istat)
+    allocate (space_r(n,lda), space_l(n,lda), aspace_r(n,lda), aspace_l(n,lda), r_r(n,n_max), &
+      r_l(n,n_max), stat=istat)
     call check_mem(istat)
+!
+!   allocate memory for convergency check
+!
+    allocate (done(n_max), r_norm_r(2,n_max), r_norm_l(2,n_max), stat=istat)
 !
 !   allocate memory for the reduced matrix, its eigenvalues with real &
-!   imaginary parts, and left & right eigenvectors
+!   imaginary parts, and its left & right eigenvectors 
 !
-    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(lda), e_red_im(lda), a_copy_r(lda,lda), &
-               a_copy_l(lda,lda), stat =istat)
+    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(lda), e_red_im(lda), evec_red_r(lda,lda), &
+              evec_red_l(lda,lda), a_copy_r(lda,lda), a_copy_l(lda,lda), stat =istat)
     call check_mem(istat)
+!
+!   allocate memory for the ritz approximation
+!
+    allocate (ritz_r(n,lda), ritz_l(n,lda))
 !
 !   clean out various quantities
 !
@@ -2329,6 +2349,9 @@ module diaglib
     aspace_l  = zero
     a_red_r   = zero
     a_red_l   = zero
+    ritz_r    = zero
+    ritz_l    = zero
+    done      = .false.
 !
     call get_time(t_tot)
 !
@@ -2385,6 +2408,12 @@ module diaglib
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
+      print *, "aspace l+r"
+      call printMatrix(aspace_r, n, lda)
+      print *
+      call printMatrix(aspace_l, n, lda)
+      print *
+!
 !     update the reduced matrix
 !
       call dgemm('t','n',ldu,n_act,n,one,space_r,n,aspace_r(1,i_beg+n_rst),n,zero,a_red_r(1,i_beg+n_rst),lda)
@@ -2401,35 +2430,83 @@ module diaglib
         restart = .false.
         n_rst   = 0
       end if
+      a_copy_r = a_red_r
+!
+!     diagonalize the reduced matrix
+!
+      print *
+      print *, "print reduced spaces a_r, a_l:"
+      call printMatrix(a_red_r, lda, lda)
+      print *
+      call printMatrix(a_red_l, lda, lda)
+      print*
+!
+      call get_time(t1)
+      call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      call get_time(t2)
+!
+      t_diag = t_diag + t2 - t1
+!
+!     extract the eigenvalues and compute the ritz approxiximation to the 
+!     eigenvectors
+!
+      eig = e_red_re(1:n_max)
+!
+      call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,ritz_r,n)
+      call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,ritz_l,n)
+!
+      print *, "evec l + r"
+      call printMatrix(evec_red_r, lda, lda)
+      print *
+      call printMatrix(evec_red_l, lda, lda)
+      print *
+      print *, "aspace l+r"
+      call printMatrix(aspace_r, n, lda)
+      print *
+      call printMatrix(aspace_l, n, lda)
+      print *
+      print *, "ritz"
+      call printMatrix(ritz_r, n,n_max)
+      print *
+      call printMatrix(ritz_l, n,n_max)
+      print *
+!
+!     compute the residuals, and their rms and sup norms
+!
+      call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
+      call dgemm('t','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
+      print * ,'residual prime'
+      print *
+      call printMatrix(r_r, n,n_max)
+      print *
+      call printMatrix(r_l, n,n_max)
+      print *
+      print *, "eig"
+      print *
+      call printVector(eig, n_max)
+!
+      do i_eig = 1, n_targ
+!
+!       if the eigenvalue is already converged, skip it.
+!
+        if (done(i_eig)) cycle
+!
+          call daxpy(n,-eig(i_eig),ritz_r(:,i_eig),1,r_r(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),ritz_l(:,i_eig),1,r_l(:,i_eig),1)
+          r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
+          r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
+          r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
+          r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
+      end do
+!
+      print*
+      print*, "residual_prime right and left"
+      call printMatrix(r_r, n, n_max)
+      print*
+      call printMatrix(r_l, n, n_max)
+      print*
     end do
-    a_copy_r = a_red_r
-    a_copy_l = a_red_l
-!
-!   diagonalize the reduced matrix
-!
-    print *
-    print *, "print reduced spaces a_r, a_l:"
-    call printMatrix(a_red_r, lda, lda)
-    print *
-    call printMatrix(a_red_l, lda, lda)
-!
-    call get_time(t1)
-    call dgeev('v','v',ldu,a_copy_l,lda,e_red_re,e_red_im,evec_l,lda,evec_r,lda,work,lwork,info)
-    call get_time(t2)
-!
-    print*
-    print*, "Eigenvectors l and r:"
-    print*
-    call printMatrix(evec_l, lda, lda)
-    print*
-    call printMatrix(evec_r, lda, lda)
-    print*
-    print *, "print real part of eigenvalues"
-    print *
-    call printVector(e_red_re, lda)
-!  
-    t_diag = t_diag + t2 - t1
-
+! 
   end subroutine nonsym_driver
 !
   subroutine printMatrix(mat, nrows, ncols) 
