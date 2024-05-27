@@ -13,8 +13,8 @@ program main
 !
   n      = 1000
   n_want = 20
-  tol    = 1.0e-6_dp
-  itmax  = 1000
+  tol    = 1.0e-10_dp
+  itmax  = 100
   m_max  = 20
   nmult  = 0
   tdscf  = .false.

@@ -39,8 +39,8 @@ module diaglib
 !        mMMMMMMMMMMMMMMMMM   + ------------------------------------ +
 !       mMMMMMMMMMMMMMMMMm    |            D I A G L I B             |
 !      mMMMMMMMMMMMMMMMMMm    + ------------------------------------ +
-!      mMMMMm       mMMMMMm   | I. Gianni', T. Nottoli, F. Lipparini |
-!      mMMMm       mMMMMMMm   |                                      |
+!      mMMMMm       mMMMMMm   | I. Gianni', T. Nottoli, F. Pes       |
+!      mMMMm       mMMMMMMm   | A. Levitt, F. Lipparini              !
 !       mMm       mMMMMMMm    |                            ver 1.0   |
 !        m       mMMMMMMm     |              molecolab.dcci.unipi.it |
 !               mMMMMMm       + ------------------------------------ +
@@ -147,7 +147,7 @@ module diaglib
 !
 ! convergence thresholds for orthogonalization
 !
-  real(dp), parameter    :: tol_ortho = 1.0e-13_dp
+  real(dp), parameter    :: tol_ortho = two * epsilon(one)
 ! 
 ! memory and info for lapack routines
 !
@@ -362,7 +362,7 @@ module diaglib
       call bvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
       call b_ortho(n,n_max,space(1,ind_w),bspace(1,ind_w))
     else
-      call ortho_vs_x(.false.,n,n_max,n_max,space,space(1,ind_w),xx,xx)
+      call ortho_vs_x(n,n_max,n_max,space,space(1,ind_w),xx,xx)
     end if
     call get_time(t2)
     t_ortho = t_ortho + t2 - t1
@@ -524,7 +524,7 @@ module diaglib
         call bvec(n,n_act,space(1,ind_w),bspace(1,ind_w))
         call b_ortho(n,n_act,space(1,ind_w),bspace(1,ind_w))
       else
-        call ortho_vs_x(.false.,n,n_max+n_act,n_act,space,space(1,ind_w),xx,xx)
+        call ortho_vs_x(n,n_max+n_act,n_act,space,space(1,ind_w),xx,xx)
       end if
       call get_time(t2)
       t_ortho = t_ortho + t2 - t1
@@ -594,7 +594,7 @@ module diaglib
 !
     integer               :: lwork_svd
 !
-    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: sqrtn, tol_rms, tol_max, growth
     real(dp)              :: xx(1), lw_svd(1)
 !
 !   arrays to control convergence and orthogonalization
@@ -712,8 +712,8 @@ module diaglib
       vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
     end do
 !
-    call ortho_cd(.false.,n,n_max,vp,xx,ok)
-    call ortho_cd(.false.,n,n_max,vm,xx,ok)
+    call ortho_cd(n,n_max,vp,growth,ok)
+    call ortho_cd(n,n_max,vm,growth,ok)
 !
     n_act = n_max
     ind   = 1
@@ -951,8 +951,8 @@ module diaglib
 !       orthonormalize them.
 !
         call get_time(t1)
-        call ortho_vs_x(.false.,n,ldu,n_act,vp,vp(1,i_beg),xx,xx)
-        call ortho_vs_x(.false.,n,ldu,n_act,vm,vm(1,i_beg),xx,xx)
+        call ortho_vs_x(n,ldu,n_act,vp,vp(1,i_beg),xx,xx)
+        call ortho_vs_x(n,ldu,n_act,vm,vm(1,i_beg),xx,xx)
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
       else
@@ -978,8 +978,8 @@ module diaglib
           vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
         end do
 !
-        call ortho_cd(.false.,n,n_max,vp,xx,ok)
-        call ortho_cd(.false.,n,n_max,vm,xx,ok)
+        call ortho_cd(n,n_max,vp,growth,ok)
+        call ortho_cd(n,n_max,vm,growth,ok)
 !
         lvp   = zero
         lvm   = zero
@@ -1783,7 +1783,7 @@ module diaglib
 !       orthonormalize them.
 !
         call get_time(t1)
-        call ortho_vs_x(.false.,n,ldu,n_act,space,space(1,i_beg),xx,xx)
+        call ortho_vs_x(n,ldu,n_act,space,space(1,i_beg),xx,xx)
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
       else
@@ -2246,7 +2246,7 @@ module diaglib
 ! orthogonalization routines:
 ! ===========================
 !
-  subroutine ortho(do_other,n,m,u,w)
+  subroutine ortho(n,m,u,w)
     implicit none
 !
 !   orthogonalize m vectors of lenght n using the QR decomposition.
@@ -2263,7 +2263,6 @@ module diaglib
 !   arguments:
 !   ==========
 !
-    logical,                     intent(in)    :: do_other
     integer,                     intent(in)    :: n, m
     real(dp),  dimension(n,m),   intent(inout) :: u, w
 !
@@ -2282,8 +2281,6 @@ module diaglib
     call dgeqrf(n,m,u,n,tau,work,lwork,info)
 !
     call dtrsm('r','u','n','n',n,m,one,u,n,v,n)
-!
-    if (do_other) call dtrsm('r','u','n','n',n,m,one,u,n,w,n)
 !
     u = v
 !
@@ -2313,7 +2310,7 @@ module diaglib
     real(dp), allocatable :: metric(:,:), sigma(:), u_svd(:,:), vt_svd(:,:), &
                              temp(:,:)
     real(dp), parameter   :: tol_svd = 1.0e-5_dp
-    logical,  parameter   :: use_svd = .true.
+    logical,  parameter   :: use_svd = .false.
 !
 !   external functions:
 !   ===================
@@ -2382,7 +2379,7 @@ module diaglib
     return
   end subroutine b_ortho
 !
-  subroutine ortho_cd(do_other,n,m,u,w,ok)
+  subroutine ortho_cd(n,m,u,growth,ok)
     implicit none
 !
 !   orthogonalize m vectors of lenght n using the Cholesky factorization
@@ -2393,33 +2390,35 @@ module diaglib
 !
 !     U(ortho)L^T = U
 !
-!   using this strategy allows to apply the same linear transformation
-!   that orthogonalizes U to a second set of vectors that usually contain
-!   the product AU, where A is some matrix that has already been applied
-!   to U.  this is useful when U and AU are built together without explicitly 
-!   performing the matrix vector multiplication.
-!
 !   as cholesky decomposition is not the most stable way of orthogonalizing
 !   a set of vectors, the orthogonalization is refined iteratively. 
-!   still, this routine can fail. 
+!   a conservative estimate of the orthogonalization error is used to 
+!   assess convergence. 
+!
+!   this routine returns a growth factor, which can be used in (b_)ortho_vs_x
+!   to estimate the orthogonality error introduced by ortho_cd.
+!
+!   while it is very unlikely to do so, this routine can fail. 
 !   a logical flag is then set to false, so that the calling program can 
 !   call a more robust orthogonalization routine without aborting.
 !
 !   arguments:
 !   ==========
 !
-    logical,                   intent(in)    :: do_other
     integer,                   intent(in)    :: n, m
-    real(dp),  dimension(n,m), intent(inout) :: u, w
+    real(dp),  dimension(n,m), intent(inout) :: u
+    real(dp),                  intent(inout) :: growth
     logical,                   intent(inout) :: ok
 !
 !   local variables
 !   ===============
 !
     integer               :: it, it_micro
-    real(dp)              :: metric_norm, dnrm2, alpha, unorm, shift
+    real(dp)              :: error, dnrm2, alpha, unorm, shift
+    real(dp)              :: rcond, l_norm, linv_norm
     logical               :: macro_done, micro_done
-    integer, parameter    :: maxit = 10
+    real(dp), parameter   :: tol_ortho_cd = two * epsilon(one)
+    integer,  parameter   :: maxit = 10
 !
 !   local scratch
 !   =============
@@ -2429,16 +2428,18 @@ module diaglib
 !   external functions:
 !   ===================
 !
-    external              :: dgemm, dgeqrf, dtrsm, dnrm2
+    external              :: dgemm, dgeqrf, dtrsm, dnrm2, dtrcon
 !
 !   get memory for the metric.
 !
     allocate (metric(m,m), msave(m,m))
+    metric = zero
     macro_done = .false.
 !
 !   assemble the metric
 !
     it = 0
+    growth = one
     do while(.not. macro_done)
       it = it + 1
       if (it .gt. maxit) then
@@ -2476,6 +2477,7 @@ module diaglib
 !
             ok = .false.
             write(6,100) ' maximum number of iterations for factorization reached.'
+            stop
             return
           end if
 !
@@ -2489,17 +2491,42 @@ module diaglib
 !
       end if
 !
-!     orthogonalize u by computing a solution to u(ortho) l^t = u
-!     if required, apply the same transformation to w.
+!     we assume that the error on the orthogonality is of order k(l)^2 * eps,
+!     where eps is the machine precision. 
+!     the condition number k(l) is estimated by computing 
+!
+!     k(l) ||l|| ||l^-1||,
+!
+!     where the norm used is the following (see norm_estimate):
+!
+!     || A || = || D + O || <= || D ||_inf + || O ||_2
+!
+!     compute l^-1, using msave to store the inverse cholesky factor
+!
+      msave = metric
+      call dtrtri('l','n',m,msave,m,info)
+!
+!     compute the norm of l, l^-1 and the condition number:
+!
+      l_norm    = norm_est(m,metric)
+      linv_norm = norm_est(m,msave)
+      rcond     = l_norm * linv_norm
+!
+!     in each iteration of ortho_cd, we apply l^-t to u, which introduces
+!     a numerical error of order ||l^-1||. 
+!     this error is saved in growth and used in ortho_vs_x to check how much
+!     ortho_cd spoiled the previously computed orthogonality to x. 
+!
+      growth    = growth * linv_norm
+!
+!     orthogonalize u by applying l^(-t)
 !    
-      call dtrsm('r','l','t','n',n,m,one,metric,m,u,n)
-      if (do_other) call dtrsm('r','l','t','n',n,m,one,metric,m,w,n)
+      call dtrmm('r','l','t','n',n,m,one,msave,m,u,n)
 !
-!     check that the vectors in v are really orthogonal
+!     check the error:
 !
-      call dgemm('t','n',m,m,n,one,u,n,u,n,zero,metric,m)
-      metric_norm = abs(dnrm2(m*m,metric,1) - sqrt(dble(m)))
-      macro_done = metric_norm .lt. tol_ortho
+      error      = epsilon(one) * rcond*rcond
+      macro_done = error .lt. tol_ortho_cd
     end do
 !
     100 format(t3,'ortho_cd failed with the following error:',a)
@@ -2510,7 +2537,41 @@ module diaglib
     return
   end subroutine ortho_cd
 !
-  subroutine ortho_vs_x(do_other,n,m,k,x,u,ax,au)
+  real(dp) function norm_est(m,a)
+!
+!   compute a cheap estimate of the norm of a lower triangular matrix.
+!   let a = d + o, where d = diag(a). as
+!   
+!   || a || <= || d || + || o ||
+!
+!   we compute || d || as max_i |d(i)| and || o || as its frobenius norm.
+!   this is tight enough, and goes to 1 when a approaches the identity.
+!
+    implicit none
+    integer,                  intent(in) :: m
+    real(dp), dimension(m,m), intent(in) :: a
+!
+    integer  :: i, j
+    real(dp) :: diag_norm, od_norm
+!
+    diag_norm = zero
+    do i = 1, m
+      diag_norm = max(diag_norm,abs(a(i,i)))
+    end do
+!
+    od_norm = zero
+    do i = 1, m
+      do j = 1, i - 1
+        od_norm = od_norm + a(i,j)**2
+      end do
+    end do
+    od_norm = sqrt(od_norm)
+!
+    norm_est = diag_norm + od_norm
+    return
+  end function norm_est
+!
+  subroutine ortho_vs_x(n,m,k,x,u,ax,au)
     implicit none
 !
 !   given two sets x(n,m) and u(n,k) of vectors, where x 
@@ -2531,7 +2592,6 @@ module diaglib
 !   arguments:
 !   ==========
 !
-    logical,                   intent(in)    :: do_other
     integer,                   intent(in)    :: n, m, k
     real(dp),  dimension(n,m), intent(in)    :: x, ax
     real(dp),  dimension(n,k), intent(inout) :: u, au
@@ -2541,7 +2601,7 @@ module diaglib
 !
     logical                :: done, ok
     integer                :: it
-    real(dp)               :: xu_norm
+    real(dp)               :: xu_norm, growth
     real(dp),  allocatable :: xu(:,:)
 !
 !   external functions:
@@ -2563,8 +2623,8 @@ module diaglib
 !
 !   start with an initial orthogonalization to improve conditioning.
 !
-    if (.not. useqr) call ortho_cd(do_other,n,k,u,au,ok)
-    if (.not. ok .or. useqr) call ortho(do_other,n,k,u,au)
+    if (.not. useqr) call ortho_cd(n,k,u,growth,ok)
+    if (.not. ok .or. useqr) call ortho(n,k,u,au)
 !
 !   iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -2576,18 +2636,24 @@ module diaglib
       call dgemm('t','n',m,k,n,one,x,n,u,n,zero,xu,m)
       call dgemm('n','n',n,k,m,-one,x,n,xu,m,one,u,n)
 !
-      if (do_other) call dgemm('n','n',n,k,m,-one,ax,n,xu,m,one,au,n)
-!
 !     now, orthonormalize u.
 !
-      if (.not. useqr) call ortho_cd(do_other,n,k,u,au,ok)
-      if (.not. ok .or. useqr) call ortho(do_other,n,k,u,au)
+      if (.not. useqr) call ortho_cd(n,k,u,growth,ok)
+      if (.not. ok .or. useqr) call ortho(n,k,u,au)
 !
-!     compute the overlap between the orthonormalized u and x and decide
-!     whether the orthogonalization procedure converged.
+!     the orthogonalization has introduced an error that makes the new
+!     vector no longer fully orthogonal to x. assuming that u was 
+!     orthogonal to x to machine precision before, we estimate the 
+!     error with growth * eps, where growth is the product of the norms
+!     of all the linear transformations applied to u.
+!     if ortho_cd has failed, we just compute the overlap and its norm.
 !
-      call dgemm('t','n',m,k,n,one,x,n,u,n,zero,xu,m)
-      xu_norm = dnrm2(m*k,xu,1)
+      if (.not. ok .or. useqr) then
+        call dgemm('t','n',m,k,n,one,x,n,u,n,zero,xu,m)
+        xu_norm = dnrm2(m*k,xu,1)
+      else
+        xu_norm = growth * epsilon(one)
+      end if
       done    = xu_norm.lt.tol_ortho
 !
 !     if things went really wrong, abort.
@@ -2624,7 +2690,7 @@ module diaglib
 !
     logical                :: done, ok
     integer                :: it
-    real(dp)               :: xu_norm, xx(1)
+    real(dp)               :: xu_norm, growth, xx(1)
     real(dp),  allocatable :: xu(:,:)
 !
 !   external functions:
@@ -2635,7 +2701,7 @@ module diaglib
     external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
-    logical, parameter     :: useqr = .true.
+    logical, parameter     :: useqr = .false.
 !
 !   allocate space for the overlap between x and u.
 !
@@ -2646,8 +2712,8 @@ module diaglib
 !
 !   start with an initial orthogonalization to improve conditioning.
 !
-    if (.not. useqr) call ortho_cd(.false.,n,k,u,xx,ok)
-    if (.not. ok .or. useqr) call ortho(.false.,n,k,u,xx)
+    if (.not. useqr) call ortho_cd(n,k,u,growth,ok)
+    if (.not. ok .or. useqr) call ortho(n,k,u,xx)
 !
 !   iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -2661,14 +2727,22 @@ module diaglib
 !
 !     now, orthonormalize u.
 !
-      if (.not. useqr) call ortho_cd(.false.,n,k,u,xx,ok)
-      if (.not. ok .or. useqr) call ortho(.false.,n,k,u,xx)
+      if (.not. useqr) call ortho_cd(n,k,u,growth,ok)
+      if (.not. ok .or. useqr) call ortho(n,k,u,xx)
 !
 !     compute the overlap between the orthonormalized u and x and decide
 !     whether the orthogonalization procedure converged.
 !
-      call dgemm('t','n',m,k,n,one,bx,n,u,n,zero,xu,m)
-      xu_norm = dnrm2(m*k,xu,1)
+!     note that, if we use ortho_cd, we estimate the norm of the overlap
+!     using the growth factor returned in growth. 
+!     see ortho_vs_x for more information.
+!
+      if (.not. ok .or. useqr) then
+        call dgemm('t','n',m,k,n,one,bx,n,u,n,zero,xu,m)
+        xu_norm = dnrm2(m*k,xu,1)
+      else
+        xu_norm = growth * epsilon(one)
+      end if
       done    = xu_norm.lt.tol_ortho
 !
 !     if things went really wrong, abort.
@@ -2742,7 +2816,7 @@ module diaglib
 !
 !   orthogonalize:
 !
-    call ortho_vs_x(.false.,len_u,n_max,n_act,u_x,u_p,xx,xx)
+    call ortho_vs_x(len_u,n_max,n_act,u_x,u_p,xx,xx)
 !
 !   all done.
 !
@@ -2756,7 +2830,8 @@ module diaglib
     real(dp), dimension(n,m), intent(inout) :: evec
 !
     integer               :: i, j, istat
-    real(dp)              :: fac, diag_norm, out_norm, xx(1)
+    real(dp)              :: fac, diag_norm, out_norm, growth, xx(1)
+    logical               :: ok
 !
     real(dp), allocatable :: overlap(:,:)
     real(dp)              :: dnrm2
@@ -2770,7 +2845,7 @@ module diaglib
 !     no luck. make a random guess, then orthonormalize it.
 !
       call random_number(evec)
-      call ortho(.false.,n,m,evec,xx)
+      call ortho_cd(n,m,evec,growth,ok)
     else
 !
 !     compute the overlap and check that the vectors are orthonormal.
@@ -2793,7 +2868,7 @@ module diaglib
 !
 !       orthogonalize the guess:
 !
-        call ortho(.false.,n,m,evec,xx)
+        call ortho_cd(n,m,evec,growth,ok)
       end if
 !
       deallocate (overlap, stat = istat)
