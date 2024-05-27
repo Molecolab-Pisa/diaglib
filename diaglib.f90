@@ -782,12 +782,6 @@ module diaglib
           eig(i_eig)      = one/e_red(2*ldu - i_eig + 1)
           up(1:ldu,i_eig) = s_red(1:ldu,2*ldu - i_eig + 1)
           um(1:ldu,i_eig) = s_red(ldu+1:2*ldu,2*ldu - i_eig + 1)
-!fl
-!         write(6,*) 'eig: ', eig(i_eig)
-!         write(6,*) 'up ', i_eig
-!         write(6,'(10f12.6)') up(1:ldu,i_eig)
-!         write(6,*) 'um ', i_eig
-!         write(6,'(10f12.6)') um(1:ldu,i_eig)
         end do
 !
       else if (i_alg.eq.1) then
@@ -853,12 +847,6 @@ module diaglib
           eig(i_eig)  = sv_2(ldu - i_eig + 1)
           up(1:ldu,i_eig) = xpt(1:ldu,ldu - i_eig + 1)/(sqrt(two) * sv_2(ldu - i_eig + 1))
           um(1:ldu,i_eig) = xmt(1:ldu,ldu - i_eig + 1)/(sqrt(two) * sv_2(ldu - i_eig + 1))
-!fl
-!         write(6,*) 'eig: ', eig(i_eig)
-!         write(6,*) 'up ', i_eig
-!         write(6,'(10f12.6)') up(1:ldu,i_eig)
-!         write(6,*) 'um ', i_eig
-!         write(6,'(10f12.6)') um(1:ldu,i_eig)
         end do
 !
 !       gather the eigenvalues
