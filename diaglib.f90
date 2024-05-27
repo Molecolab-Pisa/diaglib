@@ -2243,14 +2243,14 @@ module diaglib
     return
   end subroutine gen_david_driver
 !
-  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,matvec,precnd,eig,evec_r,evec_l)
+  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,matvec,matvec_l,precnd,eig,evec_r,evec_l)
     logical,                        intent(in)    :: verbose
     integer,                        intent(in)    :: n, n_targ, n_max
     integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol
     real(dp), dimension(n_max),     intent(inout) :: eig
     real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
-    external                                      :: matvec, precnd
+    external                                      :: matvec, matvec_l, precnd
 !
 !   local variables:
 !   ================
@@ -2404,7 +2404,7 @@ module diaglib
 !
       call get_time(t1)
       call matvec(n,n_act,space_r(1,i_beg+n_rst),aspace_r(1,i_beg+n_rst))
-      call matvec(n,n_act,space_l(1,i_beg+n_rst),aspace_l(1,i_beg+n_rst))
+      call matvec_l(n,n_act,space_l(1,i_beg+n_rst),aspace_l(1,i_beg+n_rst))
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
@@ -2474,7 +2474,7 @@ module diaglib
 !     compute the residuals, and their rms and sup norms
 !
       call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
-      call dgemm('t','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
+      call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
       print * ,'residual prime'
       print *
       call printMatrix(r_r, n,n_max)

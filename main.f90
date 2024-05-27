@@ -42,7 +42,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.true.,5,5,tol,5,10)
+    call test_nonsym(.true.,5,2,tol,5,10)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -89,6 +89,29 @@ end program main
     end do
     return
   end subroutine mmult
+!
+  subroutine mmult_l(n,m,x,ax)
+    use utils
+    implicit none
+!
+!   simple-minded matrix-vector multiplication routine, that needs to be passed as 
+!   an argument to lobpcg
+!
+    integer,                   intent(in)    :: n, m
+    real(dp),  dimension(n,m), intent(in)    :: x
+    real(dp),  dimension(n,m), intent(inout) :: ax
+!
+    real(dp), dimension(n,n)                 :: a_t 
+    integer :: i, j, icol
+!
+!   transpose the matrix
+!
+    nmult = nmult + m
+    do icol = 1, m
+      ax(:,icol) = matmul(x(:,icol), a)
+    end do
+    return
+  end subroutine mmult_l
 !
   subroutine smult(n,m,x,sx)
     use utils
@@ -898,7 +921,7 @@ end program main
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
 !
-    external :: mmult, mprec
+    external :: mmult, mmult_l, mprec
 !
     i_seed = 1234
     zero = 0.d0
@@ -985,7 +1008,7 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,mmult,mprec,eig,evec_r,evec_l)
+  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,mmult,mmult_l,mprec,eig,evec_r,evec_l)
   end subroutine test_nonsym
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)
