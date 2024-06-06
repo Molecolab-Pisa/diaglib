@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 1000
-  n_want = 20
+  n      = 15
+  n_want = 2 
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 20
@@ -30,9 +30,10 @@ program main
               t3,'   4 for linear-response equations (CASSCF-like)',/, &
               t3,'   5 for unsymmetric eigenvalue problems.')
   write(6,1000)
-  read(5,*) iwhat
+  !read(5,*) iwhat
   write(6,*)
 !
+ iwhat=5
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 
@@ -42,7 +43,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.true.,5,2,tol,5,10)
+    call test_nonsym(.true.,n,n_want,tol,itmax,m_max)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -85,7 +86,6 @@ end program main
     nmult = nmult + m
     do icol = 1, m
       ax(:,icol) = matmul(a,x(:,icol))
-      print * , ax(:,icol)
     end do
     return
   end subroutine mmult
@@ -909,6 +909,7 @@ end program main
     use utils
     use diaglib, only : nonsym_driver
     implicit none
+    logical  :: ok
     integer, intent(in) :: n, n_want, itmax, m_max
     logical, intent(in) :: check_lapack
     real(dp), intent(in):: tol
@@ -923,7 +924,7 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    i_seed = 1234
+    i_seed = 123
     zero = 0.d0
     one  = 1.d0
 !
@@ -946,6 +947,9 @@ end program main
     seed = i_seed
     call random_seed(put=seed)
     call random_number(t)
+    do i = 1, n
+      t(i,i) = t(i,i) + dble(100+i)
+    end do
     deallocate(seed)
 !
 !   ensure positive definite:   p = t^T * t
@@ -967,6 +971,19 @@ end program main
     call dgemm('n','n',n,n,n,one,p,n,diag,n,zero,t,n)
     call dgemm('n','n',n,n,n,one,t,n,a,n,zero,p,n)
     a = p
+    call printMatrix(a,n,n)
+    !stop
+!
+!    do i = 1, n
+!      do j = i, n
+!        if (j == i) then
+!          a(i,j) = i + 1.0d0
+!        else if (j > i) then
+!          a(i,j) = 1.0d0 / (dble(i + j))
+!          a(j,i) = a(i,j)
+!        end if
+!      end do
+!    end do
 !
     deallocate (p, t, diag)
 !
@@ -980,7 +997,9 @@ end program main
       allocate (work(lwork)) 
       call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
       deallocate (work)
+      print *, "Result of diagonalization"
       print *, wr
+      print *
     end if 
 !
 !   allocate and gather the diagonal
@@ -989,7 +1008,6 @@ end program main
     do i = 1,n
       diagonal(i) = a(i,i)
     end do
-    print *, diagonal
 !
 !   for better convergence, we seek more eigenpairs and stop the iterations when 
 !   the required ones are converged
@@ -1004,12 +1022,33 @@ end program main
 !
   call guess_evec(1,n,n_eig,diagonal,evec_r)
   call dcopy(n*n_eig,evec_r,1,evec_l,1)
-  print *, diagonal
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,mmult,mmult_l,mprec,eig,evec_r,evec_l)
+  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l, ok)
   end subroutine test_nonsym
+!
+  subroutine printMatrix(mat, nrows, ncols) 
+!   
+! print formatted matrix
+!
+    use real_precision
+    implicit none
+    integer , intent(in)  :: nrows, ncols
+    real(dp), dimension(ncols,nrows), intent(in)  :: mat
+    integer :: i,j 
+!
+    do i = 1, nrows
+      do j = 1, ncols
+        write(*,'(F13.6)', advance='no') mat(i,j)
+        if (j .lt. nrows) then
+          write(*, '(A)', advance='no') ' '
+        end if
+      end do
+      print *
+    end do
+!
+  end subroutine printMatrix
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)
     use real_precision

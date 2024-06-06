@@ -2243,13 +2243,15 @@ module diaglib
     return
   end subroutine gen_david_driver
 !
-  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,matvec,matvec_l,precnd,eig,evec_r,evec_l)
+  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
+                            matvec,matvec_l,precnd,eig,evec_r,evec_l, ok)
     logical,                        intent(in)    :: verbose
     integer,                        intent(in)    :: n, n_targ, n_max
     integer,                        intent(in)    :: max_iter, max_dav
-    real(dp),                       intent(in)    :: tol
+    real(dp),                       intent(in)    :: tol, shift
     real(dp), dimension(n_max),     intent(inout) :: eig
     real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
+    logical,                        intent(inout) :: ok
     external                                      :: matvec, matvec_l, precnd
 !
 !   local variables:
@@ -2264,15 +2266,20 @@ module diaglib
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
-    integer               :: n_act, i_beg
+    integer               :: n_act, ind, i_beg
 !
 !   current size and total dimension of the expansion space
 !
     integer               :: m_dim, ldu
 !
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
     integer               :: it, i_eig
 !   
-    real(dp)              :: sqrtn
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: xx(1)
 !
 !   arrays to control convergence and orthoginalization
 !
@@ -2288,14 +2295,19 @@ module diaglib
     real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), &
                              evec_red_r(:,:), evec_red_l(:,:), a_copy_r(:,:), a_copy_l(:,:)
 !
-!   ritz approximation.
-!
-    real(dp), allocatable :: ritz_r(:,:), ritz_l(:,:)
-!
 !   restarting variables
 !
     logical               :: restart
     integer               :: n_rst
+!
+!   variables for orthogonalization
+!
+    real(dp),    allocatable :: xu(:,:), qr(:,:), v(:,:), metric(:,:), msave(:,:), yv(:,:)
+    integer(dp), allocatable :: ipiv(:)
+    logical, allocatable  :: done_lu(:)
+    real(dp)              :: yv_norm, tol_ortho_lu, alpha, unorm, shift_lu
+    logical               :: not_orthogonal, use_qr, micro_done, ok_lu, symmetric
+    integer               :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
 !   external functions:
 !   ===================
@@ -2333,9 +2345,16 @@ module diaglib
               evec_red_l(lda,lda), a_copy_r(lda,lda), a_copy_l(lda,lda), stat =istat)
     call check_mem(istat)
 !
-!   allocate memory for the ritz approximation
+!   allocate space for orthogonalization routines
 !
-    allocate (ritz_r(n,lda), ritz_l(n,lda))
+    allocate (done_lu(2))
+!
+!   set the tolerance and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+    tol_ortho_lu = 1.d-14
 !
 !   clean out various quantities
 !
@@ -2349,9 +2368,8 @@ module diaglib
     aspace_l  = zero
     a_red_r   = zero
     a_red_l   = zero
-    ritz_r    = zero
-    ritz_l    = zero
     done      = .false.
+    symmetric = .false.
 !
     call get_time(t_tot)
 !
@@ -2393,7 +2411,13 @@ module diaglib
     if (verbose) write(6,1030) tol
 !   
     n_rst = 0
-    do it = 1, 1 !max_iter
+    do it = 1, 2 !max_iter
+!
+! A cute header
+!
+1000 format(20("="),/,t3,'Iteration',i3,/,20("="))
+      print 1000, it
+
 !
 !     update the size of the expansion space.
 !
@@ -2408,17 +2432,23 @@ module diaglib
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
-      print *, "aspace l+r"
-      call printMatrix(aspace_r, n, lda)
-      print *
-      call printMatrix(aspace_l, n, lda)
-      print *
+print *, "space r+l"
+call printMatrix(space_r, n, ldu)
+print *
+call printMatrix(space_l, n, ldu)
+print *
+!print *, "aspace r+l"
+!call printMatrix(aspace_r, n, lda)
+!print *
+!call printMatrix(aspace_l, n, lda)
+!print *
 !
 !     update the reduced matrix
 !
-      call dgemm('t','n',ldu,n_act,n,one,space_r,n,aspace_r(1,i_beg+n_rst),n,zero,a_red_r(1,i_beg+n_rst),lda)
-      call dgemm('t','n',ldu,n_act,n,one,space_l,n,aspace_l(1,i_beg+n_rst),n,zero,a_red_l(1,i_beg+n_rst),lda)
-!
+      call dgemm('t','n',ldu,n,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
+      call dgemm('t','n',ldu,n,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
+      !call dgemm('t','n',ldu,n_act,n,one,space_r,n,aspace_l(1,i_beg+n_rst),n,zero,a_red_l(1,i_beg+n_rst),lda)
+!      
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
 !
@@ -2431,59 +2461,100 @@ module diaglib
         n_rst   = 0
       end if
       a_copy_r = a_red_r
+      a_copy_l = a_red_l
 !
 !     diagonalize the reduced matrix
 !
-      print *
-      print *, "print reduced spaces a_r, a_l:"
-      call printMatrix(a_red_r, lda, lda)
-      print *
-      call printMatrix(a_red_l, lda, lda)
-      print*
+print *
+print *, "print reduced spaces a_r, a_l:"
+call printMatrix(a_copy_r(1:ldu,1:ldu), ldu, ldu)
+print *
+call printMatrix(a_red_l(1:ldu,1:ldu), ldu, ldu)
+print *
 !
       call get_time(t1)
-      call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      if (.not. symmetric) then 
+        call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      else
+!
+!       little test on a symmetric matrix
+!
+        call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+!        call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
+!        evec_red_r = a_copy_r
+!        evec_red_l = a_copy_r
+!        call printVector(e_red_re,ldu)
+!        call printMatrix(evec_red_r(1:ldu,1:ldu),ldu,ldu)
+      end if
+
+!
       call get_time(t2)
-!
       t_diag = t_diag + t2 - t1
+! 
+!     check if diagonalization terminated with info = 0 and check if 
+!     the eigenvalues have a complex contribution
 !
-!     extract the eigenvalues and compute the ritz approxiximation to the 
+      if (info.ne.0) then
+        print *, "diagonalization of reduced space failed."
+        stop
+      end if
+!
+      if (dnrm2(ldu,e_red_im,1).gt.1.e-12_dp) then
+        print *, "eigenvalues of reduced space contain complex contribution"
+        print *, e_red_re
+        print *, e_red_im
+        print *
+        print *, "program aborts"
+        stop
+      end if
+!
+!     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
+!
+print *, "evec r + l"
+call printMatrix(evec_red_r(1:ldu,1:ldu), ldu, ldu)
+print *
+call printMatrix(evec_red_l(1:ldu,1:ldu), ldu, ldu)
+print *
+call printVector(e_red_re,ldu)
+print *
+      call sort_eigenpairs(e_red_re(:ldu),e_red_im(:ldu),evec_red_r(:ldu,:ldu),evec_red_l(:ldu,:ldu),ldu,ldu,n_max)
+!
+print *, "evec r + l"
+call printMatrix(evec_red_r(1:ldu,1:ldu), ldu, ldu)
+print *
+call printMatrix(evec_red_l(1:ldu,1:ldu), ldu, ldu)
+print *
+call printVector(e_red_re,ldu)
+!
+!     extract the eigenvalues and compute the ritz approximation to the 
 !     eigenvectors
 !
       eig = e_red_re(1:n_max)
 !
-      call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,ritz_r,n)
-      call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,ritz_l,n)
+      call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
+      call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
 !
-      print *, "evec l + r"
-      call printMatrix(evec_red_r, lda, lda)
-      print *
-      call printMatrix(evec_red_l, lda, lda)
-      print *
-      print *, "aspace l+r"
-      call printMatrix(aspace_r, n, lda)
-      print *
-      call printMatrix(aspace_l, n, lda)
-      print *
-      print *, "ritz"
-      call printMatrix(ritz_r, n,n_max)
-      print *
-      call printMatrix(ritz_l, n,n_max)
-      print *
+print *, "eig"
+print *
+call printVector(eig, n_max)
+!
+print *, "ritz"
+call printMatrix(evec_r, n,n_max)
+print *
+call printMatrix(evec_l, n,n_max)
+print *
 !
 !     compute the residuals, and their rms and sup norms
 !
       call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
       call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
-      print * ,'residual prime'
-      print *
-      call printMatrix(r_r, n,n_max)
-      print *
-      call printMatrix(r_l, n,n_max)
-      print *
-      print *, "eig"
-      print *
-      call printVector(eig, n_max)
+!
+!print * ,'residual prime'
+!print *
+!call printMatrix(r_r, n,n_max)
+!print *
+!call printMatrix(r_l, n,n_max)
+!print *
 !
       do i_eig = 1, n_targ
 !
@@ -2491,35 +2562,428 @@ module diaglib
 !
         if (done(i_eig)) cycle
 !
-          call daxpy(n,-eig(i_eig),ritz_r(:,i_eig),1,r_r(:,i_eig),1)
-          call daxpy(n,-eig(i_eig),ritz_l(:,i_eig),1,r_l(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
           r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
           r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
           r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
           r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
       end do
+print*
+print*, "residual right and left"
+call printMatrix(r_r, n, n_max)
+print*
+call printMatrix(r_l, n, n_max)
+print*
 !
-      print*
-      print*, "residual_prime right and left"
-      call printMatrix(r_r, n, n_max)
-      print*
-      call printMatrix(r_l, n, n_max)
-      print*
+!     check convergence. look the dirst contiguous converged eigenvalues
+!     by setting the logical array "done" to true
+!
+!     TODO adapt for left and right, also the print
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm_r(1,i_eig).lt.tol_rms .and.&
+                          r_norm_r(2,i_eig).lt.tol_max .and.&
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_r(:,i_eig), done(i_eig)
+        end do
+        write(6,*)
+      end if 
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        exit
+      end if
+!     
+!     check weather and update is required.
+!     if not, perform a davidson restart
+!
+      if (m_dim .lt. dim_dav) then 
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
+        call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
+!
+        print*
+        print *, "precondition:"
+        print *
+        call printMatrix(space_r, n, ldu+n_act)
+        print*
+        print*
+        call printMatrix(space_l, n, ldu+n_act)
+        print*
+!
+!       orthogonalize the new vectors to the existing ones and 
+!       then orthonormalize them.
+!
+        allocate (xu(ldu,n_act))
+!
+        call get_time(t1)
+!
+!       Gram-Schmit orthogonalization of residual to the respective subspace 
+!
+        max_orth = 10
+        max_GS = 4
+        use_qr   = .false.
+        done_lu = .false.
+!
+        do k=1, max_orth
+          do i = 1, max_GS
+            print*, "GS:"
+            xu=zero
+            call dgemm('t','n',ldu,n_act,n,one,space_r,n,space_r(1,i_beg),n,zero,xu,ldu)
+            call dgemm('n','n',n,n_act,ldu,-one,space_r,n,xu,ldu,one,space_r(1,i_beg),n)
+!
+            call dgemm('t','n',ldu,n_act,n,one,space_l,n,space_l(1,i_beg),n,zero,xu,ldu)
+            call dgemm('n','n',n,n_act,ldu,-one,space_l,n,xu,ldu,one,space_l(1,i_beg),n)
+!
+!           check its norm, check if orthogonal and print out the projection
+!
+            print *, "projection"
+            call printMatrix(space_r, n, ldu+n_max)
+            print*
+            not_orthogonal = .false.
+            call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
+              space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
+            print * 
+            call printMatrix(space_l, n, ldu+n_max)
+            print*
+            call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+              space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+            print *
+            if (.not. not_orthogonal) exit
+            if (i.eq.max_GS) then
+              print *, "GS Orthogonalization failed."
+              stop
+            end if
+          end do 
+!
+!if (it.eq.2) stop
+          call get_time(t2)
+          t_ortho = t_ortho + t2 - t1
+!
+          if (use_qr) then
+!
+!         orthogonalize the residuals of both spaces with Lapack routine
+!
+!
+          !  qr_dim = 2*n_max
+          !  allocate (qr(n, qr_dim))
+          !  allocate (v(n, qr_dim))
+!
+!         !  move residuals of left and right space in one space for QR orthogonalization
+!
+          !  qr(:,1:n_max)             = space_r(:,i_beg:i_beg+n_max-1) 
+          !  qr(:,n_max+1:qr_dim)      = space_l(:,i_beg:i_beg+n_max-1) 
+!
+!         !  orthogonalization with qr routine
+!
+          !  call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
+          !  print *, info
+          !  call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
+          !  !call dtrsm('r','u','n','n',n,qr_dim,one,qr,n,v,n)
+          !  !qr = v
+!
+!         !  print result from the orthogonalization of the two residuals
+!
+          !  print *, "result orthogonalized preconditions with QR" 
+          !  call printMatrix(qr, n, 2*n_max)
+          !  print *, info
+          !  print *
+          !  not_orthogonal = .false.
+          !  call checkOrth1mat(qr,n, qr_dim, "QR space", 1.d-14, not_orthogonal, .true.) 
+          !  print *
+!
+!         !  move result back in expansion space
+!
+          !  space_r(:,i_beg:i_beg+n_max-1) =qr(:,1:n_max)      
+          !  space_l(:,i_beg:i_beg+n_max-1) = qr(:,n_max+1:qr_dim)  
+!
+!         !  check if spaces are orthogonol with them selfes
+!
+          !  deallocate (qr)
+          else if (.not. symmetric) then
+!
+!           orthogonalize new vectors with LU decomposition
+!
+            allocate (metric(n_max,n_max), msave(n_max,n_max))
+            allocate (ipiv(n_max))
+!
+!           compute overlap O = L^T * R
+!
+            !print *
+            !call printMatrix(space_r,n,ldu+n_max)
+            !print*
+            !call printMatrix(space_l,n,ldu+n_max)
+            print*
+            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
+            msave = metric
+            print*, "print L^T*R overlap"
+            call printMatrix(metric,n_max,n_max)
+!
+!           get lu decomposition O = l * u
+!
+            call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
+            call checkInfo(info, "LU decomposition")
+            !print*, "iPiv"
+            !print*, ipiv
+            print *, 
+            print *, "print lu result"
+            call printMatrix(metric,n_max,n_max)
+!
+!           if dgetrf failed, try a second time after level-shifting the diagonal of the metric
+!
+            if (info.ne.0) then
+!
+              alpha      = 100.0_dp
+              unorm      = dnrm2(n*n_max,space_r(1,i_beg))
+              it_micro   = 0
+              micro_done = .false.
+              maxit_lu   = 10
+!
+!             add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
+!
+              do while (.not. micro_done)
+                it_micro = it_micro + 1
+                if (it_micro.gt.maxit_lu) then 
+!
+!                 ortho_lu failed. return with an error message
+!
+                  ok_lu = .false.
+                  write(6,*) ' maximum number of the iterations reached.'
+                  stop
+                  return
+                end if 
+!
+                shift_lu = max(epsilon(one)*alpha*unorm,tol_ortho)
+                print*, "shift", shift_lu
+                metric = msave
+                call diag_shift(n_max,shift_lu,metric)
+                print *
+                print*, "Level shifted:"
+                call printMatrix(metric,n_max,n_max)
+                call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
+                print *, "result"
+                call printMatrix(metric,n_max,n_max)
+                print*, "info", info
+                print *
+                alpha = alpha * 10.0_dp
+                micro_done = info.eq.0
+              end do
+!
+            end if
+!
+!           get inverse of l and u
+!
+            call dtrtri('u','n',n_max,metric,n_max,info)
+            call checkInfo(info, "inverse of metric")
+            call dtrtri('l','u',n_max,metric,n_max,info)
+            call checkInfo(info, "inverse of metric")
+            print *
+            print *, "inverse of lower and upper and metric"
+            call printMatrix(metric,n_max,n_max)
+            print *
+!
+!           orthogonalize L and R:  L' = L * l^-T 
+!                                   R' = R * u^-1  
+!
+            call dtrmm('r','u','n','n',n,n_max,one,metric,n_max,space_r(1,i_beg),n) 
+            call dtrmm('r','l','t','u',n,n_max,one,metric,n_max,space_l(1,i_beg),n) 
+!
+!           calculate overlap of L^T and R
+!
+            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
+            print*, "print L^T*R overlap"
+            call printMatrix(metric,n_max,n_max)
+!
+            print *, "biorthogonalized new vectors:"
+            call printMatrix(space_r, n, ldu+n_max)
+            print *
+            call printMatrix(space_l, n, ldu+n_max)
+if (it.eq.2) stop
+!
+!           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
+!
+            allocate (yv(n_max,ldu))
+!
+print *, "Overlap check"
+            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
+            yv_norm = dnrm2(n_max,yv,1)
+            if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
+print*, yv_norm
+!
+            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
+            yv_norm = dnrm2(n_max,yv,1)
+            if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
+print*, yv_norm
+print*, done_lu
+!
+            if (all(done_lu)) then
+              deallocate (yv)
+              deallocate (ipiv)
+              deallocate (metric)
+              deallocate (msave)
+              exit
+            end if 
+            if (k .eq. max_orth) then
+              print *, "error of ortho_lu"
+              stop
+            end if
+         end if
+!          
+       end do
+!
+        deallocate (xu)
+!
+!       normalize columns 
+!
+        if (symmetric) then
+!
+          call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+          call checkInfo(info, "error in dgeqrf")
+!
+          call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+          call checkInfo(info, "error in dorqr") 
+!
+          call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+          call checkInfo(info, "error in dgeqrf")
+!
+          call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+          call checkInfo(info, "error in dorqr") 
+        end if
+!
+
+print *, "orthogon space r"
+call printMatrix(space_r,n,ldu+n_max)
+print *, "orthogon space l"
+call printMatrix(space_l,n,ldu+n_max)
+        do i = 0, n_max-1
+          space_l(:,i_beg+i) = space_l(:,i_beg+i)/dnrm2(n,space_l(:,i_beg+i),1)
+          space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
+        end do
+!
+        print *, "normalized space r"
+        call printMatrix(space_r,n,ldu+n_max)
+        print *, "normalized space l"
+        call printMatrix(space_l,n,ldu+n_max)
+!
+        
+      else 
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+!       TODO handle restart
+      end if
+
     end do
-! 
+ 
   end subroutine nonsym_driver
+!
+  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want)
+!
+!   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
+!   in decreasing order according to the real eigenvalues in the range of n_want
+! 
+    implicit none
+    integer,  intent(in)      :: n, m, n_want
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(n,m), vl(n,m)
+!   
+!   local variables
+!
+    real(dp)                  :: w, v(n)
+    integer                   :: i, idx, min_idx(1)
+    logical                   :: mask(m)
+!
+    mask = .true.
+!
+    print *, "SORT EIG"
+    do i = 1, n_want
+! 
+!     identify minimal value and mask first position for next iteration
+!
+      min_idx = minloc(wr, mask=mask) 
+      idx     = min_idx(1)
+      mask(i) = .false.
+!
+!     do various swaps
+!
+      w       = wr(i)
+      wr(i)   = wr(idx)
+      wr(idx) = w
+!
+      w       = wl(i)
+      wl(i)   = wl(idx)
+      wl(idx) = w
+!
+      v         = vr(:,i)
+      vr(:,i)   = vr(:,idx)
+      vr(:,idx) = v
+!    
+      v         = vl(:,i)
+      vl(:,i)   = vl(:,idx)
+      vl(:,idx) = v
+! 
+    end do
+!
+  end subroutine sort_eigenpairs
+!
+  subroutine checkInfo(info, occasion)
+!    
+! check if info is zero and print error message if not
+!
+    implicit none
+    integer              :: info, zero
+    character(len=*)     :: occasion
+
+    zero = 0
+    if (info .NE. zero) then
+      print *
+      print *, '--- WARNING ---'
+      print *, occasion
+      print *, 'Process terminated with info not equal to 0'
+      stop
+    end if
+!
+  end subroutine checkInfo
 !
   subroutine printMatrix(mat, nrows, ncols) 
 !   
 ! print formatted matrix
 !
-    real(dp), intent(in)  :: mat(:,:)
+    implicit none
     integer , intent(in)  :: nrows, ncols
+    real(dp), intent(in)  :: mat(nrows,ncols)
     integer :: i,j 
 !
     do i = 1, nrows
       do j = 1, ncols
-        write(*,'(F13.3)', advance='no') mat(i,j)
+        write(*,'(F12.5)', advance='no') mat(i,j)
         if (j .lt. nrows) then
           write(*, '(A)', advance='no') ' '
         end if
@@ -2529,22 +2993,113 @@ module diaglib
 !
   end subroutine printMatrix
 !
-  subroutine printVector(vec, lenRow)
+  subroutine printVector(vec, m)
 !    
 ! print formatted vector
 !
     implicit none
-    intrinsic                 ::  selected_real_kind, abs
-    integer,  parameter       ::  wp = selected_real_kind(15)
-    real(wp), intent(in)  :: vec(:)
-    integer,  intent(in)  :: lenRow
+    integer,  intent(in)  :: m
+    real(dp), intent(in)  :: vec(m)
     integer               :: i
+!
+    do i = 1, m
+      write(*,'(E13.5)') vec(i)
+    end do
+!
+  end subroutine printVector
+!
+  subroutine printPythonMat(mat,n,m)
+!   
+! print formatted matrix
+!
+    real(dp), intent(in)  :: mat(:,:)
+    integer , intent(in)  :: n, m
+!
+    integer :: i,j 
+    character(len=400)  ::  str
+    character(len=30) :: temp
+!
+    str = "mat = np.array(["
+    do i = 1, n
+      str = trim(str) // ' ' // trim("[")
+      do j = 1, m
+        write(temp, '(F14.10)') mat(i,j)
+        str = trim(str) //  ' ' //trim(temp) // trim(',')
+      end do
+      str = trim(str) // ' ' //  trim("],")
+      print *
+    end do
+    str = trim(str) // ' ' // trim("])")
+    print *, str
+!
+  end subroutine printPythonMat
+!
+  subroutine checkOrth1mat(mat1,n,m,mat1_name,thresh,not_orthogonal,verbose)
+! check if the vectors within the matrix are orthogonal
+!
+    implicit none
+    integer,              intent(in)      ::  m,n
+    real(dp),             intent(in)      ::  thresh, mat1(n,m)
+    character(len=*),     intent(in)      ::  mat1_name
+    logical,              intent(inout)   ::  not_orthogonal
+    logical,              intent(in)      ::  verbose
+    real(dp)                              ::  dot_prod
+    integer :: i,j 
 
-    do i = 1, lenRow
-      write(*,'(F13.3)') vec(i)
+    do i = 1, m
+      do j = 1, m
+        if (j .NE. i) then
+          dot_prod  = abs(dot_product( mat1(:,j), mat1(:,i) ))
+          if ( dot_prod .GT. thresh ) then
+            not_orthogonal = .true.
+            if (verbose) then 
+              print *
+              print *, '--- WARNING ---'
+              print *, 'vector ', i, ' of matrix ', mat1_name, ' is not orthogonal to vector ', j, ' of matrix', mat1_name
+              print *, 'Result of dot product: ', dot_prod
+              print *
+            end if
+          end if
+        end if
+      end do
     end do
 
-  end subroutine printVector
+  end subroutine checkOrth1mat
+!
+  subroutine checkOrth2mat(mat1, m1, mat1_name, mat2, m2, mat2_name, n, thresh, not_orthogonal, verbose)
+!    
+! check if vectors of two matrices are orthogonal
+!
+    implicit none
+    integer,              intent(in)      :: m1, m2, n
+    real(dp),             intent(in)      :: thresh, mat1(n,m1), mat2(n,m2)
+    character(len=*),     intent(in)      :: mat1_name, mat2_name
+    real(dp)                              :: dot_prod
+    integer                               :: i,j 
+    logical,              intent(inout)   :: not_orthogonal
+    logical,              intent(in)      :: verbose
+!
+    do i = 1, m1
+      do j = 1, m2
+        dot_prod = abs(dot_product( mat2(:,j), mat1(:,i) ))
+        if ( dot_prod .GT. thresh ) then
+          not_orthogonal = .true.
+          if (verbose) then
+            print *
+            print *, '--- WARNING ---'
+            print *, 'vector ', i, ' of matrix ', mat1_name, ' is not orthogonal to vector ', j, ' of matrix', mat2_name
+            print *, 'Result of dot product:', dot_prod
+            print *
+            !call printVector(mat1(:,i),n)
+            !print *
+            !call printVector(mat2(:,j),n)
+          end if 
+        end if
+      end do
+    end do
+    !if (not_orthogonal) stop 'Not ortho'
+!
+  end subroutine checkOrth2mat
 !
 ! orthogonalization routines:
 ! ===========================
