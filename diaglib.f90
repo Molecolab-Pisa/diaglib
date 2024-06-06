@@ -3383,6 +3383,249 @@ call printMatrix(space_l,n,ldu+n_max)
     return
   end subroutine ortho_cd
 !
+subroutine ortho_lu(n,m,u_l,u_r,ok)
+  implicit none
+
+! 
+!   orthogonalize m vectors of length n using the Cholesky factorization
+!   of their overlap.
+!   this is done by metric = U_l^t U_r and then by computing its lu 
+!   decomposition metric = L U. The orthogonal vectors are obtained then
+!   by solving the triangular linear systems
+! 
+!     U_l(ortho) L^t = U_l
+!     U_r(ortho) U   = U_r
+!   
+!   as lu decomposition can be instable for orthogonalizing a set of 
+!   vectors, the orthogonalization is refined iteratively. 
+!   a conservative estimate of the orthogonalization error is used to
+!   assess convergency
+! 
+!   a logical flag is set to false, if the routine fails, so that the
+!   calling program can call a more robust orthogonalization routine
+!   without aborting.
+! 
+!   arguments:
+!   ==========
+! 
+    integer,                   intent(in)    :: n, m
+    real(dp),  dimension(n,m), intent(inout) :: u_r, u_l
+    logical,                   intent(inout) :: ok
+! 
+!   local variables:
+!   ================
+! 
+    integer             :: it, it_micro
+    real(dp)            :: dnrm2, alpha, unorm, shift
+    logical             :: macro_done, micro_done
+    integer,  parameter :: maxit = 10
+!
+!   local scratch:
+!   ==============
+!
+    real(dp), allocatable :: metric(:,:), msave(:,:), ipiv(:)
+! 
+!   external functions:
+!   ===================
+!     
+    external                                 :: dgemm
+! 
+!   get memory for the lu routine 
+!
+    allocate (metric(n,n), msave(n,n))
+    allocate (ipiv(n))
+!
+    metric     = zero
+    macro_done = .false.
+!
+!   start iteration and handle failure
+!
+    it = 0
+    do while(.not. macro_done)
+      it = it + 1
+      if (it .gt. maxit) then
+!
+!       ortho_lu failed. return with an error message
+!
+        ok = .false.
+        write(6,*) " maximum number of iterations reached in ortho_lu."
+        return
+      end if
+!
+!     assemble the metric 
+!
+      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
+      msave = metric
+!
+!     compute the lu factorization of the metric
+!
+      call dgetrf(m,m,metric,m,ipiv,info) 
+!
+!     if dgetrf failed, try a second time, after level-shifting the diagonal of the metric.
+!
+      if (info.ne.0) then
+!  
+        alpha      = 100.0_dp
+        unorm      = dnrm2(n*m,u_r) ! TODO also do for u_l
+        it_micro   = 0
+        micro_done = .false.
+! 
+!       add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
+!  
+        do while (.not. micro_done)
+          it_micro = it_micro + 1
+          if (it_micro.gt.maxit) then 
+!  
+!            ortho_lu failed. return with an error message
+!  
+            ok = .false.
+            write(6,*) ' maximum number of the iterations reached.'
+            stop
+            return
+          end if 
+!  
+          shift = max(epsilon(one)*alpha*unorm,tol_ortho)
+          print*, "shift", shift
+          metric = msave
+          call diag_shift(m,shift,metric)
+          print *
+          print*, "Level shifted:"
+          call printMatrix(metric,m,m)
+          call dgetrf(m,m,metric,m,ipiv,info) 
+          print *, "result"
+          call printMatrix(metric,m,m)
+          print*, "info", info
+          print *
+          alpha = alpha * 10.0_dp
+          micro_done = info.eq.0
+        end do
+!  
+      end if
+!
+    end do 
+!!
+!!           orthogonalize new vectors with LU decomposition
+!!
+!!
+!!           compute overlap O = L^T * R
+!!
+!            !print *
+!            !call printMatrix(space_r,n,ldu+n_max)
+!            !print*
+!            !call printMatrix(space_l,n,ldu+n_max)
+!            print*
+!            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
+!            msave = metric
+!            print*, "print L^T*R overlap"
+!            call printMatrix(metric,n_max,n_max)
+!!
+!!           get lu decomposition O = l * u
+!!
+!            call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
+!            call checkInfo(info, "LU decomposition")
+!            !print*, "iPiv"
+!            !print*, ipiv
+!            print *, 
+!            print *, "print lu result"
+!            call printMatrix(metric,n_max,n_max)
+!!
+!!           if dgetrf failed, try a second time after level-shifting the diagonal of the metric
+!!
+!            if (info.ne.0) then
+!!
+!              alpha      = 100.0_dp
+!              unorm      = dnrm2(n*n_max,space_r(1,i_beg))
+!              it_micro   = 0
+!              micro_done = .false.
+!              maxit_lu   = 10
+!!
+!!             add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
+!!
+!              do while (.not. micro_done)
+!                it_micro = it_micro + 1
+!                if (it_micro.gt.maxit_lu) then 
+!!
+!!                 ortho_lu failed. return with an error message
+!!
+!                  ok_lu = .false.
+!                  write(6,*) ' maximum number of the iterations reached.'
+!                  stop
+!                  return
+!                end if 
+!!
+!                shift_lu = max(epsilon(one)*alpha*unorm,tol_ortho)
+!                print*, "shift", shift_lu
+!                metric = msave
+!                call diag_shift(n_max,shift_lu,metric)
+!                print *
+!                print*, "Level shifted:"
+!                call printMatrix(metric,n_max,n_max)
+!                call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
+!                print *, "result"
+!                call printMatrix(metric,n_max,n_max)
+!                print*, "info", info
+!                print *
+!                alpha = alpha * 10.0_dp
+!                micro_done = info.eq.0
+!              end do
+!!
+!            end if
+!!
+!!           get inverse of l and u
+!!
+!            call dtrtri('u','n',n_max,metric,n_max,info)
+!            call checkInfo(info, "inverse of metric")
+!            call dtrtri('l','u',n_max,metric,n_max,info)
+!            call checkInfo(info, "inverse of metric")
+!            print *
+!            print *, "inverse of lower and upper and metric"
+!            call printMatrix(metric,n_max,n_max)
+!            print *
+!!
+!!           orthogonalize L and R:  L' = L * l^-T 
+!!                                   R' = R * u^-1  
+!!
+!            call dtrmm('r','u','n','n',n,n_max,one,metric,n_max,space_r(1,i_beg),n) 
+!            call dtrmm('r','l','t','u',n,n_max,one,metric,n_max,space_l(1,i_beg),n) 
+!!
+!!           calculate overlap of L^T and R
+!!
+!            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
+!            print*, "print L^T*R overlap"
+!            call printMatrix(metric,n_max,n_max)
+!!
+!            print *, "biorthogonalized new vectors:"
+!            call printMatrix(space_r, n, ldu+n_max)
+!            print *
+!            call printMatrix(space_l, n, ldu+n_max)
+!if (it.eq.2) stop
+!!
+!!           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
+!!
+!            allocate (yv(n_max,ldu))
+!!
+!print *, "Overlap check"
+!            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
+!            yv_norm = dnrm2(n_max,yv,1)
+!            if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
+!print*, yv_norm
+!!
+!            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
+!            yv_norm = dnrm2(n_max,yv,1)
+!            if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
+!print*, yv_norm
+!print*, done_lu
+!!
+!            if (all(done_lu)) then
+!              deallocate (yv)
+!              deallocate (ipiv)
+!              deallocate (metric)
+!              deallocate (msave)
+!              exit
+!            end if 
+
+end subroutine ortho_lu
+!
   real(dp) function norm_est(m,a)
 !
 !   compute a cheap estimate of the norm of a lower triangular matrix.
