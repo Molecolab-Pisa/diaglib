@@ -2639,9 +2639,10 @@ print*
 !       Gram-Schmit orthogonalization of residual to the respective subspace 
 !
         max_orth = 10
-        max_GS = 4
+        max_GS   = 1
         use_qr   = .false.
-        done_lu = .false.
+        done_lu  = .false.
+        allocate (yv(n_max,ldu))
 !
         do k=1, max_orth
           do i = 1, max_GS
@@ -2720,125 +2721,35 @@ print*
           !  deallocate (qr)
           else if (.not. symmetric) then
 !
-!           orthogonalize new vectors with LU decomposition
-!
-            allocate (metric(n_max,n_max), msave(n_max,n_max))
-            allocate (ipiv(n_max))
-!
-!           compute overlap O = L^T * R
-!
-            !print *
-            !call printMatrix(space_r,n,ldu+n_max)
-            !print*
-            !call printMatrix(space_l,n,ldu+n_max)
-            print*
-            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
-            msave = metric
-            print*, "print L^T*R overlap"
-            call printMatrix(metric,n_max,n_max)
-!
-!           get lu decomposition O = l * u
-!
-            call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
-            call checkInfo(info, "LU decomposition")
-            !print*, "iPiv"
-            !print*, ipiv
-            print *, 
-            print *, "print lu result"
-            call printMatrix(metric,n_max,n_max)
-!
-!           if dgetrf failed, try a second time after level-shifting the diagonal of the metric
-!
-            if (info.ne.0) then
-!
-              alpha      = 100.0_dp
-              unorm      = dnrm2(n*n_max,space_r(1,i_beg))
-              it_micro   = 0
-              micro_done = .false.
-              maxit_lu   = 10
-!
-!             add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
-!
-              do while (.not. micro_done)
-                it_micro = it_micro + 1
-                if (it_micro.gt.maxit_lu) then 
-!
-!                 ortho_lu failed. return with an error message
-!
-                  ok_lu = .false.
-                  write(6,*) ' maximum number of the iterations reached.'
-                  stop
-                  return
-                end if 
-!
-                shift_lu = max(epsilon(one)*alpha*unorm,tol_ortho)
-                print*, "shift", shift_lu
-                metric = msave
-                call diag_shift(n_max,shift_lu,metric)
-                print *
-                print*, "Level shifted:"
-                call printMatrix(metric,n_max,n_max)
-                call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
-                print *, "result"
-                call printMatrix(metric,n_max,n_max)
-                print*, "info", info
-                print *
-                alpha = alpha * 10.0_dp
-                micro_done = info.eq.0
-              end do
-!
+            call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
+            if (.not. ok_lu) then
+              print *, 'abort due to failure in the ortho_lu'
+              stop
             end if
-!
-!           get inverse of l and u
-!
-            call dtrtri('u','n',n_max,metric,n_max,info)
-            call checkInfo(info, "inverse of metric")
-            call dtrtri('l','u',n_max,metric,n_max,info)
-            call checkInfo(info, "inverse of metric")
-            print *
-            print *, "inverse of lower and upper and metric"
-            call printMatrix(metric,n_max,n_max)
-            print *
-!
-!           orthogonalize L and R:  L' = L * l^-T 
-!                                   R' = R * u^-1  
-!
-            call dtrmm('r','u','n','n',n,n_max,one,metric,n_max,space_r(1,i_beg),n) 
-            call dtrmm('r','l','t','u',n,n_max,one,metric,n_max,space_l(1,i_beg),n) 
-!
-!           calculate overlap of L^T and R
-!
-            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
-            print*, "print L^T*R overlap"
-            call printMatrix(metric,n_max,n_max)
 !
             print *, "biorthogonalized new vectors:"
             call printMatrix(space_r, n, ldu+n_max)
             print *
             call printMatrix(space_l, n, ldu+n_max)
-if (it.eq.2) stop
+            read(*,*)
 !
 !           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
-            allocate (yv(n_max,ldu))
 !
-print *, "Overlap check"
+            print *, "Overlap check"
             call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
             yv_norm = dnrm2(n_max,yv,1)
             if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
-print*, yv_norm
+            print*, yv_norm
 !
             call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
             yv_norm = dnrm2(n_max,yv,1)
             if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
-print*, yv_norm
-print*, done_lu
+!
+            print*, yv_norm
+            print*, done_lu
 !
             if (all(done_lu)) then
-              deallocate (yv)
-              deallocate (ipiv)
-              deallocate (metric)
-              deallocate (msave)
               exit
             end if 
             if (k .eq. max_orth) then
@@ -2849,6 +2760,7 @@ print*, done_lu
 !          
        end do
 !
+        deallocate (yv)
         deallocate (xu)
 !
 !       normalize columns 
@@ -2955,7 +2867,6 @@ call printMatrix(space_l,n,ldu+n_max)
       print *, '--- WARNING ---'
       print *, occasion
       print *, 'Process terminated with info not equal to 0'
-      stop
     end if
 !
   end subroutine checkInfo
@@ -3416,14 +3327,15 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !   ================
 ! 
     integer             :: it, it_micro
-    real(dp)            :: dnrm2, alpha, unorm, shift
+    real(dp)            :: error, dnrm2, alpha, unorm, shift
     logical             :: macro_done, micro_done
+    real(dp), parameter :: tol_ortho_lu = two * epsilon(one)
     integer,  parameter :: maxit = 10
 !
 !   local scratch:
 !   ==============
 !
-    real(dp), allocatable :: metric(:,:), msave(:,:), ipiv(:)
+    real(dp), allocatable :: metric(:,:), msave(:,:), identity(:,:), ipiv(:)
 ! 
 !   external functions:
 !   ===================
@@ -3432,11 +3344,16 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 ! 
 !   get memory for the lu routine 
 !
-    allocate (metric(n,n), msave(n,n))
-    allocate (ipiv(n))
+    allocate (metric(m,m), msave(m,m), identity(m,m))
+    allocate (ipiv(m))
 !
     metric     = zero
     macro_done = .false.
+!
+    identity = zero
+    forall(it = 1:m) identity(it, it) = one
+    print *, "identity"
+    call printMatrix(identity,m,m)
 !
 !   start iteration and handle failure
 !
@@ -3449,6 +3366,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !
         ok = .false.
         write(6,*) " maximum number of iterations reached in ortho_lu."
+        write(6,'(A, E14.5)') " error of lu:", error
         return
       end if
 !
@@ -3502,128 +3420,46 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !  
       end if
 !
+!     compute l^-1 and u^-1, using msave to store the inverse considering that
+!     l has unitary entries on the diagonal
+!
+      
+      call dtrtri('u','n',m,metric,m,info)
+      call checkInfo(info, "inverse of metric")
+      call dtrtri('l','u',m,metric,m,info)
+      call checkInfo(info, "inverse of metric")
+!
+      print *
+      print *, "inverse of lower and upper and metric"
+      call printMatrix(metric,m,m)
+      print *
+!
+!     orthogonalize U_l and U_r:  U_l' = U_l * l^(-t) 
+!                                 U_r' = U_r * u^(-1)  
+!
+      call dtrmm('r','u','n','n',n,m,one,metric,m,u_r,n) 
+      call dtrmm('r','l','t','u',n,m,one,metric,m,u_l,n) 
+!
+!     calculate overlap of L^T & R, substract identity and check it's norm to
+!     obtain the error
+!
+      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
+      metric = metric - identity
+      error = dnrm2(m,metric,1)
+      macro_done = error .lt. tol_ortho_lu
+!
+      print*, "print L^T*R overlap - I (residual overlap)"
+      call printMatrix(metric,m,m)
+!
     end do 
-!!
-!!           orthogonalize new vectors with LU decomposition
-!!
-!!
-!!           compute overlap O = L^T * R
-!!
-!            !print *
-!            !call printMatrix(space_r,n,ldu+n_max)
-!            !print*
-!            !call printMatrix(space_l,n,ldu+n_max)
-!            print*
-!            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
-!            msave = metric
-!            print*, "print L^T*R overlap"
-!            call printMatrix(metric,n_max,n_max)
-!!
-!!           get lu decomposition O = l * u
-!!
-!            call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
-!            call checkInfo(info, "LU decomposition")
-!            !print*, "iPiv"
-!            !print*, ipiv
-!            print *, 
-!            print *, "print lu result"
-!            call printMatrix(metric,n_max,n_max)
-!!
-!!           if dgetrf failed, try a second time after level-shifting the diagonal of the metric
-!!
-!            if (info.ne.0) then
-!!
-!              alpha      = 100.0_dp
-!              unorm      = dnrm2(n*n_max,space_r(1,i_beg))
-!              it_micro   = 0
-!              micro_done = .false.
-!              maxit_lu   = 10
-!!
-!!             add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
-!!
-!              do while (.not. micro_done)
-!                it_micro = it_micro + 1
-!                if (it_micro.gt.maxit_lu) then 
-!!
-!!                 ortho_lu failed. return with an error message
-!!
-!                  ok_lu = .false.
-!                  write(6,*) ' maximum number of the iterations reached.'
-!                  stop
-!                  return
-!                end if 
-!!
-!                shift_lu = max(epsilon(one)*alpha*unorm,tol_ortho)
-!                print*, "shift", shift_lu
-!                metric = msave
-!                call diag_shift(n_max,shift_lu,metric)
-!                print *
-!                print*, "Level shifted:"
-!                call printMatrix(metric,n_max,n_max)
-!                call dgetrf(n_max,n_max,metric,n_max,ipiv,info) 
-!                print *, "result"
-!                call printMatrix(metric,n_max,n_max)
-!                print*, "info", info
-!                print *
-!                alpha = alpha * 10.0_dp
-!                micro_done = info.eq.0
-!              end do
-!!
-!            end if
-!!
-!!           get inverse of l and u
-!!
-!            call dtrtri('u','n',n_max,metric,n_max,info)
-!            call checkInfo(info, "inverse of metric")
-!            call dtrtri('l','u',n_max,metric,n_max,info)
-!            call checkInfo(info, "inverse of metric")
-!            print *
-!            print *, "inverse of lower and upper and metric"
-!            call printMatrix(metric,n_max,n_max)
-!            print *
-!!
-!!           orthogonalize L and R:  L' = L * l^-T 
-!!                                   R' = R * u^-1  
-!!
-!            call dtrmm('r','u','n','n',n,n_max,one,metric,n_max,space_r(1,i_beg),n) 
-!            call dtrmm('r','l','t','u',n,n_max,one,metric,n_max,space_l(1,i_beg),n) 
-!!
-!!           calculate overlap of L^T and R
-!!
-!            call dgemm('t','n',n_max,n_max,n,one,space_l(1,i_beg),n,space_r(1,i_beg),n,zero,metric,n_max)
-!            print*, "print L^T*R overlap"
-!            call printMatrix(metric,n_max,n_max)
-!!
-!            print *, "biorthogonalized new vectors:"
-!            call printMatrix(space_r, n, ldu+n_max)
-!            print *
-!            call printMatrix(space_l, n, ldu+n_max)
-!if (it.eq.2) stop
-!!
-!!           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
-!!
-!            allocate (yv(n_max,ldu))
-!!
-!print *, "Overlap check"
-!            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
-!            yv_norm = dnrm2(n_max,yv,1)
-!            if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
-!print*, yv_norm
-!!
-!            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
-!            yv_norm = dnrm2(n_max,yv,1)
-!            if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
-!print*, yv_norm
-!print*, done_lu
-!!
-!            if (all(done_lu)) then
-!              deallocate (yv)
-!              deallocate (ipiv)
-!              deallocate (metric)
-!              deallocate (msave)
-!              exit
-!            end if 
-
+!
+    ok = .true.
+!
+    deallocate (ipiv)
+    deallocate (metric)
+    deallocate (msave)
+!
+    return
 end subroutine ortho_lu
 !
   real(dp) function norm_est(m,a)
