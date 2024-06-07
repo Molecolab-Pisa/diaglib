@@ -2401,11 +2401,12 @@ module diaglib
     n_rst = 0
     do it = 1, 2 !max_iter
 !
-! A cute header
+!   A cute header
 !
+      print *
 1000 format(20("="),/,t3,'Iteration',i3,/,20("="))
       print 1000, it
-
+      print*
 !
 !     update the size of the expansion space.
 !
@@ -2420,22 +2421,21 @@ module diaglib
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
-print *, "space r+l"
-call printMatrix(space_r, n, ldu)
-print *
-call printMatrix(space_l, n, ldu)
-print *
-!print *, "aspace r+l"
-!call printMatrix(aspace_r, n, lda)
-!print *
-!call printMatrix(aspace_l, n, lda)
-!print *
+      print *, "space r+l"
+      call printMatrix(n,ldu,space_r,n)
+      print *
+      call printMatrix(n,ldu,space_l,n)
+      print *
+      !print *, "aspace r+l"
+      !call printMatrix(aspace_r, n, lda)
+      !print *
+      !call printMatrix(aspace_l, n, lda)
+      !print *
 !
 !     update the reduced matrix
 !
       call dgemm('t','n',ldu,n,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
       call dgemm('t','n',ldu,n,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
-      !call dgemm('t','n',ldu,n_act,n,one,space_r,n,aspace_l(1,i_beg+n_rst),n,zero,a_red_l(1,i_beg+n_rst),lda)
 !      
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
@@ -2451,32 +2451,19 @@ print *
       a_copy_r = a_red_r
       a_copy_l = a_red_l
 !
+      print *
+      print *, "print reduced spaces a_r, a_l:"
+      call printMatrix(ldu,ldu,a_copy_r,lda)
+      print *
+      call printMatrix(ldu,ldu,a_red_l,lda)
+      print *
+!
 !     diagonalize the reduced matrix
 !
-print *
-print *, "print reduced spaces a_r, a_l:"
-call printMatrix(a_copy_r(1:ldu,1:ldu), ldu, ldu)
-print *
-call printMatrix(a_red_l(1:ldu,1:ldu), ldu, ldu)
-print *
-!
       call get_time(t1)
-      if (.not. symmetric) then 
-        call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
-      else
-!
-!       little test on a symmetric matrix
-!
-        call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
-!        call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
-!        evec_red_r = a_copy_r
-!        evec_red_l = a_copy_r
-!        call printVector(e_red_re,ldu)
-!        call printMatrix(evec_red_r(1:ldu,1:ldu),ldu,ldu)
-      end if
-
-!
+      call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
       call get_time(t2)
+!
       t_diag = t_diag + t2 - t1
 ! 
 !     check if diagonalization terminated with info = 0 and check if 
@@ -2498,21 +2485,21 @@ print *
 !
 !     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
 !
-print *, "evec r + l"
-call printMatrix(evec_red_r(1:ldu,1:ldu), ldu, ldu)
-print *
-call printMatrix(evec_red_l(1:ldu,1:ldu), ldu, ldu)
-print *
-call printVector(e_red_re,ldu)
-print *
+      print *, "evec r + l"
+      call printMatrix(ldu,ldu,evec_red_r,lda)
+      print *
+      call printMatrix(ldu,ldu,evec_red_l,lda)
+      print *
+      print*, "eig"
+      call printVector(e_red_re,ldu)
+      print *
+!
       call sort_eigenpairs(e_red_re(:ldu),e_red_im(:ldu),evec_red_r(:ldu,:ldu),evec_red_l(:ldu,:ldu),ldu,ldu,n_max)
 !
-print *, "evec r + l"
-call printMatrix(evec_red_r(1:ldu,1:ldu), ldu, ldu)
-print *
-call printMatrix(evec_red_l(1:ldu,1:ldu), ldu, ldu)
-print *
-call printVector(e_red_re,ldu)
+      print *, "evec r + l after sort"
+      call printMatrix(ldu,ldu,evec_red_r,lda)
+      print *
+      call printMatrix(ldu,ldu,evec_red_l,lda)
 !
 !     extract the eigenvalues and compute the ritz approximation to the 
 !     eigenvectors
@@ -2522,27 +2509,29 @@ call printVector(e_red_re,ldu)
       call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
       call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
 !
-print *, "eig"
-print *
-call printVector(eig, n_max)
+      print *
+      print *, "extracted eigenvals"
+      print *
+      call printVector(eig, n_max)
+      print *
 !
-print *, "ritz"
-call printMatrix(evec_r, n,n_max)
-print *
-call printMatrix(evec_l, n,n_max)
-print *
+      print *, "ritz"
+      call printMatrix(n,n_max,evec_r,n)
+      print *
+      call printMatrix(n,n_max,evec_l,n)
+      print *
 !
 !     compute the residuals, and their rms and sup norms
 !
       call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
       call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
 !
-!print * ,'residual prime'
-!print *
-!call printMatrix(r_r, n,n_max)
-!print *
-!call printMatrix(r_l, n,n_max)
-!print *
+!     print * ,'residual prime'
+!     print *
+!     call printMatrix(r_r, n,n_max)
+!     print *
+!     call printMatrix(r_l, n,n_max)
+!     print *
 !
       do i_eig = 1, n_targ
 !
@@ -2556,18 +2545,21 @@ print *
           r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
           r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
           r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
+!
       end do
-print*
-print*, "residual right and left"
-call printMatrix(r_r, n, n_max)
-print*
-call printMatrix(r_l, n, n_max)
-print*
+!
+      print*
+      print*, "residual right and left"
+      call printMatrix(n,n_max,r_r,n)
+      print*
+      call printMatrix(n,n_max,r_l,n)
+      print*
 !
 !     check convergence. look the dirst contiguous converged eigenvalues
 !     by setting the logical array "done" to true
 !
 !     TODO adapt for left and right, also the print
+!
       do i_eig = 1, n_targ
         if (done(i_eig)) cycle
         done(i_eig)     = r_norm_r(1,i_eig).lt.tol_rms .and.&
@@ -2623,10 +2615,10 @@ print*
         print*
         print *, "precondition:"
         print *
-        call printMatrix(space_r, n, ldu+n_act)
+        call printMatrix(n,ldu+n_act,space_r,n)
         print*
         print*
-        call printMatrix(space_l, n, ldu+n_act)
+        call printMatrix(n,ldu+n_act,space_l,n)
         print*
 !
 !       orthogonalize the new vectors to the existing ones and 
@@ -2642,6 +2634,7 @@ print*
         max_GS   = 1
         use_qr   = .false.
         done_lu  = .false.
+!
         allocate (yv(n_max,ldu))
 !
         do k=1, max_orth
@@ -2657,13 +2650,13 @@ print*
 !           check its norm, check if orthogonal and print out the projection
 !
             print *, "projection"
-            call printMatrix(space_r, n, ldu+n_max)
+            call printMatrix(n,ldu+n_max,space_r,n)
             print*
             not_orthogonal = .false.
             call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
               space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
             print * 
-            call printMatrix(space_l, n, ldu+n_max)
+            call printMatrix(n,ldu+n_max,space_l,n)
             print*
             call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
               space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
@@ -2675,7 +2668,6 @@ print*
             end if
           end do 
 !
-!if (it.eq.2) stop
           call get_time(t2)
           t_ortho = t_ortho + t2 - t1
 !
@@ -2719,35 +2711,38 @@ print*
 !         !  check if spaces are orthogonol with them selfes
 !
           !  deallocate (qr)
+!
           else if (.not. symmetric) then
 !
             call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
+!
             if (.not. ok_lu) then
               print *, 'abort due to failure in the ortho_lu'
               stop
             end if
 !
+            print*
             print *, "biorthogonalized new vectors:"
-            call printMatrix(space_r, n, ldu+n_max)
+            call printMatrix(n,ldu+n_max,space_r,n)
             print *
-            call printMatrix(space_l, n, ldu+n_max)
+            call printMatrix(n,ldu+n_max,space_l,n)
             read(*,*)
 !
 !           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
-!
-            print *, "Overlap check"
             call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
             yv_norm = dnrm2(n_max,yv,1)
             if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
-            print*, yv_norm
 !
-            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
+            print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
+            print*, "y_r^t to V_l ", yv_norm
+            print *
+!
+            call dgemm('t','n',n_max,ldu,n,one,space_l(1,i_beg),n,space_r,n,zero,yv,n_max)
             yv_norm = dnrm2(n_max,yv,1)
             if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
 !
-            print*, yv_norm
-            print*, done_lu
+            print*, "y_l^t to V_r ", yv_norm
 !
             if (all(done_lu)) then
               exit
@@ -2763,46 +2758,45 @@ print*
         deallocate (yv)
         deallocate (xu)
 !
-!       normalize columns 
+!       if symmetric matrix is passed, orthogonalize new vectors with each other
 !
         if (symmetric) then
 !
-          call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-          call checkInfo(info, "error in dgeqrf")
+          if (n_act.le.2) then
+            call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+            call checkInfo(info, "error in dgeqrf")
 !
-          call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-          call checkInfo(info, "error in dorqr") 
+            call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+            call checkInfo(info, "error in dorqr") 
 !
-          call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-          call checkInfo(info, "error in dgeqrf")
+            call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+            call checkInfo(info, "error in dgeqrf")
 !
-          call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-          call checkInfo(info, "error in dorqr") 
+            call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+            call checkInfo(info, "error in dorqr") 
+          end if
+!
         end if
 !
-
-print *, "orthogon space r"
-call printMatrix(space_r,n,ldu+n_max)
-print *, "orthogon space l"
-call printMatrix(space_l,n,ldu+n_max)
+!       normalize columns 
+!
         do i = 0, n_max-1
           space_l(:,i_beg+i) = space_l(:,i_beg+i)/dnrm2(n,space_l(:,i_beg+i),1)
           space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
         end do
 !
         print *, "normalized space r"
-        call printMatrix(space_r,n,ldu+n_max)
+        call printMatrix(n,ldu+n_max,space_r,lda)
         print *, "normalized space l"
-        call printMatrix(space_l,n,ldu+n_max)
+        call printMatrix(n,ldu+n_max,space_l,lda)
 !
-        
       else 
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
 !       TODO handle restart
       end if
 
     end do
- 
+!
   end subroutine nonsym_driver
 !
   subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want)
@@ -2822,7 +2816,6 @@ call printMatrix(space_l,n,ldu+n_max)
 !
     mask = .true.
 !
-    print *, "SORT EIG"
     do i = 1, n_want
 ! 
 !     identify minimal value and mask first position for next iteration
@@ -2871,19 +2864,20 @@ call printMatrix(space_l,n,ldu+n_max)
 !
   end subroutine checkInfo
 !
-  subroutine printMatrix(mat, nrows, ncols) 
+  subroutine printMatrix(n,m,A,lda) 
 !   
 ! print formatted matrix
 !
     implicit none
-    integer , intent(in)  :: nrows, ncols
-    real(dp), intent(in)  :: mat(nrows,ncols)
-    integer :: i,j 
+    integer , intent(in)  :: n, m, lda
+    real(dp), intent(in)  :: A(lda,lda)
 !
-    do i = 1, nrows
-      do j = 1, ncols
-        write(*,'(F12.5)', advance='no') mat(i,j)
-        if (j .lt. nrows) then
+    integer :: i, j
+!
+    do i = 1, n
+      do j = 1, m
+        write(*,'(F12.5)', advance='no') A(i,j)
+        if (j .lt. m) then
           write(*, '(A)', advance='no') ' '
         end if
       end do
@@ -3328,7 +3322,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 ! 
     integer             :: it, it_micro
     real(dp)            :: error, dnrm2, alpha, unorm, shift
-    logical             :: macro_done, micro_done
+    logical             :: macro_done, micro_done, direct_solv
     real(dp), parameter :: tol_ortho_lu = two * epsilon(one)
     integer,  parameter :: maxit = 10
 !
@@ -3347,13 +3341,12 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
     allocate (metric(m,m), msave(m,m), identity(m,m))
     allocate (ipiv(m))
 !
-    metric     = zero
-    macro_done = .false.
+    metric      =  zero
+    macro_done  = .false.
+    direct_solv = .true.
 !
     identity = zero
     forall(it = 1:m) identity(it, it) = one
-    print *, "identity"
-    call printMatrix(identity,m,m)
 !
 !   start iteration and handle failure
 !
@@ -3378,6 +3371,11 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !     compute the lu factorization of the metric
 !
       call dgetrf(m,m,metric,m,ipiv,info) 
+!
+      print *, "ortho_lu:"
+      print *
+      print *, "overlap of non biorthogonalized"
+      call printMatrix(m,m,metric,m)
 !
 !     if dgetrf failed, try a second time, after level-shifting the diagonal of the metric.
 !
@@ -3408,10 +3406,10 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
           call diag_shift(m,shift,metric)
           print *
           print*, "Level shifted:"
-          call printMatrix(metric,m,m)
+          call printMatrix(m,m,metric,m)
           call dgetrf(m,m,metric,m,ipiv,info) 
           print *, "result"
-          call printMatrix(metric,m,m)
+          call printMatrix(m,m,metric,m)
           print*, "info", info
           print *
           alpha = alpha * 10.0_dp
@@ -3420,25 +3418,36 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !  
       end if
 !
-!     compute l^-1 and u^-1, using msave to store the inverse considering that
-!     l has unitary entries on the diagonal
+      if (direct_solv) then
 !
-      
-      call dtrtri('u','n',m,metric,m,info)
-      call checkInfo(info, "inverse of metric")
-      call dtrtri('l','u',m,metric,m,info)
-      call checkInfo(info, "inverse of metric")
+!       solve the matrix equations: U_l = U_l(ortho) l^t     
+!                                   U_r = U_r(ortho) r
 !
-      print *
-      print *, "inverse of lower and upper and metric"
-      call printMatrix(metric,m,m)
-      print *
+        call dtrsm('r','u','n','n',n,m,one,metric,m,u_r,n) 
+        call dtrsm('r','l','t','u',n,m,one,metric,m,u_l,n) 
 !
-!     orthogonalize U_l and U_r:  U_l' = U_l * l^(-t) 
-!                                 U_r' = U_r * u^(-1)  
+      else 
 !
-      call dtrmm('r','u','n','n',n,m,one,metric,m,u_r,n) 
-      call dtrmm('r','l','t','u',n,m,one,metric,m,u_l,n) 
+!       compute l^-1 and u^-1, using msave to store the inverse considering that
+!       l is a unit triangular
+!
+        call dtrtri('u','n',m,metric,m,info)
+        call checkInfo(info, "inverse of metric")
+        call dtrtri('l','u',m,metric,m,info)
+        call checkInfo(info, "inverse of metric")
+!
+        print *
+        print *, "inverse of lower and upper and metric"
+        call dgetrf(m,m,metric,m,ipiv,info) 
+        print *
+!
+!       orthogonalize U_l and U_r:  U_l(ortho) = U_l l^(-t) 
+!                                   U_r(ortho) = U_r u^(-1)  
+!
+        call dtrmm('r','u','n','n',n,m,one,metric,m,u_r,n) 
+        call dtrmm('r','l','t','u',n,m,one,metric,m,u_l,n) 
+!
+      end if
 !
 !     calculate overlap of L^T & R, substract identity and check it's norm to
 !     obtain the error
@@ -3449,7 +3458,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
       macro_done = error .lt. tol_ortho_lu
 !
       print*, "print L^T*R overlap - I (residual overlap)"
-      call printMatrix(metric,m,m)
+      call printMatrix(m,m,metric,m)
 !
     end do 
 !
