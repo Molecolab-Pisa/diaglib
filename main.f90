@@ -921,15 +921,17 @@ end program main
     real(dp)                    ::  lw(1), zero, one, low, up
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
+    logical                     :: symmetric
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat = 2
-    low     = 0
-    up      = 0.02
-    i_seed  = 123
-    zero    = 0.d0
-    one     = 1.d0
+    use_mat   = 2
+    low       = 0
+    up        = 1.d-1
+    symmetric = .false.
+    i_seed    = 123
+    zero      = 0.d0
+    one       = 1.d0
 !
 !   allocate memory to get the matrix
 !
@@ -1030,6 +1032,8 @@ end program main
         end do
       end do
 !
+      symmetric = .true.
+!
     else
       print *, "no valid matrix choice in test_nonsym."
       stop
@@ -1076,7 +1080,8 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l, ok)
+  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,1.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
+!
   end subroutine test_nonsym
 !
   subroutine printMatrix(n,m,A,lda) 

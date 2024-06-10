@@ -2232,14 +2232,14 @@ module diaglib
   end subroutine gen_david_driver
 !
   subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
-                            matvec,matvec_l,precnd,eig,evec_r,evec_l, ok)
+                            matvec,matvec_l,precnd,eig,evec_r,evec_l,symmetric,ok)
     logical,                        intent(in)    :: verbose
     integer,                        intent(in)    :: n, n_targ, n_max
     integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol, shift
     real(dp), dimension(n_max),     intent(inout) :: eig
     real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
-    logical,                        intent(inout) :: ok
+    logical,                        intent(inout) :: symmetric, ok
     external                                      :: matvec, matvec_l, precnd
 !
 !   local variables:
@@ -2294,7 +2294,7 @@ module diaglib
     integer(dp), allocatable :: ipiv(:)
     logical, allocatable  :: done_lu(:)
     real(dp)              :: yv_norm, tol_ortho_lu, alpha, unorm, shift_lu
-    logical               :: not_orthogonal, use_qr, micro_done, ok_lu, symmetric
+    logical               :: not_orthogonal, use_qr, micro_done, ok_lu
     integer               :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
 !   external functions:
@@ -2336,6 +2336,8 @@ module diaglib
 !   allocate space for orthogonalization routines
 !
     allocate (done_lu(2))
+    allocate (xu(ldu,n_act))
+    allocate (yv(n_max,ldu))
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -2357,7 +2359,6 @@ module diaglib
     a_red_r   = zero
     a_red_l   = zero
     done      = .false.
-    symmetric = .false.
 !
     call get_time(t_tot)
 !
@@ -2555,16 +2556,16 @@ module diaglib
       call printMatrix(n,n_max,r_l,n)
       print*
 !
-!     check convergence. look the dirst contiguous converged eigenvalues
+!     check convergency. look the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true
-!
-!     TODO adapt for left and right, also the print
 !
       do i_eig = 1, n_targ
         if (done(i_eig)) cycle
         done(i_eig)     = r_norm_r(1,i_eig).lt.tol_rms .and.&
                           r_norm_r(2,i_eig).lt.tol_max .and.&
-                          it.gt.1
+                          r_norm_l(1,i_eig).lt.tol_rms .and.& 
+                          r_norm_l(2,i_eig).lt.tol_max .and.&    
+                          it.gt.1                               
         if (.not.done(i_eig)) then
           done(i_eig+1:n_max) = .false.
           exit
@@ -2621,10 +2622,25 @@ module diaglib
         call printMatrix(n,ldu+n_act,space_l,n)
         print*
 !
+        if (.not. symmetric) then
+!
+!         start with initial orthogonalization to improve conditioning.
+!
+          print *, "lu before conditioning"
+          print*
+!
+          !call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
+!
+          if (.not. ok_lu) then
+            print *, 'abort due to failure in the ortho_lu'
+            stop
+          end if
+!
+        end if
+!
 !       orthogonalize the new vectors to the existing ones and 
 !       then orthonormalize them.
 !
-        allocate (xu(ldu,n_act))
 !
         call get_time(t1)
 !
@@ -2635,7 +2651,6 @@ module diaglib
         use_qr   = .false.
         done_lu  = .false.
 !
-        allocate (yv(n_max,ldu))
 !
         do k=1, max_orth
           do i = 1, max_GS
@@ -2716,6 +2731,7 @@ module diaglib
 !
             print *, "ortho_lu:"
             print *
+            print *
 !
             call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
@@ -2723,44 +2739,42 @@ module diaglib
               print *, 'abort due to failure in the ortho_lu'
               stop
             end if
+          end if
 !
-            print*
-            print *, "biorthogonalized new vectors:"
-            call printMatrix(n,ldu+n_max,space_r,n)
-            print *
-            call printMatrix(n,ldu+n_max,space_l,n)
-            read(*,*)
+          print*
+          print *, "biorthogonalized new vectors:"
+          call printMatrix(n,ldu+n_max,space_r,n)
+          print *
+          call printMatrix(n,ldu+n_max,space_l,n)
+          print*
 !
-!           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
+!         check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
-            call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
-            yv_norm = dnrm2(n_max,yv,1)
-            if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
+          call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
+          yv_norm = dnrm2(n_max,yv,1)
+          if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
 !
-            print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
-            print*, "y_r^t to V_l ", yv_norm
-            print *
+          print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
+          print*, "y_r^t to V_l ", yv_norm
+          print *
 !
-            call dgemm('t','n',n_max,ldu,n,one,space_l(1,i_beg),n,space_r,n,zero,yv,n_max)
-            yv_norm = dnrm2(n_max,yv,1)
-            if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
+          call dgemm('t','n',n_max,ldu,n,one,space_l(1,i_beg),n,space_r,n,zero,yv,n_max)
+          yv_norm = dnrm2(n_max,yv,1)
+          if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
 !
-            print*, "y_l^t to V_r ", yv_norm
-            print *
+          print*, "y_l^t to V_r ", yv_norm
+          print *
 !
-            if (all(done_lu)) then
-              exit
-            end if 
-            if (k .eq. max_orth) then
-              print *, "error of ortho_lu"
-              stop
-            end if
-         end if
+          if (all(done_lu)) then
+            exit
+          end if 
+          if (k .eq. max_orth) then
+            print *, "error of ortho_lu"
+            stop
+          end if
 !          
-       end do
+        end do
 !
-        deallocate (yv)
-        deallocate (xu)
 !
 !       if symmetric matrix is passed, orthogonalize new vectors with each other
 !
@@ -2797,9 +2811,44 @@ module diaglib
       else 
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
 !       TODO handle restart
+        n_act   = n_max
+        space_r = zero
+        space_l = zero
+!
+!       put current eigenvectors into the first position of tne
+!       expansion space
+!
+        call dcopy(n_max*n,evec_r,1,space_r,1)
+        call dcopy(n_max*n,evec_l,1,space_l,1)
+        aspace_r = zero
+        aspace_l = zero
+        a_red_r  = zero
+        a_red_l  = zero
+!
+!       initialize indexes back to their starting values
+!
+        ldu   = 0
+        i_beg = 1
+        m_dim = 1
+        n_rst = 0
+!
+!       counting how many matvec we can skip at the next
+!       iteration
+!
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_rst = n_rst + 1
+          else
+            exit
+          end if
+        end do
+        restart = .true.
       end if
-
+      !if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
+!
+    !deallocate (yv)
+    !deallocate (xu)
 !
   end subroutine nonsym_driver
 !
@@ -2880,7 +2929,7 @@ module diaglib
 !
     do i = 1, n
       do j = 1, m
-        write(*,'(F12.5)', advance='no') A(i,j)
+        write(*,'(E15.5)', advance='no') A(i,j)
         if (j .lt. m) then
           write(*, '(A)', advance='no') ' '
         end if
@@ -3338,7 +3387,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !   external functions:
 !   ===================
 !     
-    external                                 :: dgemm
+    external                                 :: dgemm, dgetrf, dtrtri
 ! 
 !   get memory for the lu routine 
 !
@@ -3372,14 +3421,17 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
       call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
       msave = metric
 !
-!     compute the lu factorization of the metric
-!
-      call dgetrf(m,m,metric,m,ipiv,info) 
-!
       print*, "iteration lu", it
       print *
       print *, "overlap of non biorthogonalized"
       call printMatrix(m,m,metric,m)
+      print*
+!
+!
+!     compute the lu factorization of the metric
+!
+      call dgetrf(m,m,metric,m,ipiv,info) 
+!
 !
 !     if dgetrf failed, try a second time, after level-shifting the diagonal of the metric.
 !
@@ -3457,6 +3509,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !     obtain the error
 !
       call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
+!
       metric = metric - identity
       error = dnrm2(m,metric,1)
       macro_done = error .lt. tol_ortho_lu
