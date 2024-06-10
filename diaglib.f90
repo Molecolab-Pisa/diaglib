@@ -2714,6 +2714,9 @@ module diaglib
 !
           else if (.not. symmetric) then
 !
+            print *, "ortho_lu:"
+            print *
+!
             call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
             if (.not. ok_lu) then
@@ -2743,6 +2746,7 @@ module diaglib
             if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
 !
             print*, "y_l^t to V_r ", yv_norm
+            print *
 !
             if (all(done_lu)) then
               exit
@@ -2786,9 +2790,9 @@ module diaglib
         end do
 !
         print *, "normalized space r"
-        call printMatrix(n,ldu+n_max,space_r,lda)
+        call printMatrix(n,ldu+n_max,space_r,n)
         print *, "normalized space l"
-        call printMatrix(n,ldu+n_max,space_l,lda)
+        call printMatrix(n,ldu+n_max,space_l,n)
 !
       else 
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
@@ -3372,7 +3376,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !
       call dgetrf(m,m,metric,m,ipiv,info) 
 !
-      print *, "ortho_lu:"
+      print*, "iteration lu", it
       print *
       print *, "overlap of non biorthogonalized"
       call printMatrix(m,m,metric,m)
@@ -3459,6 +3463,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !
       print*, "print L^T*R overlap - I (residual overlap)"
       call printMatrix(m,m,metric,m)
+      print*
 !
     end do 
 !

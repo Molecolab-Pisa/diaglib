@@ -916,17 +916,20 @@ end program main
 !
 !   test matrix
 !
-    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig
+    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig, use_mat
     integer, allocatable        :: seed(:)
-    real(dp)                    ::  lw(1), zero, one
+    real(dp)                    ::  lw(1), zero, one, low, up
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
 !
     external :: mmult, mmult_l, mprec
 !
-    i_seed = 123
-    zero = 0.d0
-    one  = 1.d0
+    use_mat = 2
+    low     = 0
+    up      = 0.02
+    i_seed  = 123
+    zero    = 0.d0
+    one     = 1.d0
 !
 !   allocate memory to get the matrix
 !
@@ -934,56 +937,104 @@ end program main
 !    
     diag = zero
 !
-!   build a nonsymmetric matrix 
+!   choice of the test matrix (1 = nonsym, 2 = nonsym (pertubation on sym), 3 = sym)
 !
-!   generate diagonal matrix:   diag(i,i) = 2 + i
+    if (use_mat .eq. 1) then
 !
-    forall(i = 1:n) diag(i, i) = real(2 + i, kind=dp)
+!     build a nonsymmetric matrix 
 !
-!   generate random matrix:     t = random
+!     generate diagonal matrix:   diag(i,i) = 2 + i
 !
-    call random_seed(size=seed_size)
-    allocate(seed(seed_size))
-    seed = i_seed
-    call random_seed(put=seed)
-    call random_number(t)
-    do i = 1, n
-      t(i,i) = t(i,i) + dble(100+i)
-    end do
-    deallocate(seed)
+      forall(i = 1:n) diag(i, i) = real(2 + i, kind=dp)
 !
-!   ensure positive definite:   p = t^T * t
+!     generate random matrix:     t = random
 !
-    call dgemm('t','n',n,n,n,one,t,n,t,n,zero,p,n)
-    a = p
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = i_seed
+      call random_seed(put=seed)
+      call random_number(t)
+      do i = 1, n
+        t(i,i) = t(i,i) + dble(100+i)
+      end do
+      deallocate(seed)
 !
-!   get it's invert by using lu decomposition
+!     ensure positive definite:   p = t^T * t
 !
-    call dgetrf(n,n,a,n,ipiv,info)
-    call dgetri(n,a,n,ipiv,lw,-1,info)
-    lwork = int(lw(1))
-    allocate(work(lwork))
-    call dgetri(n,a,n,ipiv,work,lwork,info)
-    deallocate(work)   
-!    
-!   get final matrix:           a = p * diag * p^-1
+      call dgemm('t','n',n,n,n,one,t,n,t,n,zero,p,n)
+      a = p
 !
-    call dgemm('n','n',n,n,n,one,p,n,diag,n,zero,t,n)
-    call dgemm('n','n',n,n,n,one,t,n,a,n,zero,p,n)
-    a = p
-    call printMatrix(a,n,n)
-    !stop
+!     get it's invert by using lu decomposition
 !
-!    do i = 1, n
-!      do j = i, n
-!        if (j == i) then
-!          a(i,j) = i + 1.0d0
-!        else if (j > i) then
-!          a(i,j) = 1.0d0 / (dble(i + j))
-!          a(j,i) = a(i,j)
-!        end if
-!      end do
-!    end do
+      call dgetrf(n,n,a,n,ipiv,info)
+      call dgetri(n,a,n,ipiv,lw,-1,info)
+      lwork = int(lw(1))
+      allocate(work(lwork))
+      call dgetri(n,a,n,ipiv,work,lwork,info)
+      deallocate(work)   
+!      
+!     get final matrix:           a = p * diag * p^-1
+!
+      call dgemm('n','n',n,n,n,one,p,n,diag,n,zero,t,n)
+      call dgemm('n','n',n,n,n,one,t,n,a,n,zero,p,n)
+      a = p
+!
+    else if (use_mat .eq. 2) then
+!
+!   get a symmetric matrix
+!
+      do i = 1, n
+        do j = i, n
+          if (j == i) then
+            a(i,j) = i + 1.0d0
+          else if (j > i) then
+            a(i,j) = 1.0d0 / (dble(i + j))
+            a(j,i) = a(i,j)
+          end if
+        end do
+      end do
+!
+!     generate random matrix :     t = random
+!
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = i_seed
+      call random_seed(put=seed)
+      call random_number(t)
+      deallocate(seed)
+!
+!     adapt to range low:up and set diagonal to zero
+!
+      t = low + (up-low) * t
+!
+      do i = 1, n
+        t(i,i) = zero
+      end do
+!
+!     introduce perturbation on matrix
+!
+      a = a + t
+!
+    else if (use_mat .eq. 3) then 
+!
+!   get a symmetric matrix
+!
+      do i = 1, n
+        do j = i, n
+          if (j == i) then
+            a(i,j) = i + 1.0d0
+          else if (j > i) then
+            a(i,j) = 1.0d0 / (dble(i + j))
+            a(j,i) = a(i,j)
+          end if
+        end do
+      end do
+!
+    else
+      print *, "no valid matrix choice in test_nonsym."
+      stop
+    end if
+    call printMatrix(n,n,a,n)
 !
     deallocate (p, t, diag)
 !
@@ -1028,20 +1079,21 @@ end program main
   call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l, ok)
   end subroutine test_nonsym
 !
-  subroutine printMatrix(mat, nrows, ncols) 
+  subroutine printMatrix(n,m,A,lda) 
 !   
 ! print formatted matrix
 !
     use real_precision
     implicit none
-    integer , intent(in)  :: nrows, ncols
-    real(dp), dimension(ncols,nrows), intent(in)  :: mat
-    integer :: i,j 
+    integer , intent(in)  :: n, m, lda
+    real(dp), intent(in)  :: A(lda,lda)
 !
-    do i = 1, nrows
-      do j = 1, ncols
-        write(*,'(F13.6)', advance='no') mat(i,j)
-        if (j .lt. nrows) then
+    integer :: i, j
+!
+    do i = 1, n
+      do j = 1, m
+        write(*,'(F12.5)', advance='no') A(i,j)
+        if (j .lt. m) then
           write(*, '(A)', advance='no') ' '
         end if
       end do
