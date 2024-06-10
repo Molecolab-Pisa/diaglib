@@ -2336,8 +2336,8 @@ module diaglib
 !   allocate space for orthogonalization routines
 !
     allocate (done_lu(2))
-    allocate (xu(ldu,n_act))
-    allocate (yv(n_max,ldu))
+    allocate (xu(lda,n_max))
+    allocate (yv(n_max,lda))
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -2400,7 +2400,7 @@ module diaglib
     if (verbose) write(6,1030) tol
 !   
     n_rst = 0
-    do it = 1, 2 !max_iter
+    do it = 1, max_iter
 !
 !   A cute header
 !
@@ -2434,6 +2434,9 @@ module diaglib
       !print *
 !
 !     update the reduced matrix
+!
+!fl
+!     is this really needed? arent ared_r and ared_l just one the transpose of the other?
 !
       call dgemm('t','n',ldu,n,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
       call dgemm('t','n',ldu,n,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
@@ -2495,7 +2498,7 @@ module diaglib
       call printVector(e_red_re,ldu)
       print *
 !
-      call sort_eigenpairs(e_red_re(:ldu),e_red_im(:ldu),evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
+      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
 !
       print *, "evec r + l after sort"
       call printMatrix(ldu,ldu,evec_red_r,lda)
@@ -2629,6 +2632,7 @@ module diaglib
           print *, "lu before conditioning"
           print*
 !
+          ok_lu = .true.
           !call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
           if (.not. ok_lu) then
@@ -2653,39 +2657,43 @@ module diaglib
 !
 !
         do k=1, max_orth
-          do i = 1, max_GS
-            print*, "GS:"
-            xu=zero
-            call dgemm('t','n',ldu,n_act,n,one,space_r,n,space_r(1,i_beg),n,zero,xu,ldu)
-            call dgemm('n','n',n,n_act,ldu,-one,space_r,n,xu,ldu,one,space_r(1,i_beg),n)
+          call ortho_vs_x(n,ldu,n_act,space_l,space_r(1,i_beg),xx,xx)
+          call ortho_vs_x(n,ldu,n_act,space_r,space_l(1,i_beg),xx,xx)
+          !fldo i = 1, max_GS
+          !fl  print*, "GS:"
+          !fl  xu=zero
+          !fl  call dgemm('t','n',ldu,n_act,n,one,space_l,n,space_r(1,i_beg),n,zero,xu,ldu)
+          !fl  call dgemm('n','n',n,n_act,ldu,-one,space_l,n,xu,ldu,one,space_r(1,i_beg),n)
 !
-            call dgemm('t','n',ldu,n_act,n,one,space_l,n,space_l(1,i_beg),n,zero,xu,ldu)
-            call dgemm('n','n',n,n_act,ldu,-one,space_l,n,xu,ldu,one,space_l(1,i_beg),n)
+          !fl  call dgemm('t','n',ldu,n_act,n,one,space_r,n,space_l(1,i_beg),n,zero,xu,ldu)
+          !fl  call dgemm('n','n',n,n_act,ldu,-one,space_r,n,xu,ldu,one,space_l(1,i_beg),n)
 !
-!           check its norm, check if orthogonal and print out the projection
+!         !fl  check its norm, check if orthogonal and print out the projection
 !
-            print *, "projection"
-            call printMatrix(n,ldu+n_max,space_r,n)
-            print*
-            not_orthogonal = .false.
-            call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
-              space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
-            print * 
-            call printMatrix(n,ldu+n_max,space_l,n)
-            print*
-            call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
-              space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
-            print *
-            if (.not. not_orthogonal) exit
-            if (i.eq.max_GS) then
-              print *, "GS Orthogonalization failed."
-              stop
-            end if
-          end do 
+          print *, "projection"
+          call printMatrix(n,ldu+n_max,space_r,n)
+          print*
+          not_orthogonal = .false.
+          call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
+            space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
+          print * 
+          call printMatrix(n,ldu+n_max,space_l,n)
+          print*
+          call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+            space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+          print *
+!         if (.not. not_orthogonal) exit
+!         if (i.eq.max_GS) then
+!           print *, "GS Orthogonalization failed."
+!           stop
+!         end if
+          !flend do 
 !
           call get_time(t2)
           t_ortho = t_ortho + t2 - t1
 !
+          write(6,*) 'use_qr = ', use_qr
+          write(6,*) 'symmetric = ', symmetric
           if (use_qr) then
 !
 !         orthogonalize the residuals of both spaces with Lapack routine
@@ -2798,10 +2806,10 @@ module diaglib
 !
 !       normalize columns 
 !
-        do i = 0, n_max-1
-          space_l(:,i_beg+i) = space_l(:,i_beg+i)/dnrm2(n,space_l(:,i_beg+i),1)
-          space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
-        end do
+!       do i = 0, n_max-1
+!         space_l(:,i_beg+i) = space_l(:,i_beg+i)/dnrm2(n,space_l(:,i_beg+i),1)
+!         space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
+!       end do
 !
         print *, "normalized space r"
         call printMatrix(n,ldu+n_max,space_r,n)
