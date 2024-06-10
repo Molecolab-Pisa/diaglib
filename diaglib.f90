@@ -2494,7 +2494,7 @@ module diaglib
       call printVector(e_red_re,ldu)
       print *
 !
-      call sort_eigenpairs(e_red_re(:ldu),e_red_im(:ldu),evec_red_r(:ldu,:ldu),evec_red_l(:ldu,:ldu),ldu,ldu,n_max)
+      call sort_eigenpairs(e_red_re(:ldu),e_red_im(:ldu),evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
 !
       print *, "evec r + l after sort"
       call printMatrix(ldu,ldu,evec_red_r,lda)
@@ -2799,18 +2799,18 @@ module diaglib
 !
   end subroutine nonsym_driver
 !
-  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want)
+  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv)
 !
 !   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
 !   in decreasing order according to the real eigenvalues in the range of n_want
 ! 
     implicit none
-    integer,  intent(in)      :: n, m, n_want
-    real(dp), intent(inout)   :: wr(m), wl(m), vr(n,m), vl(n,m)
+    integer,  intent(in)      :: n, m, ldv, n_want
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
 !   
 !   local variables
 !
-    real(dp)                  :: w, v(n)
+    real(dp)                  :: w, v(ldv)
     integer                   :: i, idx, min_idx(1)
     logical                   :: mask(m)
 !
@@ -3382,7 +3382,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
       if (info.ne.0) then
 !  
         alpha      = 100.0_dp
-        unorm      = dnrm2(n*m,u_r) ! TODO also do for u_l
+        unorm      = dnrm2(n*m,u_r,1) ! TODO also do for u_l
         it_micro   = 0
         micro_done = .false.
 ! 
