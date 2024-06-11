@@ -2290,12 +2290,12 @@ module diaglib
 !
 !   variables for orthogonalization
 !
-    real(dp),    allocatable :: xu(:,:), qr(:,:), v(:,:), metric(:,:), msave(:,:), yv(:,:)
-    integer(dp), allocatable :: ipiv(:)
-    logical, allocatable  :: done_lu(:)
-    real(dp)              :: yv_norm, tol_ortho_lu, alpha, unorm, shift_lu
-    logical               :: not_orthogonal, use_qr, micro_done, ok_lu
-    integer               :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
+    real(dp),    allocatable  :: xu(:,:), qr(:,:), v(:,:), metric(:,:), msave(:,:), vy(:,:)
+    integer(dp), allocatable  :: ipiv(:)
+    logical, allocatable      :: done_lu(:)
+    real(dp)                  :: vy_norm, tol_ortho_lu, alpha, unorm, shift_lu
+    logical                   :: not_orthogonal, use_qr, micro_done, ok_lu
+    integer                   :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
 !   external functions:
 !   ===================
@@ -2337,7 +2337,7 @@ module diaglib
 !
     allocate (done_lu(2))
     allocate (xu(lda,n_max))
-    allocate (yv(n_max,lda))
+    allocate (vy(lda,n_max))
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -2402,7 +2402,7 @@ module diaglib
     n_rst = 0
     do it = 1, max_iter
 !
-!   A cute header
+!     header
 !
       print *
 1000 format(20("="),/,t3,'Iteration',i3,/,20("="))
@@ -2435,16 +2435,13 @@ module diaglib
 !
 !     update the reduced matrix
 !
-!fl
-!     is this really needed? arent ared_r and ared_l just one the transpose of the other?
-!
       call dgemm('t','n',ldu,n,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
-      call dgemm('t','n',ldu,n,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
+!     call dgemm('t','n',ldu,n,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
 !      
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
 !
-      if(restart) then !handle for right and left space!
+      if(restart) then !TODO handle for right and left space!
         do i_eig = 1, n_rst
           !a_red_r(i_eig,i_eig) = e_red_re(i_eig)
           !a_red_l(i_eig,i_eig) = e_red_l(i_eig)
@@ -2453,14 +2450,14 @@ module diaglib
         n_rst   = 0
       end if
       a_copy_r = a_red_r
-      a_copy_l = a_red_l
+      !a_copy_l = a_red_l
 !
       print *
       print *, "print reduced spaces a_r, a_l:"
       call printMatrix(ldu,ldu,a_copy_r,lda)
       print *
-      call printMatrix(ldu,ldu,a_red_l,lda)
-      print *
+      !call printMatrix(ldu,ldu,a_red_l,lda)
+      !print *
 !
 !     diagonalize the reduced matrix
 !
@@ -2479,7 +2476,7 @@ module diaglib
       end if
 !
       if (dnrm2(ldu,e_red_im,1).gt.1.e-12_dp) then
-        print *, "eigenvalues of reduced space contain complex contribution"
+        print *, "eigenvalues of reduced space encounter complex contribution"
         print *, e_red_re
         print *, e_red_im
         print *
@@ -2589,7 +2586,7 @@ module diaglib
         exit
       end if
 !     
-!     check weather and update is required.
+!     check weather an update is required.
 !     if not, perform a davidson restart
 !
       if (m_dim .lt. dim_dav) then 
@@ -2632,7 +2629,7 @@ module diaglib
           print *, "lu before conditioning"
           print*
 !
-          ok_lu = .true.
+          !ok_lu = .false.
           !call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
           if (.not. ok_lu) then
@@ -2692,8 +2689,6 @@ module diaglib
           call get_time(t2)
           t_ortho = t_ortho + t2 - t1
 !
-          write(6,*) 'use_qr = ', use_qr
-          write(6,*) 'symmetric = ', symmetric
           if (use_qr) then
 !
 !         orthogonalize the residuals of both spaces with Lapack routine
@@ -2740,6 +2735,7 @@ module diaglib
             print *, "ortho_lu:"
             print *
             print *
+            ok_lu = .false.
 !
             call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
@@ -2758,19 +2754,19 @@ module diaglib
 !
 !         check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
-          call dgemm('t','n',n_max,ldu,n,one,space_r(1,i_beg),n,space_l,n,zero,yv,n_max)
-          yv_norm = dnrm2(n_max,yv,1)
-          if (yv_norm.le.tol_ortho_lu) done_lu(1) = .true. 
+          call dgemm('t','n',ldu,n_max,n,one,space_l,n,space_r(1,i_beg),n,zero,vy,lda)
+          vy_norm = dnrm2(ldu,vy,1)
+          if (vy_norm.le.tol_ortho_lu) done_lu(1) = .true. 
 !
           print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
-          print*, "y_r^t to V_l ", yv_norm
+          print*, "V_l^t to y_r ", vy_norm
           print *
 !
-          call dgemm('t','n',n_max,ldu,n,one,space_l(1,i_beg),n,space_r,n,zero,yv,n_max)
-          yv_norm = dnrm2(n_max,yv,1)
-          if (yv_norm.le.tol_ortho_lu) done_lu(2) = .true. 
+          call dgemm('t','n',ldu,n_max,n,one,space_r,n,space_l(1,i_beg),n,zero,vy,lda)
+          vy_norm = dnrm2(ldu,vy,1)
+          if (vy_norm.le.tol_ortho_lu) done_lu(2) = .true. 
 !
-          print*, "y_l^t to V_r ", yv_norm
+          print*, "V_r^t to y_l ", vy_norm
           print *
 !
           if (all(done_lu)) then
@@ -2855,7 +2851,7 @@ module diaglib
       !if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
 !
-    !deallocate (yv)
+    !deallocate (vy)
     !deallocate (xu)
 !
   end subroutine nonsym_driver
@@ -3384,7 +3380,7 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
     integer             :: it, it_micro
     real(dp)            :: error, dnrm2, alpha, unorm, shift
     logical             :: macro_done, micro_done, direct_solv
-    real(dp), parameter :: tol_ortho_lu = two * epsilon(one)
+    real(dp), parameter :: tol_ortho_lu = 1.d-14 !two * epsilon(one)
     integer,  parameter :: maxit = 10
 !
 !   local scratch:
@@ -3520,6 +3516,8 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
 !
       metric = metric - identity
       error = dnrm2(m,metric,1)
+      print*
+      print *, "error", error, error .lt. tol_ortho_lu
       macro_done = error .lt. tol_ortho_lu
 !
       print*, "print L^T*R overlap - I (residual overlap)"

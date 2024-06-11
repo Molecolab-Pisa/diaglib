@@ -11,7 +11,7 @@ program main
 !
 ! initialize:
 !
-  n      = 15
+  n      = 20
   n_want = 2
   tol    = 1.0e-10_dp
   itmax  = 100
@@ -108,7 +108,7 @@ end program main
 !
     nmult = nmult + m
     do icol = 1, m
-      ax(:,icol) = matmul(x(:,icol), a)
+      ax(:,icol) = matmul(transpose(a),x(:,icol))
     end do
     return
   end subroutine mmult_l
@@ -918,14 +918,14 @@ end program main
 !
     integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig, use_mat
     integer, allocatable        :: seed(:)
-    real(dp)                    ::  lw(1), zero, one, low, up
+    real(dp)                    :: lw(1), zero, one, low, up
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
     logical                     :: symmetric
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 2
+    use_mat   = 3
     low       = 0
     up        = 1.d-1
     symmetric = .false.
@@ -1080,7 +1080,7 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,1.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
+  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
 !
   end subroutine test_nonsym
 !
