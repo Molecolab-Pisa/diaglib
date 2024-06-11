@@ -12,7 +12,7 @@ program main
 ! initialize:
 !
   n      = 1000
-  n_want = 10
+  n_want = 100
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 10
@@ -309,16 +309,14 @@ end program main
 !
 !     here we want to compute sigma_re+ = (A+B)re*Vre+ - (A-B)im*Vim+
 !
-      do icol = 1, m
-        y(:,icol) = matmul(apbre,x1(:,icol)) - matmul(ambim,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,apbre,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,-1.0_dp,ambim,n,x2,n,1.0_dp,y,n)
     else if (reim.eq.1) then
 !
 !     here we want to compute sigma_im+ = (A+B)im*Vre+ - (A-B)re*Vim+
 !
-      do icol = 1, m
-        y(:,icol) = matmul(apbim,x1(:,icol)) + matmul(ambre,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,apbim,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,1.0_dp,ambre,n,x2,n,1.0_dp,y,n)
     else
       write(6,*) 'invalid entry: first position of apbvec_complex subroutine must be either 0 or 1'
     end if
@@ -341,16 +339,14 @@ end program main
 !
 !     here we want to compute sigma_re- = (A-B)re*Vre- - (A+B)im*Vim-
 !
-      do icol = 1, m
-        y(:,icol) = matmul(ambre,x1(:,icol)) - matmul(apbim,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,ambre,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,-1.0_dp,apbim,n,x2,n,1.0_dp,y,n)
     else if (reim.eq.1) then
 !
 !     here we want to compute sigma_im- = (A-B)im*Vre- + (A+B)re*Vim-
 !
-      do icol = 1, m
-        y(:,icol) = matmul(ambim,x1(:,icol)) + matmul(apbre,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,ambim,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,1.0_dp,apbre,n,x2,n,1.0_dp,y,n)
     else
       write(6,*) 'invalid entry: first position of ambvec_complex subroutine must be either 0 or 1'
     end if
@@ -373,16 +369,14 @@ end program main
 !
 !     here we want to compute tau_re- = (SIG + DEL)re*Vre+ - (SIG - DEL)im*Vim+
 !
-      do icol = 1, m
-        y(:,icol) = matmul(spdre,x1(:,icol)) - matmul(smdim,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,spdre,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,-1.0_dp,smdim,n,x2,n,1.0_dp,y,n)
     else if (reim.eq.1) then
 !
 !     here we want to compute tau_im- = (SIG + DEL)im*Vre+ + (SIG - DEL)re*Vim+
 !
-      do icol = 1, m
-        y(:,icol) = matmul(spdim,x1(:,icol)) + matmul(smdre,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,spdim,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,1.0_dp,smdre,n,x2,n,1.0_dp,y,n)
     else
       write(6,*) 'invalid entry: first position of spdvec_complex subroutine must be either 0 or 1'
     end if
@@ -405,16 +399,14 @@ end program main
 !
 !     here we want to compute tau_re+ = (SIG - DEL)re*Vre- - (SIG + DEL)im*Vim-
 !
-      do icol = 1, m
-        y(:,icol) = matmul(smdre,x1(:,icol)) - matmul(spdim,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,smdre,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,-1.0_dp,spdim,n,x2,n,1.0_dp,y,n)
     else if (reim.eq.1) then
 !
 !     here we want to compute tau_im+ = (SIG - DEL)im*Vre- + (SIG + DEL)re*Vim-
 !
-      do icol = 1, m
-        y(:,icol) = matmul(smdim,x1(:,icol)) + matmul(spdre,x2(:,icol))
-      end do
+      call dgemm('n','n',n,m,n,1.0_dp,smdim,n,x1,n,0.0_dp,y,n)
+      call dgemm('n','n',n,m,n,1.0_dp,spdre,n,x2,n,1.0_dp,y,n)
     else
       write(6,*) 'invalid entry: first position of smdvec_complex subroutine must be either 0 or 1'
     end if
@@ -1234,7 +1226,7 @@ end program main
       end do 
     end do
     do i = 1, n
-      sigmare(i,i) = sigmare(i,i) + 5.0_dp
+      sigmare(i,i) = sigmare(i,i) + 10.0_dp
     end do
 !  
 !   build antisymmetric delta:
@@ -1390,7 +1382,7 @@ end program main
 !
 !   make a guess for the eigenvector 
 !
-    call guess_evec(1,n4,n_eig,diagonal,evec)
+    call guess_evec(3,n4,n_eig,diagonal,evec)
 !
 !   evec structure: X = (Yr Zr Yi -Zi) 
 !
@@ -1430,7 +1422,7 @@ end program main
 !
 !   make a guess for the eigenvector
 !
-    call guess_evec(1,n4,n_eig,diagonal,evec)
+    call guess_evec(3,n4,n_eig,diagonal,evec)
 !
 !   evec structure: X = (Yr Zr Yi -Zi) 
 !

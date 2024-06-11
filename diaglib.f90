@@ -1220,11 +1220,11 @@ module diaglib
 !     real 
       vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
       vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-      vpre(:,i_eig+1) = (+evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-      vmre(:,i_eig+1) = (+evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vpre(:,i_eig+1) = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vmre(:,i_eig+1) = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
 !     imaginary 
-      vpim(:,i_eig)   = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-      vmim(:,i_eig)   = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
+      vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
+      vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
       vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
       vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
     end do
@@ -1374,15 +1374,22 @@ module diaglib
         r_norm(1,i_eig) = sqrt(dot_product(rpre(:,i_eig),rpre(:,i_eig)) + &
                                dot_product(rmre(:,i_eig),rmre(:,i_eig)) + &
                                dot_product(rpim(:,i_eig),rpim(:,i_eig)) + &
-                               dot_product(rmim(:,i_eig),rmim(:,i_eig)))/sqrt2n
+                               dot_product(rmim(:,i_eig),rmim(:,i_eig)))/(sqrt(two)*sqrt2n)
         r_norm(2,i_eig) = maxval(abs(rpre(:,i_eig) + rmre(:,i_eig) + & 
-                                     rpim(:,i_eig) + rmim(:,i_eig)))
+                                     rpim(:,i_eig) + rmim(:,i_eig)))/sqrt(two)
       end do
+      !tnwrite(6,*) 'RESIDUAL OLSEN'
+      !tndo i_eig = 1, n_max
+      !tn  write(6,'(2a20)') 'R+re'//'R+im', 'R-re'//'R-im' 
+      !tn  do i = 1, n
+      !tn    write(6,'(2f20.10)') rpre(i,i_eig)+rmre(i,i_eig), rpim(i,i_eig)+rmim(i,i_eig)
+      !tn  end do
+      !tnend do
 !
 !     check convergence. lock the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true.
 !
-      do i_eig = 1, n_targ
+      do i_eig = 1, n_targ, 2
         if (done(i_eig)) cycle
         done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
                           r_norm(2,i_eig).lt.tol_max .and. &
@@ -2154,7 +2161,7 @@ end subroutine caslr_eff_driver
 !
     integer               :: it, i_eig
 !
-    real(dp)              :: sqrtn, sqrt2n, tol_rms, tol_max
+    real(dp)              :: sqrtn, sqrt2n, tol_rms, tol_max, fac
 !
 !   arrays to control convergence and orthogonalization
 !
@@ -2168,10 +2175,6 @@ end subroutine caslr_eff_driver
 !   imaginary
     real(dp), allocatable :: vpim(:,:), vmim(:,:), lvpim(:,:), lvmim(:,:), bvpim(:,:), bvmim(:,:)
     real(dp), allocatable :: rpim(:,:), rmim(:,:), rrim(:,:)
-!
-!   debug
-!
-    real(dp), allocatable :: vpp(:,:), vmm(:,:), lvpp(:,:), lvmm(:,:) 
 !
 !   eigenvectors of the reduced problem and components of the ritz vectors:
 !
@@ -2265,15 +2268,16 @@ end subroutine caslr_eff_driver
     smat    = zero
     ok      = .false.
     done    = .false.
-!
-!   debug
-!
-    vpp = zero
-    vmm = zero
 !    
     call get_time(t_tot)
 !
 !   move the guess into the expansion space.
+!
+!
+!   keep in mind that: X_eig   = (Yr  Zr  Yi -Zi)
+!                      X_eig+1 = (-Yi Zi Yr Zr)
+!                      evecre  = (Yr Zr), (-Yi Zi)
+!                      evecim  = (Yi -Zi), (Yr Zr) 
 !
     do i_eig = 1, n_max, 2
 !     real 
@@ -2357,8 +2361,6 @@ end subroutine caslr_eff_driver
 !
       call get_time(t1)
       call dsyev('v','u',ldu,s_copy,lda,e_red,work,lwork,info)
-      call get_time(t2)
-      t_diag = t_diag + t2 - t1
 !
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
@@ -2371,11 +2373,15 @@ end subroutine caslr_eff_driver
 !     compute the u_- eigenvectors:
 !
       call dgemm('n','n',ldu,n_max,ldu,one,s_red,lda,up,lda,zero,um,lda)
+!
       do i_eig = 1, n_max
         um(1:ldu,i_eig) = um(1:ldu,i_eig)/eig(i_eig)
       end do
 !
-!     asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
+!
+!     assemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
 !
 !     real part 
 !
@@ -2390,6 +2396,9 @@ end subroutine caslr_eff_driver
 !     assemble the current approximation to the eigenvectors
 !
       do i_eig = 1, n_max
+!
+!       being the evec defined as Xeig   = (Yr Zr Yi -Zi)
+!
         evecre(1:n,i_eig)    =  eigpre(:,i_eig) + eigmre(:,i_eig)   !Yre
         evecre(n+1:n2,i_eig) =  eigpre(:,i_eig) - eigmre(:,i_eig)   !Zre
         evecim(1:n,i_eig)    =  eigpim(:,i_eig) + eigmim(:,i_eig)   !Yim
@@ -2431,15 +2440,15 @@ end subroutine caslr_eff_driver
         r_norm(1,i_eig) = sqrt(dot_product(rpre(:,i_eig),rpre(:,i_eig)) + &
                                dot_product(rmre(:,i_eig),rmre(:,i_eig)) + &
                                dot_product(rpim(:,i_eig),rpim(:,i_eig)) + &
-                               dot_product(rmim(:,i_eig),rmim(:,i_eig)))/sqrt2n
+                               dot_product(rmim(:,i_eig),rmim(:,i_eig)))/(eig(i_eig)*two*sqrt2n)
         r_norm(2,i_eig) = maxval(abs(rpre(:,i_eig) + rmre(:,i_eig) + & 
-                                     rpim(:,i_eig) + rmim(:,i_eig)))
+                                     rpim(:,i_eig) + rmim(:,i_eig)))/(eig(i_eig)*two)
       end do
 !
 !     check convergence. lock the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true.
 !
-      do i_eig = 1, n_targ
+      do i_eig = 1, n_targ, 2
         if (done(i_eig)) cycle
         done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
                           r_norm(2,i_eig).lt.tol_max .and. &
@@ -2448,8 +2457,8 @@ end subroutine caslr_eff_driver
                           r_norm(2,i_eig+1).lt.tol_max .and. &
                           it.gt.1
 !                  
-!     check coupled-eigenvalues convergece: if one eigval from the same couple
-!     is false, both need to be put false (even if the other was .true.)
+!       check coupled-eigenvalues convergece: if one eigval from the same couple
+!       is false, both need to be put false (even if the other was .true.)
 !
         if (done(i_eig) .neqv. done(i_eig+1)) then 
           done(i_eig)   = .false.
@@ -2464,18 +2473,18 @@ end subroutine caslr_eff_driver
 !     print some information:
 !
       if (verbose) then
-      do i_eig = 1, n_targ
-        write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
-      end do
-      write(6,*) 
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, one/eig(i_eig), r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
       end if
 !
       if (all(done(1:n_targ))) then
-      ok = .true.
-      do i_eig = 1, n_targ
-        eig(i_eig) = one/eig(i_eig)
-      end do
-      exit
+        ok = .true.
+        do i_eig = 1, n_targ
+          eig(i_eig) = one/eig(i_eig)
+        end do
+        exit
       end if
 !
 !     check whether an update is required. 
@@ -2517,21 +2526,47 @@ end subroutine caslr_eff_driver
         call get_time(t1)
 !       
         call b_ortho_vs_x_complex(n,ldu,n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg),vpim(1,i_beg))
+!        
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
 !
+        call get_time(t1)
+!        
         call apbmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg))
         call apbmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpim(1,i_beg))
-!       
+!        
+        call get_time(t2)
+        t_mv = t_mv + t2 - t1
+!        
+        call get_time(t1) 
+!        
         call b_ortho_complex(n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg),lvpim(1,i_beg))
 !        
+        call get_time(t2)
+        t_diag = t_diag + t2 - t1
+!        
+        call get_time(t1) 
+!       
         call b_ortho_vs_x_complex(n,ldu,n_act,vmre,vmim,lvmre,lvmim,vmre(1,i_beg),vmim(1,i_beg))
+!        
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+!        
+        call get_time(t1) 
 !        
         call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))
         call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))
 !        
+        call get_time(t2)
+        t_mv = t_mv + t2 - t1
+!        
+        call get_time(t1) 
+!        
         call b_ortho_complex(n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg),lvmim(1,i_beg))
 !        
         call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
+        t_diag = t_diag + t2 - t1
+!        
       else
 !
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
@@ -2588,8 +2623,6 @@ end subroutine caslr_eff_driver
         bvpim   = zero
         bvmim   = zero
         s_red   = zero
-        smatre  = zero
-        smatim  = zero
         smat    = zero
 !        
       end if
@@ -3648,11 +3681,13 @@ end subroutine caslr_eff_driver
 !
 !     TODO
       call dgemm('n','n',n,m,m,one,ur,n,metric,m,zero,temp,n)
-      call dgemm('n','n',n,m,m,one,ui,n,metric,m,one,temp,n)
       ur = temp
+      call dgemm('n','n',n,m,m,one,ui,n,metric,m,zero,temp,n)
+      ui = temp
       call dgemm('n','n',n,m,m,one,bur,n,metric,m,zero,temp,n)
-      call dgemm('n','n',n,m,m,one,bui,n,metric,m,one,temp,n)
       bur = temp
+      call dgemm('n','n',n,m,m,one,bui,n,metric,m,zero,temp,n)
+      bui = temp
 !
       deallocate (sigma, u_svd, vt_svd, temp)
     else
