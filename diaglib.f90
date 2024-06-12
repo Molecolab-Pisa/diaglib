@@ -2338,6 +2338,7 @@ module diaglib
     allocate (done_lu(2))
     allocate (xu(lda,n_max))
     allocate (vy(lda,n_max))
+    allocate (qr(n,lda))
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -2359,6 +2360,8 @@ module diaglib
     a_red_r   = zero
     a_red_l   = zero
     done      = .false.
+    use_qr    = .true.
+    ok_lu     = .true.
 !
     call get_time(t_tot)
 !
@@ -2456,6 +2459,8 @@ module diaglib
       print *, "print reduced spaces a_r, a_l:"
       call printMatrix(ldu,ldu,a_copy_r,lda)
       print *
+      call printPythonMat(ldu,ldu,a_copy_r,lda)
+      print *
       !call printMatrix(ldu,ldu,a_red_l,lda)
       !print *
 !
@@ -2497,10 +2502,20 @@ module diaglib
 !
       call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
 !
-      print *, "evec r + l after sort"
+      print *, "evec r + l after sort + eigenvecs"
       call printMatrix(ldu,ldu,evec_red_r,lda)
       print *
       call printMatrix(ldu,ldu,evec_red_l,lda)
+      print *
+      call printVector(e_red_re,ldu)
+!
+!     double check x_l^t  a  x_r = eig
+! 
+      call dgemm('n','n',ldu,ldu,ldu,one,a_red_r,lda,evec_red_r,lda,zero,a_copy_r,lda)
+      call dgemm('t','n',ldu,ldu,ldu,one,evec_red_l,lda,a_copy_r,lda,zero,a_copy_l,lda)
+      print*
+      print *, "double check x_l^t a x_r"
+      call printMatrix(ldu,ldu,a_copy_l,lda)
 !
 !     extract the eigenvalues and compute the ritz approximation to the 
 !     eigenvectors
@@ -2574,6 +2589,7 @@ module diaglib
 !
 !     print some information
 !
+      print *, "interim info"
       if (verbose) then
         do i_eig = 1, n_targ
           write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_r(:,i_eig), done(i_eig)
@@ -2627,8 +2643,8 @@ module diaglib
 !
 !         start with initial orthogonalization to improve conditioning.
 !
-          print *, "lu before conditioning"
-          print*
+!          print *, "lu before conditioning"
+!          print*
 !
           !ok_lu = .false.
           !call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
@@ -2648,163 +2664,219 @@ module diaglib
 !
 !       Gram-Schmit orthogonalization of residual to the respective subspace 
 !
-        max_orth = 10
-        max_GS   = 1
-        use_qr   = .false.
-        done_lu  = .false.
+          max_orth = 10
+          max_GS   = 1
+          done_lu  = .false.
 !
 !
-        do k=1, max_orth
-!
-          call ortho_vs_x(n,ldu,n_act,space_l,space_r(1,i_beg),xx,xx)
-          call ortho_vs_x(n,ldu,n_act,space_r,space_l(1,i_beg),xx,xx)
-!
-          !fldo i = 1, max_GS
-          !fl  print*, "GS:"
-          !fl  xu=zero
-          !fl  call dgemm('t','n',ldu,n_act,n,one,space_l,n,space_r(1,i_beg),n,zero,xu,ldu)
-          !fl  call dgemm('n','n',n,n_act,ldu,-one,space_l,n,xu,ldu,one,space_r(1,i_beg),n)
-!
-          !fl  call dgemm('t','n',ldu,n_act,n,one,space_r,n,space_l(1,i_beg),n,zero,xu,ldu)
-          !fl  call dgemm('n','n',n,n_act,ldu,-one,space_r,n,xu,ldu,one,space_l(1,i_beg),n)
-!
-!         !fl  check its norm, check if orthogonal and print out the projection
-!
-          print *, "projection it:", k
-          call printMatrix(n,ldu+n_max,space_r,n)
-          print*
-          !not_orthogonal = .false.
-          !call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
-          !  space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
-          print * 
-          call printMatrix(n,ldu+n_max,space_l,n)
-          print*
-          !call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
-          !  space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
-          print *
-!         if (.not. not_orthogonal) exit
-!         if (i.eq.max_GS) then
-!           print *, "GS Orthogonalization failed."
-!           stop
-!         end if
-          !flend do 
-!
-          call get_time(t2)
-          t_ortho = t_ortho + t2 - t1
-!
-          if (use_qr) then
-!
-!         orthogonalize the residuals of both spaces with Lapack routine
+          do k=1, max_orth
 !
 !
-          !  qr_dim = 2*n_max
-          !  allocate (qr(n, qr_dim))
-          !  allocate (v(n, qr_dim))
+            if (.not. use_qr) then
+              call ortho_vs_x(n,ldu,n_act,space_l,space_r(1,i_beg),xx,xx)
+              call ortho_vs_x(n,ldu,n_act,space_r,space_l(1,i_beg),xx,xx)
+            else
 !
-!         !  move residuals of left and right space in one space for QR orthogonalization
+!             try implementation with QR
 !
-          !  qr(:,1:n_max)             = space_r(:,i_beg:i_beg+n_max-1) 
-          !  qr(:,n_max+1:qr_dim)      = space_l(:,i_beg:i_beg+n_max-1) 
+              qr_dim = ldu+n_max
+              print*, "try qr orthogonalization"
 !
-!         !  orthogonalization with qr routine
+!             move old vectors l and new Vectors r in qr space
 !
-          !  call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
-          !  print *, info
-          !  call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
-          !  !call dtrsm('r','u','n','n',n,qr_dim,one,qr,n,v,n)
-          !  !qr = v
+              call dcopy(n*ldu,space_l,1,qr,1)
+              call dcopy(n*n_max,space_r(1,i_beg),1,qr(1,i_beg),1)
+              call printMatrix(n,ldu,qr,n)
+!    
+!             do for V_l and y_r
 !
-!         !  print result from the orthogonalization of the two residuals
+              call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
+              print *, info
+              call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
 !
-          !  print *, "result orthogonalized preconditions with QR" 
-          !  call printMatrix(qr, n, 2*n_max)
-          !  print *, info
-          !  print *
-          !  not_orthogonal = .false.
-          !  call checkOrth1mat(qr,n, qr_dim, "QR space", 1.d-14, not_orthogonal, .true.) 
-          !  print *
+!             move back
 !
-!         !  move result back in expansion space
+              call dcopy(n*ldu,qr,1,space_l,1)
+              call dcopy(n*n_max,qr(1,i_beg),1,space_r(1,i_beg),1)
 !
-          !  space_r(:,i_beg:i_beg+n_max-1) =qr(:,1:n_max)      
-          !  space_l(:,i_beg:i_beg+n_max-1) = qr(:,n_max+1:qr_dim)  
+!             move old vectors l and new Vectors r in qr space
 !
-!         !  check if spaces are orthogonol with them selfes
+              call dcopy(n*ldu,space_r,1,qr,1)
+              call dcopy(n*n_max,space_l(1,i_beg),1,qr(1,i_beg),1)
+              call printMatrix(n,ldu,qr,n)
+!    
+!             do for V_l and y_r
 !
-          !  deallocate (qr)
+              call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
+              print *, info
+              call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
 !
-          else if (.not. symmetric) then
+!             move back
 !
-            print *, "ortho_lu:"
+              call dcopy(n*ldu,qr,1,space_r,1)
+              call dcopy(n*n_max,qr(1,i_beg),1,space_l(1,i_beg),1)
+!
+!             check if matrices are orthogonal with each other
+!
+              call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+               space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+              call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+               space_l,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+!
+!             check if matrices are orthogonal with themselfes
+!
+              call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"residual l",1.d-14,not_orthogonal,.true.)
+              call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"residual r",1.d-14,not_orthogonal,.true.)
+              call checkOrth1mat(space_l,n,ldu,"residual l",1.d-14,not_orthogonal,.true.)
+              call checkOrth1mat(space_l,n,ldu,"residual l",1.d-14,not_orthogonal,.true.)
+!
+            end if
+!
+            !fldo i = 1, max_GS
+            !fl  print*, "GS:"
+            !fl  xu=zero
+            !fl  call dgemm('t','n',ldu,n_act,n,one,space_l,n,space_r(1,i_beg),n,zero,xu,ldu)
+            !fl  call dgemm('n','n',n,n_act,ldu,-one,space_l,n,xu,ldu,one,space_r(1,i_beg),n)
+!
+            !fl  call dgemm('t','n',ldu,n_act,n,one,space_r,n,space_l(1,i_beg),n,zero,xu,ldu)
+            !fl  call dgemm('n','n',n,n_act,ldu,-one,space_r,n,xu,ldu,one,space_l(1,i_beg),n)
+!
+!           !fl  check its norm, check if orthogonal and print out the projection
+!
+            print *, "projection it:", k
+            call printMatrix(n,ldu+n_max,space_r,n)
+            print*
+            !not_orthogonal = .false.
+            !call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
+            !  space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
+            print * 
+            call printMatrix(n,ldu+n_max,space_l,n)
+            print*
+            !call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+            !  space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
             print *
+!           if (.not. not_orthogonal) exit
+!           if (i.eq.max_GS) then
+!             print *, "GS Orthogonalization failed."
+!             stop
+!           end if
+            !flend do 
+!
+            call get_time(t2)
+            t_ortho = t_ortho + t2 - t1
+!
+!            if (use_qr) then
+!
+!           orthogonalize the residuals of both spaces with Lapack routine
+!
+!
+            !  qr_dim = 2*n_max
+            !  allocate (qr(n, qr_dim))
+            !  allocate (v(n, qr_dim))
+!
+!           !  move residuals of left and right space in one space for QR orthogonalization
+!
+            !  qr(:,1:n_max)             = space_r(:,i_beg:i_beg+n_max-1) 
+            !  qr(:,n_max+1:qr_dim)      = space_l(:,i_beg:i_beg+n_max-1) 
+!
+!           !  orthogonalization with qr routine
+!
+            !  call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
+            !  print *, info
+            !  call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
+            !  !call dtrsm('r','u','n','n',n,qr_dim,one,qr,n,v,n)
+            !  !qr = v
+!
+!           !  print result from the orthogonalization of the two residuals
+!
+            !  print *, "result orthogonalized preconditions with QR" 
+            !  call printMatrix(qr, n, 2*n_max)
+            !  print *, info
+            !  print *
+            !  not_orthogonal = .false.
+            !  call checkOrth1mat(qr,n, qr_dim, "QR space", 1.d-14, not_orthogonal, .true.) 
+            !  print *
+!
+!           !  move result back in expansion space
+!
+            !  space_r(:,i_beg:i_beg+n_max-1) =qr(:,1:n_max)      
+            !  space_l(:,i_beg:i_beg+n_max-1) = qr(:,n_max+1:qr_dim)  
+!
+!           !  check if spaces are orthogonol with them selfes
+!
+            !  deallocate (qr)
+!
+            if (.not. symmetric) then
+!
+              print *, "ortho_lu:"
+              print *
+              print *
+              ok_lu = .false.
+!
+              call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
+!
+              if (.not. ok_lu) then
+                print *, 'abort due to failure in the ortho_lu'
+                stop
+              end if
+            end if
+!
+!         if symmetric matrix is passed, orthogonalize new vectors with each other
+!
+            if (.false.) then
+!
+              if (n_act.le.2) then
+                call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+                call checkInfo(info, "error in dgeqrf")
+!
+                call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+                call checkInfo(info, "error in dorqr") 
+!
+                call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+                call checkInfo(info, "error in dgeqrf")
+!
+                call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+                call checkInfo(info, "error in dorqr") 
+                not_orthogonal = .false.
+                call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
+                call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
+              end if
+!
+            print*
+            print *, "biorthogonalized new vectors:"
+            call printMatrix(n,ldu+n_max,space_r,n)
             print *
-            ok_lu = .false.
+            call printMatrix(n,ldu+n_max,space_l,n)
+            print*
 !
-            call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
+            end if
 !
-            if (.not. ok_lu) then
-              print *, 'abort due to failure in the ortho_lu'
+!           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
+!
+            call dgemm('t','n',ldu,n_max,n,one,space_l,n,space_r(1,i_beg),n,zero,vy,lda)
+            vy_norm = dnrm2(ldu,vy,1)
+            if (vy_norm.le.tol_ortho_lu) done_lu(1) = .true. 
+!
+            print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
+            print*, "V_l^t to y_r ", vy_norm
+            print *
+!
+            call dgemm('t','n',ldu,n_max,n,one,space_r,n,space_l(1,i_beg),n,zero,vy,lda)
+            vy_norm = dnrm2(ldu,vy,1)
+            if (vy_norm.le.tol_ortho_lu) done_lu(2) = .true. 
+!
+            print*, "V_r^t to y_l ", vy_norm
+            print *
+!
+            if (all(done_lu)) then
+              exit
+            end if 
+            if (k .eq. max_orth) then
+              print *, "Orthogonalization loop with ortho_vs_x and ortho_lu reached maximum."
               stop
             end if
-          end if
-!
-!       if symmetric matrix is passed, orthogonalize new vectors with each other
-!
-          if (.false.) then
-!
-            if (n_act.le.2) then
-              call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-              call checkInfo(info, "error in dgeqrf")
-!
-              call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-              call checkInfo(info, "error in dorqr") 
-!
-              call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-              call checkInfo(info, "error in dgeqrf")
-!
-              call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-              call checkInfo(info, "error in dorqr") 
-              not_orthogonal = .false.
-              call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
-              call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
-            end if
-!
-          print*
-          print *, "biorthogonalized new vectors:"
-          call printMatrix(n,ldu+n_max,space_r,n)
-          print *
-          call printMatrix(n,ldu+n_max,space_l,n)
-          print*
-!
-          end if
-!
-!         check norm of the overlap ||y_l^t * V_r|| < t and vice versa
-!
-          call dgemm('t','n',ldu,n_max,n,one,space_l,n,space_r(1,i_beg),n,zero,vy,lda)
-          vy_norm = dnrm2(ldu,vy,1)
-          if (vy_norm.le.tol_ortho_lu) done_lu(1) = .true. 
-!
-          print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
-          print*, "V_l^t to y_r ", vy_norm
-          print *
-!
-          call dgemm('t','n',ldu,n_max,n,one,space_r,n,space_l(1,i_beg),n,zero,vy,lda)
-          vy_norm = dnrm2(ldu,vy,1)
-          if (vy_norm.le.tol_ortho_lu) done_lu(2) = .true. 
-!
-          print*, "V_r^t to y_l ", vy_norm
-          print *
-!
-          if (all(done_lu)) then
-            exit
-          end if 
-          if (k .eq. max_orth) then
-            print *, "Orthogonalization loop with ortho_vs_x and ortho_lu reached maximum."
-            stop
-          end if
-!          
-        end do
-!
+!            
+          end do
 !
 !       normalize columns 
 !
@@ -2964,26 +3036,25 @@ module diaglib
 !
   end subroutine printVector
 !
-  subroutine printPythonMat(mat,n,m)
+  subroutine printPythonMat(n,m,a,lda)
 !   
 ! print formatted matrix
 !
-    real(dp), intent(in)  :: mat(:,:)
-    integer , intent(in)  :: n, m
+    integer , intent(in)  :: n, m, lda
+    real(dp), intent(in)  :: a(lda,m)
 !
     integer :: i,j 
-    character(len=400)  ::  str
+    character(len=4000)  :: str
     character(len=30) :: temp
 !
     str = "mat = np.array(["
     do i = 1, n
       str = trim(str) // ' ' // trim("[")
       do j = 1, m
-        write(temp, '(F14.10)') mat(i,j)
+        write(temp, '(F14.10)') a(i,j)
         str = trim(str) //  ' ' //trim(temp) // trim(',')
       end do
       str = trim(str) // ' ' //  trim("],")
-      print *
     end do
     str = trim(str) // ' ' // trim("])")
     print *, str

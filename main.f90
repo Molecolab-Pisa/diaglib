@@ -925,7 +925,7 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 1
+    use_mat   = 2
     low       = 0
     up        = 1.d-4
     symmetric = .false.
