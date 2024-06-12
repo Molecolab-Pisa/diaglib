@@ -2583,6 +2583,7 @@ module diaglib
 !
       if (all(done(1:n_targ))) then
         ok = .true.
+        print *, "converged =)"
         exit
       end if
 !     
@@ -2654,8 +2655,10 @@ module diaglib
 !
 !
         do k=1, max_orth
+!
           call ortho_vs_x(n,ldu,n_act,space_l,space_r(1,i_beg),xx,xx)
           call ortho_vs_x(n,ldu,n_act,space_r,space_l(1,i_beg),xx,xx)
+!
           !fldo i = 1, max_GS
           !fl  print*, "GS:"
           !fl  xu=zero
@@ -2667,17 +2670,17 @@ module diaglib
 !
 !         !fl  check its norm, check if orthogonal and print out the projection
 !
-          print *, "projection"
+          print *, "projection it:", k
           call printMatrix(n,ldu+n_max,space_r,n)
           print*
-          not_orthogonal = .false.
-          call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
-            space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
+          !not_orthogonal = .false.
+          !call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
+          !  space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
           print * 
           call printMatrix(n,ldu+n_max,space_l,n)
           print*
-          call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
-            space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+          !call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+          !  space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
           print *
 !         if (.not. not_orthogonal) exit
 !         if (i.eq.max_GS) then
@@ -2745,12 +2748,35 @@ module diaglib
             end if
           end if
 !
+!       if symmetric matrix is passed, orthogonalize new vectors with each other
+!
+          if (.false.) then
+!
+            if (n_act.le.2) then
+              call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+              call checkInfo(info, "error in dgeqrf")
+!
+              call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+              call checkInfo(info, "error in dorqr") 
+!
+              call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+              call checkInfo(info, "error in dgeqrf")
+!
+              call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+              call checkInfo(info, "error in dorqr") 
+              not_orthogonal = .false.
+              call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
+              call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
+            end if
+!
           print*
           print *, "biorthogonalized new vectors:"
           call printMatrix(n,ldu+n_max,space_r,n)
           print *
           call printMatrix(n,ldu+n_max,space_l,n)
           print*
+!
+          end if
 !
 !         check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
@@ -2773,32 +2799,12 @@ module diaglib
             exit
           end if 
           if (k .eq. max_orth) then
-            print *, "error of ortho_lu"
+            print *, "Orthogonalization loop with ortho_vs_x and ortho_lu reached maximum."
             stop
           end if
 !          
         end do
 !
-!
-!       if symmetric matrix is passed, orthogonalize new vectors with each other
-!
-        if (symmetric) then
-!
-          if (n_act.le.2) then
-            call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-            call checkInfo(info, "error in dgeqrf")
-!
-            call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-            call checkInfo(info, "error in dorqr") 
-!
-            call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-            call checkInfo(info, "error in dgeqrf")
-!
-            call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-            call checkInfo(info, "error in dorqr") 
-          end if
-!
-        end if
 !
 !       normalize columns 
 !

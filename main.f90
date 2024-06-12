@@ -925,9 +925,9 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 3
+    use_mat   = 1
     low       = 0
-    up        = 1.d-1
+    up        = 1.d-4
     symmetric = .false.
     i_seed    = 123
     zero      = 0.d0
