@@ -2481,7 +2481,7 @@ module diaglib
         print *, e_red_im
         print *
         print *, "program aborts"
-        stop
+        !stop
       end if
 !
 !     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
