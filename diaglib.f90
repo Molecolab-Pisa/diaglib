@@ -147,7 +147,7 @@ module diaglib
 !
 ! convergence thresholds for orthogonalization
 !
-  real(dp), parameter    :: tol_ortho = two * epsilon(one)
+  real(dp), parameter    :: tol_ortho = 1.0d-12 ! two * epsilon(one)
 ! 
 ! memory and info for lapack routines
 !
@@ -2292,10 +2292,12 @@ module diaglib
 !
     real(dp),    allocatable  :: xu(:,:), qr(:,:), v(:,:), metric(:,:), msave(:,:), vy(:,:)
     integer(dp), allocatable  :: ipiv(:)
-    logical, allocatable      :: done_lu(:)
+    logical                   :: done_lu(2)
     real(dp)                  :: vy_norm, tol_ortho_lu, alpha, unorm, shift_lu
     logical                   :: not_orthogonal, use_qr, micro_done, ok_lu
     integer                   :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
+!
+    integer                   :: verbosity
 !
 !   external functions:
 !   ===================
@@ -2307,12 +2309,12 @@ module diaglib
 !   the input makes sense.
 !
     dim_dav =  max(min_dav,max_dav)
-    lda = dim_dav !* n_max
+    lda = dim_dav * n_max 
 !
 !   start by allocating memory for the various lapack routines
 !
-    lwork = get_mem_lapack(n,n_max)
-    allocate (work(lwork), tau(n_max), stat=istat)
+    lwork = get_mem_lapack(n,n_max) 
+    allocate (work(lwork), tau(lda), stat=istat)
     call check_mem(istat)
 !
 !   allocate memory for for expansion space, the corresponding
@@ -2335,7 +2337,6 @@ module diaglib
 !
 !   allocate space for orthogonalization routines
 !
-    allocate (done_lu(2))
     allocate (xu(lda,n_max))
     allocate (vy(lda,n_max))
     allocate (qr(n,lda))
@@ -2360,8 +2361,9 @@ module diaglib
     a_red_r   = zero
     a_red_l   = zero
     done      = .false.
-    use_qr    = .true.
-    ok_lu     = .true.
+    done_lu   = .true. 
+    use_qr    = .false.
+    verbosity = 0
 !
     call get_time(t_tot)
 !
@@ -2407,10 +2409,12 @@ module diaglib
 !
 !     header
 !
-      print *
+      if (verbosity.ge.1) then
+        print *
 1000 format(20("="),/,t3,'Iteration',i3,/,20("="))
-      print 1000, it
-      print*
+        print 1000, it
+        print*
+      end if
 !
 !     update the size of the expansion space.
 !
@@ -2425,16 +2429,18 @@ module diaglib
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
-      print *, "space r+l"
-      call printMatrix(n,ldu,space_r,n)
-      print *
-      call printMatrix(n,ldu,space_l,n)
-      print *
+      if (verbosity.ge.2) then
+        print *, "space r+l"
+        call printMatrix(n,ldu,space_r,n)
+        print *
+        call printMatrix(n,ldu,space_l,n)
+        print *
       !print *, "aspace r+l"
       !call printMatrix(aspace_r, n, lda)
       !print *
       !call printMatrix(aspace_l, n, lda)
       !print *
+      end if
 !
 !     update the reduced matrix
 !
@@ -2444,10 +2450,9 @@ module diaglib
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
 !
-      if(restart) then !TODO handle for right and left space!
+      if(restart) then 
         do i_eig = 1, n_rst
-          !a_red_r(i_eig,i_eig) = e_red_re(i_eig)
-          !a_red_l(i_eig,i_eig) = e_red_l(i_eig)
+          a_red_r(i_eig,i_eig) = e_red_re(i_eig)
         end do
         restart = .false.
         n_rst   = 0
@@ -2455,14 +2460,16 @@ module diaglib
       a_copy_r = a_red_r
       !a_copy_l = a_red_l
 !
-      print *
-      print *, "print reduced spaces a_r, a_l:"
-      call printMatrix(ldu,ldu,a_copy_r,lda)
-      print *
-      call printPythonMat(ldu,ldu,a_copy_r,lda)
-      print *
-      !call printMatrix(ldu,ldu,a_red_l,lda)
-      !print *
+      if (verbosity.ge.1) then
+        print *
+        print *, "print reduced spaces a_r, a_l:"
+        call printMatrix(ldu,ldu,a_copy_r,lda)
+        print *
+        !call printPythonMat(ldu,ldu,a_copy_r,lda)
+        !print *
+        !call printMatrix(ldu,ldu,a_red_l,lda)
+        !print *
+      end if
 !
 !     diagonalize the reduced matrix
 !
@@ -2480,6 +2487,21 @@ module diaglib
         stop
       end if
 !
+!     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
+!
+      if (verbosity.ge.2) then
+        print *, "evec r + l"
+        call printMatrix(ldu,ldu,evec_red_r,lda)
+        print *
+        call printMatrix(ldu,ldu,evec_red_l,lda)
+        print *
+        print*, "eig"
+        call printVector(e_red_re,ldu)
+        print *
+      end if
+!
+      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
+!
       if (dnrm2(ldu,e_red_im,1).gt.1.e-12_dp) then
         print *, "eigenvalues of reduced space encounter complex contribution"
         print *, e_red_re
@@ -2489,33 +2511,26 @@ module diaglib
         !stop
       end if
 !
-!     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
 !
-      print *, "evec r + l"
-      call printMatrix(ldu,ldu,evec_red_r,lda)
-      print *
-      call printMatrix(ldu,ldu,evec_red_l,lda)
-      print *
-      print*, "eig"
-      call printVector(e_red_re,ldu)
-      print *
-!
-      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
-!
-      print *, "evec r + l after sort + eigenvecs"
-      call printMatrix(ldu,ldu,evec_red_r,lda)
-      print *
-      call printMatrix(ldu,ldu,evec_red_l,lda)
-      print *
-      call printVector(e_red_re,ldu)
+      if (verbosity.ge.2) then
+        print *, "evec r + l after sort + eigenvecs"
+        call printMatrix(ldu,ldu,evec_red_r,lda)
+        print *
+        call printMatrix(ldu,ldu,evec_red_l,lda)
+        print *
+        call printVector(e_red_re,ldu)
+      end if
 !
 !     double check x_l^t  a  x_r = eig
 ! 
-      call dgemm('n','n',ldu,ldu,ldu,one,a_red_r,lda,evec_red_r,lda,zero,a_copy_r,lda)
-      call dgemm('t','n',ldu,ldu,ldu,one,evec_red_l,lda,a_copy_r,lda,zero,a_copy_l,lda)
-      print*
-      print *, "double check x_l^t a x_r"
-      call printMatrix(ldu,ldu,a_copy_l,lda)
+      !call dgemm('n','n',ldu,ldu,ldu,one,a_red_r,lda,evec_red_r,lda,zero,a_copy_r,lda)
+      !call dgemm('t','n',ldu,ldu,ldu,one,evec_red_l,lda,a_copy_r,lda,zero,a_copy_l,lda)
+!
+      !if (verbosity.ge.2) then
+      !  print*
+      !  print *, "double check x_l^t a x_r"
+      !  call printMatrix(ldu,ldu,a_copy_l,lda)
+      !end if 
 !
 !     extract the eigenvalues and compute the ritz approximation to the 
 !     eigenvectors
@@ -2525,29 +2540,24 @@ module diaglib
       call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
       call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
 !
-      print *
-      print *, "extracted eigenvals"
-      print *
-      call printVector(eig, n_max)
-      print *
+      if (verbosity.ge.2) then
+        print *
+        print *, "extracted eigenvals"
+        print *
+        call printVector(eig, n_max)
+        print *
 !
-      print *, "ritz"
-      call printMatrix(n,n_max,evec_r,n)
-      print *
-      call printMatrix(n,n_max,evec_l,n)
-      print *
+        print *, "ritz"
+        call printMatrix(n,n_max,evec_r,n)
+        print *
+        call printMatrix(n,n_max,evec_l,n)
+        print *
+      end if
 !
 !     compute the residuals, and their rms and sup norms
 !
       call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
       call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
-!
-!     print * ,'residual prime'
-!     print *
-!     call printMatrix(r_r, n,n_max)
-!     print *
-!     call printMatrix(r_l, n,n_max)
-!     print *
 !
       do i_eig = 1, n_targ
 !
@@ -2564,12 +2574,14 @@ module diaglib
 !
       end do
 !
-      print*
-      print*, "residual right and left"
-      call printMatrix(n,n_max,r_r,n)
-      print*
-      call printMatrix(n,n_max,r_l,n)
-      print*
+      if (verbosity.ge.2) then
+        print*
+        print*, "residual right and left"
+        call printMatrix(n,n_max,r_r,n)
+        print*
+        call printMatrix(n,n_max,r_l,n)
+        print*
+      end if
 !
 !     check convergency. look the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true
@@ -2589,8 +2601,8 @@ module diaglib
 !
 !     print some information
 !
-      print *, "interim info"
       if (verbose) then
+        if (verbosity.ge.1) print *, "interim info"
         do i_eig = 1, n_targ
           write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_r(:,i_eig), done(i_eig)
         end do
@@ -2599,12 +2611,19 @@ module diaglib
 !
       if (all(done(1:n_targ))) then
         ok = .true.
-        print *, "converged =)"
+        if (verbose) print *, "converged =)"
+        print*
         exit
       end if
 !     
 !     check weather an update is required.
 !     if not, perform a davidson restart
+!
+      !print *, "ldu:", ldu
+      !print *, "lda:", lda
+      !print *, "shape (V)", shape(space_l)
+      !print *, "m_dim:", m_dim
+      !print *, "dim_dav", dim_dav
 !
       if (m_dim .lt. dim_dav) then 
 !
@@ -2630,14 +2649,19 @@ module diaglib
         call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
         call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
 !
-        print*
-        print *, "precondition:"
-        print *
-        call printMatrix(n,ldu+n_act,space_r,n)
-        print*
-        print*
-        call printMatrix(n,ldu+n_act,space_l,n)
-        print*
+        if (verbosity.ge.2) then
+          print*
+          print *, "precondition:"
+          print *
+          call printMatrix(n,n_act,space_r(1,i_beg),n)
+          print*
+          print*
+          call printMatrix(n,n_act,space_l(1,i_beg),n)
+          print*
+        end if
+!
+        !call dcopy(n*n_act,r_r(1,ind),1,space_r(1,i_beg),1)
+        !call dcopy(n*n_act,r_l(1,ind),1,space_l(1,i_beg),1)
 !
         if (.not. symmetric) then
 !
@@ -2680,18 +2704,23 @@ module diaglib
 !             try implementation with QR
 !
               qr_dim = ldu+n_max
-              print*, "try qr orthogonalization"
+              if (verbosity.ge.2) then
+                print*, "try qr orthogonalization"
+              end if
 !
 !             move old vectors l and new Vectors r in qr space
 !
               call dcopy(n*ldu,space_l,1,qr,1)
               call dcopy(n*n_max,space_r(1,i_beg),1,qr(1,i_beg),1)
-              call printMatrix(n,ldu,qr,n)
+!
+              !call printMatrix(n,ldu+n_max,qr,n)
+              !print '(4(a6,i5))', 'rqdim:', qr_dim, 'n:', n, 'ldu:', ldu, 'nmax:', n_max
+              !print '(a6,2i5)', 'shape qr:', shape(qr)
+              !pause
 !    
 !             do for V_l and y_r
 !
               call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
-              print *, info
               call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
 !
 !             move back
@@ -2703,12 +2732,11 @@ module diaglib
 !
               call dcopy(n*ldu,space_r,1,qr,1)
               call dcopy(n*n_max,space_l(1,i_beg),1,qr(1,i_beg),1)
-              call printMatrix(n,ldu,qr,n)
+              !call printMatrix(n,ldu+n_max,qr,n)
 !    
 !             do for V_l and y_r
 !
               call dgeqrf(n,qr_dim,qr,n,tau,work,lwork,info)
-              print *, info
               call dorgqr(n,qr_dim,qr_dim,qr,n,tau,work,lwork,info)
 !
 !             move back
@@ -2718,17 +2746,17 @@ module diaglib
 !
 !             check if matrices are orthogonal with each other
 !
-              call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
-               space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
-              call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
-               space_l,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+              !call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+              ! space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
+              !call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
+              ! space_l,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
 !
-!             check if matrices are orthogonal with themselfes
+!             !check if matrices are orthogonal with themselfes
 !
-              call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"residual l",1.d-14,not_orthogonal,.true.)
-              call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"residual r",1.d-14,not_orthogonal,.true.)
-              call checkOrth1mat(space_l,n,ldu,"residual l",1.d-14,not_orthogonal,.true.)
-              call checkOrth1mat(space_l,n,ldu,"residual l",1.d-14,not_orthogonal,.true.)
+              !call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"residual l",1.d-14,not_orthogonal,.true.)
+              !call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"residual r",1.d-14,not_orthogonal,.true.)
+              !call checkOrth1mat(space_l,n,ldu,"residual l",1.d-14,not_orthogonal,.true.)
+              !call checkOrth1mat(space_l,n,ldu,"residual l",1.d-14,not_orthogonal,.true.)
 !
             end if
 !
@@ -2743,18 +2771,23 @@ module diaglib
 !
 !           !fl  check its norm, check if orthogonal and print out the projection
 !
-            print *, "projection it:", k
-            call printMatrix(n,ldu+n_max,space_r,n)
-            print*
+            if (verbosity.ge.2) then
+              print *, "projection it:", k
+              call printMatrix(n,ldu+n_max,space_r,n)
+              print*
+!
+              print * 
+              call printMatrix(n,ldu+n_max,space_l,n)
+              print*
+              print *
+!
+            end if
+!
             !not_orthogonal = .false.
             !call checkOrth2mat(space_r(:,i_beg:i_beg+n_max-1),n_max,"residual r", &
             !  space_l,ldu, "space l", n, 1.d-14, not_orthogonal, .true.) 
-            print * 
-            call printMatrix(n,ldu+n_max,space_l,n)
-            print*
             !call checkOrth2mat(space_l(:,i_beg:i_beg+n_max-1),n_max,"residual l",&
             !  space_r,ldu, " space r ",n, 1.d-14, not_orthogonal, .true.) 
-            print *
 !           if (.not. not_orthogonal) exit
 !           if (i.eq.max_GS) then
 !             print *, "GS Orthogonalization failed."
@@ -2808,9 +2841,12 @@ module diaglib
 !
             if (.not. symmetric) then
 !
-              print *, "ortho_lu:"
-              print *
-              print *
+              if (verbosity.gt.2) then
+                print *, "ortho_lu:"
+                print *
+                print *
+              end if
+!
               ok_lu = .false.
 !
               call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
@@ -2842,12 +2878,14 @@ module diaglib
                 call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
               end if
 !
-            print*
-            print *, "biorthogonalized new vectors:"
-            call printMatrix(n,ldu+n_max,space_r,n)
-            print *
-            call printMatrix(n,ldu+n_max,space_l,n)
-            print*
+              if (verbosity.gt.2) then
+                print*
+                print *, "biorthogonalized new vectors:"
+                call printMatrix(n,ldu+n_max,space_r,n)
+                print *
+                call printMatrix(n,ldu+n_max,space_l,n)
+                print*
+              end if
 !
             end if
 !
@@ -2857,16 +2895,20 @@ module diaglib
             vy_norm = dnrm2(ldu,vy,1)
             if (vy_norm.le.tol_ortho_lu) done_lu(1) = .true. 
 !
-            print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
-            print*, "V_l^t to y_r ", vy_norm
-            print *
+            if (verbosity.gt.2) then
+              print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
+              print*, "V_l^t to y_r ", vy_norm
+              print *
+            end if
 !
             call dgemm('t','n',ldu,n_max,n,one,space_r,n,space_l(1,i_beg),n,zero,vy,lda)
             vy_norm = dnrm2(ldu,vy,1)
             if (vy_norm.le.tol_ortho_lu) done_lu(2) = .true. 
 !
-            print*, "V_r^t to y_l ", vy_norm
-            print *
+            if (verbosity.gt.2) then
+              print*, "V_r^t to y_l ", vy_norm
+              print *
+            end if
 !
             if (all(done_lu)) then
               exit
@@ -2885,14 +2927,15 @@ module diaglib
 !         space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
 !       end do
 !
-        print *, "normalized space r"
-        call printMatrix(n,ldu+n_max,space_r,n)
-        print *, "normalized space l"
-        call printMatrix(n,ldu+n_max,space_l,n)
+        if (verbosity.gt.2) then
+          print *, "normalized space r"
+          call printMatrix(n,ldu+n_max,space_r,n)
+          print *, "normalized space l"
+          call printMatrix(n,ldu+n_max,space_l,n)
+        end if
 !
       else 
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
-!       TODO handle restart
         n_act   = n_max
         space_r = zero
         space_l = zero
@@ -2925,12 +2968,14 @@ module diaglib
           end if
         end do
         restart = .true.
+        stop
       end if
       !if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
 !
-    !deallocate (vy)
-    !deallocate (xu)
+    deallocate(work, tau, space_r, space_l, aspace_r, aspace_l, r_r, r_l, done, r_norm_r, r_norm_l)
+    deallocate(a_red_r, a_red_l, e_red_re, e_red_im, evec_red_r, evec_red_l, a_copy_r, a_copy_l)
+    deallocate(xu, vy, qr)
 !
   end subroutine nonsym_driver
 !

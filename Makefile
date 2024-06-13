@@ -2,7 +2,7 @@
 #   Makefile
 #
 FC = gfortran
-FFLAGS = -Og -g -fbacktrace -fcheck=all -fopenmp -std=f95 --pedantic -ftrapv -Wuninitialized 
+FFLAGS = -Og -g -fbacktrace -fcheck=all  -std=legacy --pedantic -ftrapv -Wuninitialized -fsanitize=address
 #LIBS = -lblas -llapack 
 #LIBS = -L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib -lblas -llapack 
 LIBS = -L/opt/OpenBLAS/lib -lopenblas

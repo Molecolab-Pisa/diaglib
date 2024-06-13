@@ -11,11 +11,11 @@ program main
 !
 ! initialize:
 !
-  n      = 20
-  n_want = 2
-  tol    = 1.0e-10_dp
+  n      = 400
+  n_want = 4
+  tol    = 1.0e-8_dp
   itmax  = 100
-  m_max  = 20
+  m_max  = 10
   nmult  = 0
   tdscf  = .false.
   i_alg  = 0
@@ -161,7 +161,11 @@ end program main
 !
     do icol = 1, m
       do i = 1, n
-        if (abs(a(i,i)+fac).gt.tol) px(i,icol) = x(i,icol)/(a(i,i) + fac)
+        if (abs(a(i,i)+fac).gt.tol) then
+          px(i,icol) = x(i,icol)/(a(i,i) + fac)
+        else
+          px(i,icol) = x(i,icol)
+        end if
       end do
     end do
     return
@@ -925,8 +929,8 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 2
-    low       = 0
+    use_mat   = 3
+    low       = 0.0d0
     up        = 1.d-4
     symmetric = .false.
     i_seed    = 123
@@ -1038,7 +1042,7 @@ end program main
       print *, "no valid matrix choice in test_nonsym."
       stop
     end if
-    call printMatrix(n,n,a,n)
+    !call printMatrix(n,n,a,n)
 !
     deallocate (p, t, diag)
 !
@@ -1052,9 +1056,9 @@ end program main
       allocate (work(lwork)) 
       call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
       deallocate (work)
-      print *, "Result of diagonalization"
-      print *, wr
-      print *
+      !print *, "Result of diagonalization"
+      !print *, wr(:n_want)
+      !print *
     end if 
 !
 !   allocate and gather the diagonal
@@ -1081,6 +1085,8 @@ end program main
 !   call driver nonsym
 !
   call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
+!
+  deallocate(eig, evec_r, evec_l, diagonal, a_copy, wr, wi, r, l)
 !
   end subroutine test_nonsym
 !
