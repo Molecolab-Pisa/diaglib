@@ -11,11 +11,11 @@ program main
 !
 ! initialize:
 !
-  n      = 400
+  n      = 50
   n_want = 4
   tol    = 1.0e-8_dp
   itmax  = 100
-  m_max  = 10
+  m_max  = 20
   nmult  = 0
   tdscf  = .false.
   i_alg  = 0
@@ -33,7 +33,7 @@ program main
   !read(5,*) iwhat
   write(6,*)
 !
- iwhat=5
+ iwhat=1
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 
@@ -284,7 +284,7 @@ end program main
   subroutine test_symm(check_lapack,n,n_want,tol,itmax,m_max)
     use real_precision
     use utils
-    use diaglib, only : lobpcg_driver, davidson_driver
+    use diaglib, only : lobpcg_driver, davidson_driver, nonsym_driver
     implicit none
     logical,  intent(in) :: check_lapack
     integer,  intent(in) :: n, n_want, itmax, m_max
@@ -298,7 +298,12 @@ end program main
     real(dp), allocatable :: diagonal(:), eig(:), evec(:,:)
     real(dp), allocatable :: work(:), w(:), a_copy(:,:)
 !
-    external :: mmult, mprec, smult
+!   allocations for nonsym driver
+!
+    logical               :: symmetric
+    real(dp), allocatable :: evec_r(:,:), evec_l(:,:)
+!
+    external :: mmult, mprec, smult, mmult_l
 !
     1000 format(t3,' eigenvalue # ',i6,': ',f12.6,/,t3,' eigenvector: ')
 !
@@ -360,7 +365,7 @@ end program main
 !
 !   compute a guess for the eigenvector (see guess_evec for more information)
 !
-    call guess_evec(4,n,n_eig,diagonal,evec)
+    call guess_evec(1,n,n_eig,diagonal,evec)
 !
 !   call lobpcg:
 !
@@ -380,7 +385,7 @@ end program main
 !
 !   make a guess for the eigenvector
 !
-    call guess_evec(4,n,n_eig,diagonal,evec)
+    call guess_evec(1,n,n_eig,diagonal,evec)
 !
 !   call the davidson driver:
 !
@@ -397,6 +402,16 @@ end program main
       write(10,*)
     end do
     close (10)
+!
+!  call nonsym driver on symmetric matrix
+!
+    allocate (evec_r(n,n_eig), evec_l(n,n_eig))
+    symmetric = .true.
+!
+    call guess_evec(1,n,n_eig,diagonal,evec_r)
+    call dcopy(n*n_eig,evec_r,1,evec_l,1)
+!
+    call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
 !
     return
   end subroutine test_symm
@@ -913,7 +928,6 @@ end program main
     use utils
     use diaglib, only : nonsym_driver
     implicit none
-    logical  :: ok
     integer, intent(in) :: n, n_want, itmax, m_max
     logical, intent(in) :: check_lapack
     real(dp), intent(in):: tol
@@ -925,7 +939,7 @@ end program main
     real(dp)                    :: lw(1), zero, one, low, up
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
-    logical                     :: symmetric
+    logical                     :: symmetric, ok
 !
     external :: mmult, mmult_l, mprec
 !
@@ -1026,10 +1040,9 @@ end program main
 !   get a symmetric matrix
 !
       do i = 1, n
+        a(i,i) = real(i,kind=dp) + 1.0d0
         do j = i, n
-          if (j == i) then
-            a(i,j) = i + 1.0d0
-          else if (j > i) then
+          if (j.ne.i) then
             a(i,j) = 1.0d0 / (dble(i + j))
             a(j,i) = a(i,j)
           end if
@@ -1071,7 +1084,7 @@ end program main
 !   for better convergence, we seek more eigenpairs and stop the iterations when 
 !   the required ones are converged
 !
-    n_eig = n_want ! min(2*n_want, n_want + 5)
+    n_eig =  min(3*n_want, n_want + 5) ! n_want 
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
@@ -1084,7 +1097,7 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_want,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
+  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
 !
   deallocate(eig, evec_r, evec_l, diagonal, a_copy, wr, wi, r, l)
 !

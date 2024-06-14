@@ -2303,13 +2303,13 @@ module diaglib
 !   ===================
 !
     real(dp)              :: dnrm2
-    external              :: dnrm2, dgemm, dcopy
+    external              :: dnrm2, dgemm, dcopy, dgeev
 !
 !   computing actual size of the expansion space, checking that
 !   the input makes sense.
 !
     dim_dav =  max(min_dav,max_dav)
-    lda = dim_dav * n_max 
+    lda = dim_dav*n_max 
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -2360,10 +2360,12 @@ module diaglib
     aspace_l  = zero
     a_red_r   = zero
     a_red_l   = zero
+    e_red_im  = zero
     done      = .false.
     done_lu   = .true. 
     use_qr    = .false.
     verbosity = 0
+    ok        = .false.
 !
     call get_time(t_tot)
 !
@@ -2371,8 +2373,8 @@ module diaglib
 !   weather it is orthonormal.
 !   if evec is zero, create a random guess
 !
-    call check_guess(n,n_targ,evec_r)
-    call check_guess(n,n_targ,evec_l)
+    call check_guess(n,n_max,evec_r)
+    call check_guess(n,n_max,evec_l)
 !
 !   move guess into the expansion spaces
 !
@@ -2383,6 +2385,7 @@ module diaglib
 !
     n_act = n_max
     i_beg = 1
+    ind   = 1
 !
 !   initialize the counter for the expansion of the subspace
 !
@@ -2473,8 +2476,19 @@ module diaglib
 !
 !     diagonalize the reduced matrix
 !
-      call get_time(t1)
-      call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      call get_time(false!
+      if (.false.) then 
+        call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+        print *, info
+      else
+!
+!       debug symmetric case
+!
+        call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
+        evec_red_r = a_copy_r
+        evec_red_l = a_copy_r
+      end if
+!
       call get_time(t2)
 !
       t_diag = t_diag + t2 - t1
@@ -2484,7 +2498,6 @@ module diaglib
 !
       if (info.ne.0) then
         print *, "diagonalization of reduced space failed."
-        stop
       end if
 !
 !     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
@@ -2565,12 +2578,12 @@ module diaglib
 !
         if (done(i_eig)) cycle
 !
-          call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
-          call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
-          r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
-          r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
-          r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
-          r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
+        call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
+        r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
+        r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
+        r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
+        r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
 !
       end do
 !
@@ -2673,10 +2686,10 @@ module diaglib
           !ok_lu = .false.
           !call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
-          if (.not. ok_lu) then
-            print *, 'abort due to failure in the ortho_lu'
-            stop
-          end if
+          !if (.not. ok_lu) then
+          !  print *, 'abort due to failure in the ortho_lu'
+          !  stop
+          !end if
 !
         end if
 !
@@ -2688,7 +2701,7 @@ module diaglib
 !
 !       Gram-Schmit orthogonalization of residual to the respective subspace 
 !
-          max_orth = 10
+          max_orth = 1
           max_GS   = 1
           done_lu  = .false.
 !
@@ -2891,32 +2904,32 @@ module diaglib
 !
 !           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
-            call dgemm('t','n',ldu,n_max,n,one,space_l,n,space_r(1,i_beg),n,zero,vy,lda)
-            vy_norm = dnrm2(ldu,vy,1)
-            if (vy_norm.le.tol_ortho_lu) done_lu(1) = .true. 
+           ! call dgemm('t','n',ldu,n_max,n,one,space_l,n,space_r(1,i_beg),n,zero,vy,lda)
+           ! vy_norm = dnrm2(ldu,vy,1)
+           ! if (vy_norm.le.tol_ortho_lu) done_lu(1) = .true. 
 !
-            if (verbosity.gt.2) then
-              print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
-              print*, "V_l^t to y_r ", vy_norm
-              print *
-            end if
+           ! if (verbosity.gt.2) then
+           !   print *, "Overlap check (||newvectors_r/l oldvectors_l/r||)"
+           !   print*, "V_l^t to y_r ", vy_norm
+           !   print *
+           ! end if
 !
-            call dgemm('t','n',ldu,n_max,n,one,space_r,n,space_l(1,i_beg),n,zero,vy,lda)
-            vy_norm = dnrm2(ldu,vy,1)
-            if (vy_norm.le.tol_ortho_lu) done_lu(2) = .true. 
+           ! call dgemm('t','n',ldu,n_max,n,one,space_r,n,space_l(1,i_beg),n,zero,vy,lda)
+           ! vy_norm = dnrm2(ldu,vy,1)
+           ! if (vy_norm.le.tol_ortho_lu) done_lu(2) = .true. 
 !
-            if (verbosity.gt.2) then
-              print*, "V_r^t to y_l ", vy_norm
-              print *
-            end if
+           ! if (verbosity.gt.2) then
+           !   print*, "V_r^t to y_l ", vy_norm
+           !   print *
+           ! end if
 !
-            if (all(done_lu)) then
-              exit
-            end if 
-            if (k .eq. max_orth) then
-              print *, "Orthogonalization loop with ortho_vs_x and ortho_lu reached maximum."
-              stop
-            end if
+           ! if (all(done_lu)) then
+           !   exit
+           ! end if 
+           ! if (k .eq. max_orth) then
+           !   print *, "Orthogonalization loop with ortho_vs_x and ortho_lu reached maximum."
+           !   stop
+           ! end if
 !            
           end do
 !
@@ -2970,12 +2983,31 @@ module diaglib
         restart = .true.
         stop
       end if
-      !if (verbose) write(6,1050) n_targ, n_act, n_frozen
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
+!
+!   if required, print timings
+!
+    1100 format(t3,'timings for davidson (cpu/wall): ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1100) t_mv, t_diag, t_ortho, t_tot
+!      
+!   deallocate memory
 !
     deallocate(work, tau, space_r, space_l, aspace_r, aspace_l, r_r, r_l, done, r_norm_r, r_norm_l)
     deallocate(a_red_r, a_red_l, e_red_re, e_red_im, evec_red_r, evec_red_l, a_copy_r, a_copy_l)
     deallocate(xu, vy, qr)
+!
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
+    return
 !
   end subroutine nonsym_driver
 !
