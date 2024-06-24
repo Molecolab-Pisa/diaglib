@@ -2477,13 +2477,13 @@ module diaglib
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      !call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
 !
 !       debug symmetric case
 !
-        call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
-        evec_red_r = a_copy_r
-        evec_red_l = a_copy_r
+       ! call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
+       ! evec_red_r = a_copy_r
+       ! evec_red_l = a_copy_r
 !
       call get_time(t2)
 !
@@ -2510,7 +2510,32 @@ module diaglib
         print *
       end if
 !
-      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda)
+!
+    if (it.eq.2) then
+      e_red_re(1) = 0.0108d0
+      e_red_re(2) = 0.0109d0
+      e_red_re(3) = 0.02009d0
+      e_red_re(4) = 0.02008d0
+      e_red_re(5) = 0.03009d0
+      e_red_im(1) = -0.005d0
+      e_red_im(2) = 0.005d0
+      e_red_im(3) = -0.06d0
+      e_red_im(4) = 0.06d0
+      e_red_im(5) = 0.d0
+      
+      call printVector(e_red_re, ldu)
+      print *
+      call printVector(e_red_im, ldu)
+      print * 
+    end if
+      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,1.d-12)
+      if (it.eq.2) then
+        call printVector(e_red_re, ldu)
+        print *
+        call printVector(e_red_im, ldu)
+        print * 
+        stop
+      end if
 !
       if (dnrm2(ldu,e_red_im,1).gt.1.e-12_dp) then
         print *, "eigenvalues of reduced space encounter complex contribution"
@@ -2706,9 +2731,9 @@ module diaglib
           do k=1, max_orth
 !
             if (.not. use_qr) then
-              call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
-              call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
-              !call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+              !call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
+              !call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
+              call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
             else
 !
 !             try implementation with QR
@@ -3008,7 +3033,7 @@ module diaglib
 !
   end subroutine nonsym_driver
 !
-  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv)
+  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh)
 !
 !   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
 !   in decreasing order according to the real eigenvalues in the range of n_want
@@ -3016,12 +3041,16 @@ module diaglib
     implicit none
     integer,  intent(in)      :: n, m, ldv, n_want
     real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
+    real(dp), intent(in)      :: thresh
+    logical,  intent(in)      :: ignore
 !   
 !   local variables
 !
     real(dp)                  :: w, v(ldv)
-    integer                   :: i, idx, min_idx(1)
+    integer                   :: i, j, idx, min_idx(1), fin
     logical                   :: mask(m)
+!
+    real(dp)                  :: dnrm2
 !
     mask = .true.
 !
@@ -3031,9 +3060,57 @@ module diaglib
 !
       min_idx = minloc(wr, mask=mask) 
       idx     = min_idx(1)
+      print *, "min index ini", idx
+      print*, wr
+      print*, mask
+!
+!     check complex contribution, if so, move it to with to the last position 
+!     of the array and mask it. search again for lowest eigenvalue and 
+!     continue with that.
+!
+      if (ignore .and. wl(idx) > thresh) then
+        print*, "norm", wl(idx)
+        print*, "CHECK CHECK"
+        fin = m
+!
+        do j = 1, m
+          if (.not. mask(fin)) then
+            fin = fin - 1
+          else 
+            exit
+          end if
+        end do
+!
+        mask(fin) = .false.
+!
+!       do various swaps for double value on last available position fin
+!
+        w       = wr(fin)
+        wr(fin) = wr(idx)
+        wr(idx) = w
+!
+        w       = wl(fin)
+        wl(fin) = wl(idx)
+        wl(idx) = w
+!
+        v         = vr(:,fin)
+        vr(:,fin) = vr(:,idx)
+        vr(:,idx) = v
+!    
+        v         = vl(:,fin)
+        vl(:,fin) = vl(:,idx)
+        vl(:,idx) = v
+!
+!       now search again for lowest and find automatically the corresponding 
+!       pair with imaginary contribution
+!
+        min_idx = minloc(wr, mask=mask) 
+        idx     = min_idx(1)
+      end if
+!
       mask(i) = .false.
 !
-!     do various swaps
+!     do various swaps to move minimum value et alii on position i
 !
       w       = wr(i)
       wr(i)   = wr(idx)
@@ -3051,6 +3128,10 @@ module diaglib
       vl(:,i)   = vl(:,idx)
       vl(:,idx) = v
 ! 
+      print*, wr
+      print*, mask
+      print*, "----"
+!
     end do
 !
   end subroutine sort_eigenpairs

@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 1000
-  n_want = 8
+  n      = 50
+  n_want = 3
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -33,7 +33,7 @@ program main
   !read(5,*) iwhat
   write(6,*)
 !
- iwhat=1
+ iwhat=5
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 
@@ -944,7 +944,7 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 3
+    use_mat   = 2
     low       = 0.0d0
     up        = 1.d-4
     symmetric = .false.
