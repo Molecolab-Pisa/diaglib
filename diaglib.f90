@@ -2331,7 +2331,7 @@ module diaglib
 !   allocate memory for the reduced matrix, its eigenvalues with real &
 !   imaginary parts, and its left & right eigenvectors 
 !
-    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(lda), e_red_im(lda), evec_red_r(lda,lda), &
+    allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(2*lda), e_red_im(2*lda), evec_red_r(lda,lda), &
               evec_red_l(lda,lda), a_copy_r(lda,lda), a_copy_l(lda,lda), stat =istat)
     call check_mem(istat)
 !
@@ -2360,6 +2360,7 @@ module diaglib
     aspace_l  = zero
     a_red_r   = zero
     a_red_l   = zero
+    e_red_re  = zero
     e_red_im  = zero
     done      = .false.
     done_lu   = .true. 
@@ -2391,7 +2392,6 @@ module diaglib
 !
     m_dim = 1
     ldu   = 0
-    
 !
 !   initialize to false the restart
 !
@@ -2438,17 +2438,17 @@ module diaglib
         print *
         call printMatrix(n,ldu,space_l,n)
         print *
-      !print *, "aspace r+l"
-      !call printMatrix(aspace_r, n, lda)
-      !print *
-      !call printMatrix(aspace_l, n, lda)
-      !print *
+        print *, "aspace r+l"
+        call printMatrix(n,n,aspace_r,n)
+        print *
+        call printMatrix(n,n,aspace_l,n)
+        print *
       end if
 !
 !     update the reduced matrix
 !
-      call dgemm('t','n',ldu,n,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
-!     call dgemm('t','n',ldu,n,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
+      call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
+!     call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
 !      
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
@@ -2466,7 +2466,7 @@ module diaglib
       if (verbosity.ge.1) then
         print *
         print *, "print reduced spaces a_r, a_l:"
-        call printMatrix(ldu,ldu,a_copy_r,lda)
+        call printMatrix(ldu,ldu,a_red_r,lda)
         print *
         !call printPythonMat(ldu,ldu,a_copy_r,lda)
         !print *
@@ -2476,18 +2476,14 @@ module diaglib
 !
 !     diagonalize the reduced matrix
 !
-      call get_time(false!
-      if (.false.) then 
-        call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
-        print *, info
-      else
+      call get_time(t1)
+      !call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
 !
 !       debug symmetric case
 !
         call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
         evec_red_r = a_copy_r
         evec_red_l = a_copy_r
-      end if
 !
       call get_time(t2)
 !
@@ -2498,6 +2494,7 @@ module diaglib
 !
       if (info.ne.0) then
         print *, "diagonalization of reduced space failed."
+        stop
       end if
 !
 !     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
@@ -2517,10 +2514,10 @@ module diaglib
 !
       if (dnrm2(ldu,e_red_im,1).gt.1.e-12_dp) then
         print *, "eigenvalues of reduced space encounter complex contribution"
-        print *, e_red_re
-        print *, e_red_im
+        call printVector(e_red_re, ldu)
         print *
-        print *, "program aborts"
+        call printVector(e_red_im, ldu)
+        print * 
         !stop
       end if
 !
@@ -2712,6 +2709,7 @@ module diaglib
             if (.not. use_qr) then
               call ortho_vs_x(n,ldu,n_act,space_l,space_r(1,i_beg),xx,xx)
               call ortho_vs_x(n,ldu,n_act,space_r,space_l(1,i_beg),xx,xx)
+              !call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
             else
 !
 !             try implementation with QR
@@ -2854,20 +2852,20 @@ module diaglib
 !
             if (.not. symmetric) then
 !
-              if (verbosity.gt.2) then
-                print *, "ortho_lu:"
-                print *
-                print *
-              end if
+           !   if (verbosity.gt.2) then
+           !     print *, "ortho_lu:"
+           !     print *
+           !     print *
+           !   end if
 !
-              ok_lu = .false.
+           !   ok_lu = .false.
 !
-              call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
+           !   call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
 !
-              if (.not. ok_lu) then
-                print *, 'abort due to failure in the ortho_lu'
-                stop
-              end if
+           !   if (.not. ok_lu) then
+           !     print *, 'abort due to failure in the ortho_lu'
+           !     stop
+           !   end if
             end if
 !
 !         if symmetric matrix is passed, orthogonalize new vectors with each other
@@ -2981,7 +2979,7 @@ module diaglib
           end if
         end do
         restart = .true.
-        stop
+        !stop
       end if
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
@@ -3499,7 +3497,7 @@ module diaglib
     return
   end subroutine ortho_cd
 !
-subroutine ortho_lu(n,m,u_l,u_r,ok)
+  subroutine ortho_lu(n,m,u_l,u_r,ok)
   implicit none
 
 ! 
@@ -3687,7 +3685,121 @@ subroutine ortho_lu(n,m,u_l,u_r,ok)
     deallocate (msave)
 !
     return
-end subroutine ortho_lu
+  end subroutine ortho_lu
+!
+  subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
+    implicit none
+    integer,                  intent(in)    :: n, m, k
+    real(dp), dimension(n,m), intent(in)    :: xl, xr
+    real(dp), dimension(n,k), intent(inout) :: ul, ur
+!
+!   local variables:
+!
+    integer               :: it, istat
+    real(dp)              :: xu_norm(2), xx
+    logical               :: done, ok
+    real(dp), allocatable :: xu(:,:)
+!
+    integer, parameter    :: maxit = 20
+    logical, parameter    :: allsvd = .true.
+    real(dp)              :: dnrm2
+!
+    allocate (xu(m,k), stat = istat)
+    call check_mem(istat)
+!
+    done = .false.
+    it   = 0
+!
+    do while(.not. done)
+      it = it + 1
+      if (it.gt.maxit) stop 'biortho_vs_x failed.'
+!
+!     biorthogonalize ul and ur to xr and xl:
+!
+      call dgemm('t','n',m,k,n,one,xl,n,ur,n,zero,xu,m)
+      call dgemm('n','n',n,k,m,-one,xr,n,xu,m,one,ur,n)
+      call dgemm('t','n',m,k,n,one,xr,n,ul,n,zero,xu,m)
+      call dgemm('n','n',n,k,m,-one,xl,n,xu,m,one,ul,n)
+!
+!     now, orthogonalize ur and ul. 
+!     if allsvd is true, biorthogonalize them (to be tested)
+!
+      if (allsvd) then 
+        call svd_biortho(n,k,ul,ur)
+      else
+        call ortho_cd(n,k,ul,xx,ok)
+        call ortho_cd(n,k,ur,xx,ok)
+      end if
+!
+!     compute the overlap between the orthonormalized ul, ur and xr, xl
+!
+      call dgemm('t','n',m,k,n,one,xl,n,ur,n,zero,xu,m)
+      xu_norm(1) = dnrm2(m*k,xu,1)
+      call dgemm('t','n',m,k,n,one,xr,n,ul,n,zero,xu,m)
+      xu_norm(2) = dnrm2(m*k,xu,1)
+!
+      done = xu_norm(1) .lt. tol_ortho .and. xu_norm(2) .lt. tol_ortho
+    end do
+!
+!   if we didn't make the vectors already biorthogonal, do it now:
+!
+    if (.not. allsvd) call svd_biortho(n,k,ul,ur)
+!
+    deallocate (xu)
+    return
+  end subroutine biortho_vs_x
+!
+  subroutine svd_biortho(n,m,u_l,u_r)
+    implicit none
+!
+!   given two set of vectors, biorthogonalize them by computing the LU decomposition
+!   of the overlap matrix and then solving
+!
+!     u_l = u_l l^t
+!     u_r = u_r u
+!
+    integer,                  intent(in)    :: n, m
+    real(dp), dimension(n,m), intent(inout) :: u_l, u_r
+!
+    integer               :: i, istat
+    real(dp)              :: fac
+!
+    real(dp), allocatable :: over(:,:), u(:,:), s(:), vt(:,:), tmp(:,:)
+!
+    real(dp)              :: dnrm2
+    external              :: dnrm2
+!
+!   allocate memory.
+!
+    allocate (over(m,m), s(m), u(m,m), vt(m,m), tmp(n,m), stat = istat)
+    call check_mem(istat)
+!
+!   compute the overlap:
+!
+    call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,over,m)
+!
+!   compute its singular value decomposition:
+!
+    call dgesvd('a','a',m,m,over,m,s,u,m,vt,m,work,lwork,info)
+!
+!   compute l*u and r*v
+!
+    call dgemm('n','n',n,m,m,one,u_l,n,u,m,zero,tmp,n)
+    u_l = tmp
+    call dgemm('n','t',n,m,m,one,u_r,n,vt,m,zero,tmp,n)
+    u_r = tmp
+!
+!   scale with square root of singular values
+!   here, dropping redundant vectors could be a good idea...
+!
+    do i = 1, m
+      fac = one/sqrt(s(i))
+      u_l(:,i) = fac * u_l(:,i) 
+      u_r(:,i) = fac * u_r(:,i) 
+    end do
+    deallocate(over, u, s, vt, tmp, stat = istat)
+    return
+  end subroutine svd_biortho
 !
   real(dp) function norm_est(m,a)
 !

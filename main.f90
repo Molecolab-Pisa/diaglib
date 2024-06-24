@@ -11,7 +11,7 @@ program main
 !
 ! initialize:
 !
-  n      = 50
+  n      = 1000
   n_want = 4
   tol    = 1.0e-8_dp
   itmax  = 100
@@ -33,7 +33,7 @@ program main
   !read(5,*) iwhat
   write(6,*)
 !
- iwhat=1
+ iwhat=5
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 
@@ -1084,7 +1084,7 @@ end program main
 !   for better convergence, we seek more eigenpairs and stop the iterations when 
 !   the required ones are converged
 !
-    n_eig =  min(3*n_want, n_want + 5) ! n_want 
+    n_eig =  n_want !min(3*n_want, n_want + 5)
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
