@@ -12,7 +12,7 @@ program main
 ! initialize:
 !
   n      = 1000
-  n_want = 4
+  n_want = 8
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -33,7 +33,7 @@ program main
   !read(5,*) iwhat
   write(6,*)
 !
- iwhat=5
+ iwhat=1
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 
@@ -357,7 +357,7 @@ end program main
 !   for better convergence, we seek more eigenpairs and stop the iterations when the
 !   required ones are converged.
 !
-    n_eig = min(2*n_want, n_want + 5)
+    n_eig = n_want
 !
 !   allocate memory for the eigenvalues and eigenvectors:
 !
@@ -407,6 +407,7 @@ end program main
 !
     allocate (evec_r(n,n_eig), evec_l(n,n_eig))
     symmetric = .true.
+    !n_eig = n_want
 !
     call guess_evec(1,n,n_eig,diagonal,evec_r)
     call dcopy(n*n_eig,evec_r,1,evec_l,1)

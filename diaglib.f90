@@ -1462,7 +1462,7 @@ module diaglib
     return
   end subroutine caslr_eff_driver
 !
-  subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
+  subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
                              shift,matvec,precnd,eig,evec,ok)
 !
 !   main driver for davidson-liu.
@@ -2427,8 +2427,8 @@ module diaglib
 !     right and left spaces
 !
       call get_time(t1)
-      call matvec(n,n_act,space_r(1,i_beg+n_rst),aspace_r(1,i_beg+n_rst))
-      call matvec_l(n,n_act,space_l(1,i_beg+n_rst),aspace_l(1,i_beg+n_rst))
+      call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
+      call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
@@ -2705,10 +2705,9 @@ module diaglib
 !
           do k=1, max_orth
 !
-!
             if (.not. use_qr) then
-              call ortho_vs_x(n,ldu,n_act,space_l,space_r(1,i_beg),xx,xx)
-              call ortho_vs_x(n,ldu,n_act,space_r,space_l(1,i_beg),xx,xx)
+              call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
+              call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
               !call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
             else
 !
@@ -2870,35 +2869,35 @@ module diaglib
 !
 !         if symmetric matrix is passed, orthogonalize new vectors with each other
 !
-            if (.false.) then
+           ! if (.false.) then
 !
-              if (n_act.le.2) then
-                call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-                call checkInfo(info, "error in dgeqrf")
+           !   if (n_act.le.2) then
+           !     call dgeqrf(n,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+           !     call checkInfo(info, "error in dgeqrf")
 !
-                call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
-                call checkInfo(info, "error in dorqr") 
+           !     call dorgqr(n,n_max,n_max,space_l(:,i_beg),n,tau,work,lwork,info)
+           !     call checkInfo(info, "error in dorqr") 
 !
-                call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-                call checkInfo(info, "error in dgeqrf")
+           !     call dgeqrf(n,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+           !     call checkInfo(info, "error in dgeqrf")
 !
-                call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
-                call checkInfo(info, "error in dorqr") 
-                not_orthogonal = .false.
-                call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
-                call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
-              end if
+           !     call dorgqr(n,n_max,n_max,space_r(:,i_beg),n,tau,work,lwork,info)
+           !     call checkInfo(info, "error in dorqr") 
+           !     not_orthogonal = .false.
+           !     call checkOrth1mat(space_r(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
+           !     call checkOrth1mat(space_l(:,i_beg:i_beg+n_max-1),n,n_max,"space_r",1.d-14,not_orthogonal,.true.)
+           !   end if
 !
-              if (verbosity.gt.2) then
-                print*
-                print *, "biorthogonalized new vectors:"
-                call printMatrix(n,ldu+n_max,space_r,n)
-                print *
-                call printMatrix(n,ldu+n_max,space_l,n)
-                print*
-              end if
+           !   if (verbosity.gt.2) then
+           !     print*
+           !     print *, "biorthogonalized new vectors:"
+           !     call printMatrix(n,ldu+n_max,space_r,n)
+           !     print *
+           !     call printMatrix(n,ldu+n_max,space_l,n)
+           !     print*
+           !   end if
 !
-            end if
+           ! end if
 !
 !           check norm of the overlap ||y_l^t * V_r|| < t and vice versa
 !
