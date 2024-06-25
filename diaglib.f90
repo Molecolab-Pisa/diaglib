@@ -2281,7 +2281,7 @@ module diaglib
 !   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
 !
     real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), &
-                             evec_red_r(:,:), evec_red_l(:,:), a_copy_r(:,:), a_copy_l(:,:)
+                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), overlap(:,:)
 !
 !   restarting variables
 !
@@ -2297,7 +2297,7 @@ module diaglib
     logical                   :: not_orthogonal, use_qr, micro_done, ok_lu
     integer                   :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
-    integer                   :: verbosity
+    integer                   :: verbosity, max_idx(1)
     logical                   :: found_im
 !
 !   external functions:
@@ -2333,7 +2333,7 @@ module diaglib
 !   imaginary parts, and its left & right eigenvectors 
 !
     allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(2*lda), e_red_im(2*lda), evec_red_r(lda,lda), &
-              evec_red_l(lda,lda), a_copy_r(lda,lda), a_copy_l(lda,lda), stat =istat)
+              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), overlap(n_max,n_max), stat =istat)
     call check_mem(istat)
 !
 !   allocate space for orthogonalization routines
@@ -2364,6 +2364,8 @@ module diaglib
     a_red_l   = zero
     e_red_re  = zero
     e_red_im  = zero
+    copy_r    = zero
+    copy_l    = zero
     done      = .false.
     done_lu   = .true. 
     use_qr    = .false.
@@ -2441,9 +2443,9 @@ module diaglib
         call printMatrix(n,ldu,space_l,n)
         print *
         print *, "aspace r+l"
-        call printMatrix(n,n,aspace_r,n)
+        call printMatrix(n,ldu,aspace_r,n)
         print *
-        call printMatrix(n,n,aspace_l,n)
+        call printMatrix(n,ldu,aspace_l,n)
         print *
       end if
 !
@@ -2462,15 +2464,15 @@ module diaglib
         restart = .false.
         n_rst   = 0
       end if
-      a_copy_r = a_red_r
-      !a_copy_l = a_red_l
+      copy_r = a_red_r
+      !copy_l = a_red_l
 !
       if (verbosity.ge.1) then
         print *
         print *, "print reduced spaces a_r, a_l:"
         call printMatrix(ldu,ldu,a_red_r,lda)
         print *
-        !call printPythonMat(ldu,ldu,a_copy_r,lda)
+        !call printPythonMat(ldu,ldu,copy_r,lda)
         !print *
         !call printMatrix(ldu,ldu,a_red_l,lda)
         !print *
@@ -2479,13 +2481,13 @@ module diaglib
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      call dgeev('v','v',ldu,a_copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      call dgeev('v','v',ldu,copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
 !
-!       debug symmetric case
+!      debug symmetric case
 !
-       ! call dsyev('v','u',ldu,a_copy_r,lda,e_red_re,work,lwork,info)
-       ! evec_red_r = a_copy_r
-       ! evec_red_l = a_copy_r
+      ! call dsyev('v','u',ldu,copy_r,lda,e_red_re,work,lwork,info)
+      ! evec_red_r = copy_r
+      ! evec_red_l = copy_r
 !
       call get_time(t2)
 !
@@ -2553,6 +2555,7 @@ module diaglib
         call printVector(e_red_re, ldu)
         print *
         call printVector(e_red_im, ldu)
+        print *
       end if
 !
 !
@@ -2565,15 +2568,46 @@ module diaglib
         call printVector(e_red_re,ldu)
       end if
 !
+!     compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
+!     to ensure correct sorting, by checking if largest absolute value of column is on the
+!     diagonal
+!  
+      if (it.ne.1) then  
+        call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
+!
+        do j = 1, n_max
+          max_idx = maxloc(abs(overlap(:,j)))
+          if (max_idx(1).ne.j) then
+            print *, "sorting of eigenpairs went worng."
+            stop
+          end if
+        end do
+!
+        call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
+!
+        do j = 1, n_max
+          max_idx = maxloc(abs(overlap(:,j)))
+          if (max_idx(1).ne.j) then
+            print *, "sorting of eigenpairs went worng."
+            stop
+          end if
+        end do
+      end if
+!
+!     copy and save the new eigenvectors for the next iteration
+!
+      copy_r = evec_red_r
+      copy_l = evec_red_l
+!
 !     double check x_l^t  a  x_r = eig
 ! 
-      !call dgemm('n','n',ldu,ldu,ldu,one,a_red_r,lda,evec_red_r,lda,zero,a_copy_r,lda)
-      !call dgemm('t','n',ldu,ldu,ldu,one,evec_red_l,lda,a_copy_r,lda,zero,a_copy_l,lda)
+      !call dgemm('n','n',ldu,ldu,ldu,one,a_red_r,lda,evec_red_r,lda,zero,copy_r,lda)
+      !call dgemm('t','n',ldu,ldu,ldu,one,evec_red_l,lda,a_copy_r,lda,zero,copy_l,lda)
 !
       !if (verbosity.ge.2) then
       !  print*
       !  print *, "double check x_l^t a x_r"
-      !  call printMatrix(ldu,ldu,a_copy_l,lda)
+      !  call printMatrix(ldu,ldu,copy_l,lda)
       !end if 
 !
 !     extract the eigenvalues and compute the ritz approximation to the 
@@ -3030,7 +3064,7 @@ module diaglib
 !   deallocate memory
 !
     deallocate(work, tau, space_r, space_l, aspace_r, aspace_l, r_r, r_l, done, r_norm_r, r_norm_l)
-    deallocate(a_red_r, a_red_l, e_red_re, e_red_im, evec_red_r, evec_red_l, a_copy_r, a_copy_l)
+    deallocate(a_red_r, a_red_l, e_red_re, e_red_im, evec_red_r, evec_red_l, copy_r, copy_l)
     deallocate(xu, vy, qr)
 !
 1050 format(t5,'----------------------------------------',/,&
