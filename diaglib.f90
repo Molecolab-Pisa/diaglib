@@ -2464,7 +2464,7 @@ module diaglib
         restart = .false.
         n_rst   = 0
       end if
-      copy_r = a_red_r
+      !copy_r = a_red_r
       !copy_l = a_red_l
 !
       if (verbosity.ge.1) then
@@ -2481,13 +2481,13 @@ module diaglib
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      call dgeev('v','v',ldu,copy_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
 !
 !      debug symmetric case
 !
-      ! call dsyev('v','u',ldu,copy_r,lda,e_red_re,work,lwork,info)
-      ! evec_red_r = copy_r
-      ! evec_red_l = copy_r
+       !call dsyev('v','u',ldu,a_red_r,lda,e_red_re,work,lwork,info)
+       !evec_red_r = a_red_r
+       !evec_red_l = a_red_r
 !
       call get_time(t2)
 !
@@ -2504,6 +2504,7 @@ module diaglib
 !     sort eigenvalues and eigenvectors in decreasing order in range n_targ 
 !
       if (verbosity.ge.2) then
+        print *, "before sorting"
         print *, "evec r + l"
         call printMatrix(ldu,ldu,evec_red_r,lda)
         print *
@@ -2566,20 +2567,25 @@ module diaglib
         call printMatrix(ldu,ldu,evec_red_l,lda)
         print *
         call printVector(e_red_re,ldu)
+        print *
       end if
 !
 !     compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
 !     to ensure correct sorting, by checking if largest absolute value of column is on the
 !     diagonal
 !  
+      !call printPythonMat(ldu,ldu,copy_r,lda)
+      !call printPythonMat(ldu,ldu,evec_red_r, lda)
       if (it.ne.1) then  
         call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
 !
         do j = 1, n_max
           max_idx = maxloc(abs(overlap(:,j)))
           if (max_idx(1).ne.j) then
-            print *, "sorting of eigenpairs went worng."
-            stop
+            print *, "sorting of eigenpairs went wrong."
+            print *
+            !call printMatrix(n_max,n_max,overlap,n_max)
+            !stop
           end if
         end do
 !
@@ -2588,8 +2594,10 @@ module diaglib
         do j = 1, n_max
           max_idx = maxloc(abs(overlap(:,j)))
           if (max_idx(1).ne.j) then
-            print *, "sorting of eigenpairs went worng."
-            stop
+            print *, "sorting of eigenpairs went wrong."
+            print *
+            !call printMatrix(n_max,n_max,overlap,n_max)
+            !stop
           end if
         end do
       end if

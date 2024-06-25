@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 20
-  n_want = 3
+  n      = 1000
+  n_want = 4
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -944,7 +944,7 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 4
+    use_mat   = 3
     low       = 0.0d0
     up        = 1.d-4
     symmetric = .false.
@@ -1125,7 +1125,8 @@ end program main
 !   for better convergence, we seek more eigenpairs and stop the iterations when 
 !   the required ones are converged
 !
-    n_eig =  n_want !min(3*n_want, n_want + 5)
+    n_eig =  n_want 
+    !n_eig =  min(3*n_want, n_want + 5)
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
