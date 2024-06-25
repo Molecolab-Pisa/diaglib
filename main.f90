@@ -11,7 +11,7 @@ program main
 !
 ! initialize:
 !
-  n      = 10
+  n      = 20
   n_want = 3
   tol    = 1.0e-8_dp
   itmax  = 100
@@ -944,7 +944,7 @@ end program main
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 2
+    use_mat   = 4
     low       = 0.0d0
     up        = 1.d-4
     symmetric = .false.
@@ -1096,7 +1096,7 @@ end program main
       print *, "no valid matrix choice in test_nonsym."
       stop
     end if
-    call printMatrix(n,n,a,n)
+    !call printMatrix(n,n,a,n)
 !
     deallocate (p, t, diag, expmt, expt, a_copy)
 !

@@ -2266,7 +2266,7 @@ module diaglib
 !
     integer               :: it, i_eig
 !   
-    real(dp)              :: sqrtn, tol_rms, tol_max
+    real(dp)              :: sqrtn, tol_rms, tol_max, tol_im
     real(dp)              :: xx(1)
 !
 !   arrays to control convergence and orthoginalization
@@ -2298,6 +2298,7 @@ module diaglib
     integer                   :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
     integer                   :: verbosity
+    logical                   :: found_im
 !
 !   external functions:
 !   ===================
@@ -2347,6 +2348,7 @@ module diaglib
     tol_rms = tol
     tol_max = 10.0_dp * tol
     tol_ortho_lu = 1.d-14
+    tol_im  = 1.d-12
 !
 !   clean out various quantities
 !
@@ -2510,40 +2512,47 @@ module diaglib
         print *
       end if
 !
+!    test sort function with test set
 !
-    if (it.eq.2) then
-      e_red_re(1) = 0.0108d0
-      e_red_re(2) = 0.0109d0
-      e_red_re(3) = 0.02009d0
-      e_red_re(4) = 0.02008d0
-      e_red_re(5) = 0.03009d0
-      e_red_im(1) = -0.005d0
-      e_red_im(2) = 0.005d0
-      e_red_im(3) = -0.06d0
-      e_red_im(4) = 0.06d0
-      e_red_im(5) = 0.d0
-      
-      call printVector(e_red_re, ldu)
-      print *
-      call printVector(e_red_im, ldu)
-      print * 
-    end if
-      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,1.d-12)
-      if (it.eq.2) then
-        call printVector(e_red_re, ldu)
+!    if (it.eq.2) then
+!      e_red_re(1) = 0.0108d0
+!      e_red_re(2) = 0.0108d0
+!      e_red_re(3) = 0.02008d0
+!      e_red_re(4) = 0.02008d0
+!      e_red_re(5) = 0.03009d0
+!      e_red_im(1) = -0.005d0
+!      e_red_im(2) = 0.005d0
+!      e_red_im(3) = -0.06d0
+!      e_red_im(4) = 0.06d0
+!      e_red_im(5) = 0.d0
+!      
+!      call printVector(e_red_re, ldu)
+!      print *
+!      call printVector(e_red_im, ldu)
+!      print * 
+!    end if
+!
+      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,tol_im)
+!
+!     double check for complex contributions in the n_max sought eigenvalues
+!
+      found_im = .false.
+      do j = 1, n_max
+        if (e_red_im(j).gt.tol_im) found_im = .true.
+      end do
+!
+      if (found_im.and.verbose) then
         print *
-        call printVector(e_red_im, ldu)
-        print * 
-        stop
+        print *, "complex contribution in sought eigenvalues"
+        print*
       end if
 !
-      if (dnrm2(ldu,e_red_im,1).gt.1.e-12_dp) then
-        print *, "eigenvalues of reduced space encounter complex contribution"
+      if (verbosity.ge.2) then
+        print *
+        print *, "eigenvalues after sort real and imaginary"
         call printVector(e_red_re, ldu)
         print *
         call printVector(e_red_im, ldu)
-        print * 
-        !stop
       end if
 !
 !
@@ -3060,17 +3069,12 @@ module diaglib
 !
       min_idx = minloc(wr, mask=mask) 
       idx     = min_idx(1)
-      print *, "min index ini", idx
-      print*, wr
-      print*, mask
 !
 !     check complex contribution, if so, move it to with to the last position 
 !     of the array and mask it. search again for lowest eigenvalue and 
 !     continue with that.
 !
-      if (ignore .and. wl(idx) > thresh) then
-        print*, "norm", wl(idx)
-        print*, "CHECK CHECK"
+      if (ignore .and. abs(wl(idx)) > thresh) then
         fin = m
 !
         do j = 1, m
@@ -3128,9 +3132,6 @@ module diaglib
       vl(:,i)   = vl(:,idx)
       vl(:,idx) = v
 ! 
-      print*, wr
-      print*, mask
-      print*, "----"
 !
     end do
 !
