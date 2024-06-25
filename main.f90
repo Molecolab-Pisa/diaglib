@@ -11,7 +11,7 @@ program main
 !
 ! initialize:
 !
-  n      = 50
+  n      = 10
   n_want = 3
   tol    = 1.0e-8_dp
   itmax  = 100
@@ -937,9 +937,9 @@ end program main
 !
     integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig, use_mat
     integer, allocatable        :: seed(:)
-    real(dp)                    :: lw(1), zero, one, low, up
+    real(dp)                    :: lw(1), zero, one, low, up, fac, dnrm2
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
-                                    p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:)
+                                    p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:), expt(:,:), expmt(:,:)
     logical                     :: symmetric, ok
 !
     external :: mmult, mmult_l, mprec
@@ -954,7 +954,7 @@ end program main
 !
 !   allocate memory to get the matrix
 !
-    allocate (a(n,n), diag(n,n), t(n,n), p(n,n))
+    allocate (a(n,n), diag(n,n), t(n,n), p(n,n), expt(n,n), expmt(n,n), a_copy(n,n))
 !    
     diag = zero
 !
@@ -1052,13 +1052,53 @@ end program main
 !
       symmetric = .true.
 !
+    else if (use_mat .eq. 4) then 
+!
+!   get an unsymmetric matrix by using matrix exponentials to create a similarity transform.
+!
+      a = 0.0_dp
+      do i = 1, n
+        a(i,i) = real(i,kind=dp) + 1.0_dp
+      end do
+! 
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = i_seed
+      call random_seed(put=seed)
+      deallocate(seed)
+!
+      call random_number(t)
+!
+!     make sure that the matrix has a small norm:
+!
+      fac  = dnrm2(n*n,t,1)
+      fac  = 0.01_dp / fac
+      t    = fac * t
+!
+!     uncomment the following line to obtain a unitary transformation!
+!
+!     tmat = tmat - transpose(tmat)
+!
+!     compute exp(tmat):
+!
+      call matexp(n,t,expt)
+!
+!     compute exp(- tmat):
+!
+      t   = - t
+      call matexp(n,t,expmt)
+!
+!     a = exp(-t) a exp(t)
+!
+      a_copy = matmul(a,expt)
+      a      = matmul(expmt,a_copy) 
     else
       print *, "no valid matrix choice in test_nonsym."
       stop
     end if
-    !call printMatrix(n,n,a,n)
+    call printMatrix(n,n,a,n)
 !
-    deallocate (p, t, diag)
+    deallocate (p, t, diag, expmt, expt, a_copy)
 !
 !  if required, solve the problem with a dense lapack routine:
 !
@@ -1103,6 +1143,42 @@ end program main
   deallocate(eig, evec_r, evec_l, diagonal, a_copy, wr, wi, r, l)
 !
   end subroutine test_nonsym
+!
+  subroutine matexp(n,mat,expmat)
+    use real_precision
+    implicit none
+    integer,                  intent(in)    :: n
+    real(dp), dimension(n,n), intent(in)    :: mat 
+    real(dp), dimension(n,n), intent(inout) :: expmat
+!
+    integer  :: i, iter
+    real(dp) :: del_norm, fac
+    real(dp) :: dnrm2
+    external :: dnrm2
+!
+    real(dp), allocatable :: x(:,:), y(:,:)
+!
+    integer,  parameter :: maxit = 100
+    real(dp), parameter :: tol = 1.0d-20
+!
+    allocate (x(n,n), y(n,n))
+!
+    expmat = 0.0_dp
+    x      = 0.0_dp
+    do i = 1, n
+      x(i,i) = 1.0_dp
+    end do
+!
+    do iter = 1, maxit
+      del_norm = dnrm2(n*n,x,1)
+      expmat = expmat + x
+      if (del_norm.lt.tol) exit
+      x = matmul(mat,x) / real (iter, kind=dp)
+    end do
+!
+    deallocate (x,y)
+    return
+  end subroutine matexp
 !
   subroutine printMatrix(n,m,A,lda) 
 !   
