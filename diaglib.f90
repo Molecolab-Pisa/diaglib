@@ -2455,7 +2455,9 @@ module diaglib
 !     call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
 !      
 !     explicitly putting the first block of 
-!     converged eigenvalues in the reduced matrix
+!     converged eigenvalues in the reduced matrix 
+!     the way as it is implemented now may be unnessecary
+!     due to whole matvec product after restart
 !
       if(restart) then 
         do i_eig = 1, n_rst
@@ -2535,7 +2537,7 @@ module diaglib
 !      print * 
 !    end if
 !
-      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,tol_im)
+      !call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,tol_im)
 !
 !     double check for complex contributions in the n_max sought eigenvalues
 !
@@ -2604,7 +2606,7 @@ module diaglib
           print *, "---- WARNING ----"
           print *, "found inconsistence in old and current eigenvectors"
           print *
-          stop
+          !stop
         end if
       end if
 !

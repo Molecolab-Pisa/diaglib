@@ -12,7 +12,7 @@ program main
 ! initialize:
 !
   n      = 1000
-  n_want = 6
+  n_want = 9
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -106,9 +106,10 @@ end program main
 !
 !   transpose the matrix
 !
+    a_t = transpose(a)
     nmult = nmult + m
     do icol = 1, m
-      ax(:,icol) = matmul(transpose(a),x(:,icol))
+      ax(:,icol) = matmul(a_t,x(:,icol))
     end do
     return
   end subroutine mmult_l
