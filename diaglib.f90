@@ -2449,8 +2449,9 @@ module diaglib
         print *
       end if
 !
-!     update the reduced matrix
+!     get the reduced matrix
 !
+      a_red_r = zero
       call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_r,n,zero,a_red_r,lda)
 !     call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_l,n,zero,a_red_l,lda)
 !      
@@ -2483,15 +2484,21 @@ module diaglib
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      !call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
 !
 !      debug symmetric case
 !
-       call dsyev('v','u',ldu,a_red_r,lda,e_red_re,work,lwork,info)
-       evec_red_r = a_red_r
-       evec_red_l = a_red_r
+       !call dsyev('v','u',ldu,a_red_r,lda,e_red_re,work,lwork,info)
+       !evec_red_r = a_red_r
+       !evec_red_l = a_red_r
 !
       call get_time(t2)
+      !print *
+      !print *, "norm of eigenvec difference"
+      !print * ,dnrm2(ldu, evec_red_l-evec_red_r,1)
+      !print *
+      !call printMatrix(ldu,ldu,evec_red_l-evec_red_r,lda)
+      !print *
 !
       t_diag = t_diag + t2 - t1
 ! 
@@ -2537,7 +2544,7 @@ module diaglib
 !      print * 
 !    end if
 !
-      !call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,tol_im)
+      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,tol_im)
 !
 !     double check for complex contributions in the n_max sought eigenvalues
 !
@@ -2578,6 +2585,7 @@ module diaglib
 !  
       !call printPythonMat(ldu,ldu,copy_r,lda)
       !call printPythonMat(ldu,ldu,evec_red_r, lda)
+!
       if (it.ne.1) then  
         call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
 !
@@ -2604,9 +2612,9 @@ module diaglib
         if (found_er) then
           print*
           print *, "---- WARNING ----"
-          print *, "found inconsistence in old and current eigenvectors"
+          print *, "found inconsistance in old and current eigenvectors"
           print *
-          !stop
+          stop
         end if
       end if
 !
@@ -2790,9 +2798,14 @@ module diaglib
           do k=1, max_orth
 !
             if (.not. use_qr) then
-              call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
-              call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
-              !call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+              !call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
+              !call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
+              call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+!
+              !do i = 0, n_max-1
+              !  space_l(:,i_beg+i) = space_l(:,i_beg+i)/dnrm2(n,space_l(:,i_beg+i),1)
+              !  space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
+              !end do
             else
 !
 !             try implementation with QR
