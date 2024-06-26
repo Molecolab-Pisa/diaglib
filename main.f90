@@ -12,7 +12,7 @@ program main
 ! initialize:
 !
   n      = 1000
-  n_want = 4
+  n_want = 6
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -33,7 +33,7 @@ program main
   !read(5,*) iwhat
   write(6,*)
 !
- iwhat=5
+ iwhat=1
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 

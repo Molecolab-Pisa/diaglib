@@ -2298,13 +2298,13 @@ module diaglib
     integer                   :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
     integer                   :: verbosity, max_idx(1)
-    logical                   :: found_im
+    logical                   :: found_im, found_er
 !
 !   external functions:
 !   ===================
 !
     real(dp)              :: dnrm2
-    external              :: dnrm2, dgemm, dcopy, dgeev
+    external              :: dnrm2, dgemm, dcopy, dgeev, dsyev
 !
 !   computing actual size of the expansion space, checking that
 !   the input makes sense.
@@ -2481,13 +2481,13 @@ module diaglib
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+      !call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
 !
 !      debug symmetric case
 !
-       !call dsyev('v','u',ldu,a_red_r,lda,e_red_re,work,lwork,info)
-       !evec_red_r = a_red_r
-       !evec_red_l = a_red_r
+       call dsyev('v','u',ldu,a_red_r,lda,e_red_re,work,lwork,info)
+       evec_red_r = a_red_r
+       evec_red_l = a_red_r
 !
       call get_time(t2)
 !
@@ -2579,11 +2579,11 @@ module diaglib
       if (it.ne.1) then  
         call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
 !
+        found_er = .false.
         do j = 1, n_max
           max_idx = maxloc(abs(overlap(:,j)))
           if (max_idx(1).ne.j) then
-            print *, "sorting of eigenpairs went wrong."
-            print *
+            found_er = .true.
             !call printMatrix(n_max,n_max,overlap,n_max)
             !stop
           end if
@@ -2594,12 +2594,18 @@ module diaglib
         do j = 1, n_max
           max_idx = maxloc(abs(overlap(:,j)))
           if (max_idx(1).ne.j) then
-            print *, "sorting of eigenpairs went wrong."
-            print *
+            found_er = .true.
             !call printMatrix(n_max,n_max,overlap,n_max)
             !stop
           end if
         end do
+        if (found_er) then
+          print*
+          print *, "---- WARNING ----"
+          print *, "found inconsistence in old and current eigenvectors"
+          print *
+          stop
+        end if
       end if
 !
 !     copy and save the new eigenvectors for the next iteration
@@ -2782,9 +2788,9 @@ module diaglib
           do k=1, max_orth
 !
             if (.not. use_qr) then
-              !call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
-              !call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
-              call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+              call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
+              call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
+              !call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
             else
 !
 !             try implementation with QR
