@@ -1097,7 +1097,7 @@ end program main
       print *, "no valid matrix choice in test_nonsym."
       stop
     end if
-    call printMatrix(n,n,a,n)
+    !call printMatrix(n,n,a,n)
 !
     deallocate (p, t, diag, expmt, expt, a_copy)
 !
@@ -1111,9 +1111,20 @@ end program main
       allocate (work(lwork)) 
       call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
       deallocate (work)
-      !print *, "Result of diagonalization"
+!
+      if (info.ne.0) then
+        print *, "diagonalization of full space failed."
+        stop
+      end if
+!
+      print *
+      print *, "Result of lapack diagonalization"
       !print *, wr(:n_want)
-      !print *
+      call sort_eigenpairs(wr,wi,r,l,n,n,n,n,.true.,1.d-16)
+      call printMatrix(n_want,1,wr,n)
+      
+      print *
+      print *
     end if 
 !
 !   allocate and gather the diagonal
@@ -1204,6 +1215,102 @@ end program main
     end do
 !
   end subroutine printMatrix
+!
+  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh)
+!
+!   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
+!   in decreasing order according to the real eigenvalues in the range of n_want
+! 
+    use real_precision
+    implicit none
+    integer,  intent(in)      :: n, m, ldv, n_want
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
+    real(dp), intent(in)      :: thresh
+    logical,  intent(in)      :: ignore
+!   
+!   local variables
+!
+    real(dp)                  :: w, v(ldv)
+    integer                   :: i, j, idx, min_idx(1), fin
+    logical                   :: mask(m)
+!
+    real(dp)                  :: dnrm2
+!
+    mask = .true.
+!
+    do i = 1, n_want
+! 
+!     identify minimal value and mask first position for next iteration
+!
+      min_idx = minloc(wr, mask=mask) 
+      idx     = min_idx(1)
+!
+!     check complex contribution, if so, move it to with to the last position 
+!     of the array and mask it. search again for lowest eigenvalue and 
+!     continue with that.
+!
+      if (ignore .and. abs(wl(idx)) > thresh) then
+        fin = m
+!
+        do j = 1, m
+          if (.not. mask(fin)) then
+            fin = fin - 1
+          else 
+            exit
+          end if
+        end do
+!
+        mask(fin) = .false.
+!
+!       do various swaps for double value on last available position fin
+!
+        w       = wr(fin)
+        wr(fin) = wr(idx)
+        wr(idx) = w
+!
+        w       = wl(fin)
+        wl(fin) = wl(idx)
+        wl(idx) = w
+!
+        v         = vr(:,fin)
+        vr(:,fin) = vr(:,idx)
+        vr(:,idx) = v
+!    
+        v         = vl(:,fin)
+        vl(:,fin) = vl(:,idx)
+        vl(:,idx) = v
+!
+!       now search again for lowest and find automatically the corresponding 
+!       pair with imaginary contribution
+!
+        min_idx = minloc(wr, mask=mask) 
+        idx     = min_idx(1)
+      end if
+!
+      mask(i) = .false.
+!
+!     do various swaps to move minimum value et alii on position i
+!
+      w       = wr(i)
+      wr(i)   = wr(idx)
+      wr(idx) = w
+!
+      w       = wl(i)
+      wl(i)   = wl(idx)
+      wl(idx) = w
+!
+      v         = vr(:,i)
+      vr(:,i)   = vr(:,idx)
+      vr(:,idx) = v
+!    
+      v         = vl(:,i)
+      vl(:,i)   = vl(:,idx)
+      vl(:,idx) = v
+! 
+!
+    end do
+!
+  end subroutine sort_eigenpairs
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)
     use real_precision
