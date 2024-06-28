@@ -1101,6 +1101,29 @@ end program main
 !
     deallocate (p, t, diag, expmt, expt, a_copy)
 !
+!   for better convergence, we seek more eigenpairs and stop the iterations when 
+!   the required ones are converged
+!
+    n_eig =  n_want 
+!
+!   print some information
+!
+       
+    1000 format(t5,55("-"),/,t3,'   nonsymmetric davidson eigensolver test run',/,t5,55("-"),/)
+    1100 format(t5,55("="),/,t3,'   input information',/,t5,55("-"),/, &
+                t3,'  dimension of the full space            :   ',i4,/, &
+                t3,'  sought number of eigenpairs            :   ',i4,/, &
+                t3,'  number of vectors added each iteration :   ',i4,/, &
+                t3,'  convergency tolerance of resiudal norm :   ',d10.2,/, &
+                t3,'  maximum iterations                     :   ',i4,/, &
+                t3,'  size of expansion space                :   ',i4,/, &
+                t3,'  used matrix                            :   ',i4,/, &
+                t3,'  seed for matrix generation             :   ',i4,/,&
+                t5,55("="))
+    write(6,1000)
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed
+    print *
+!
 !  if required, solve the problem with a dense lapack routine:
 !
     if (check_lapack) then
@@ -1117,10 +1140,11 @@ end program main
         stop
       end if
 !
-      print *
-      print *, "Result of lapack diagonalization"
-      !print *, wr(:n_want)
       call sort_eigenpairs(wr,wi,r,l,n,n,n,n,.true.,1.d-16)
+!
+      print *
+      1200 format(t5,55("-"),/,t3,'   eigenvalues of lapack full space diagonalization',/,t5,55("-"))
+      write(6,1200)
       call printMatrix(n_want,1,wr,n)
       
       print *
@@ -1133,12 +1157,10 @@ end program main
     do i = 1,n
       diagonal(i) = a(i,i)
     end do
-!
-!   for better convergence, we seek more eigenpairs and stop the iterations when 
-!   the required ones are converged
-!
-    n_eig =  n_want 
     !n_eig =  min(3*n_want, n_want + 5)
+!
+      1300 format(t5,55("-"),/,t3,'   nonsymmetric davidson results',/,t5,55("-"),/)
+      write(6,1300)
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
