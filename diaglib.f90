@@ -2301,9 +2301,9 @@ module diaglib
 ! 
 !   variables for the sort
 !
-    integer                   :: max_idx(1)
+    integer                   :: max_idx(1), fin, iter
     real(dp)                  :: diff(n_max), temp
-    logical                   :: found_im, found_er
+    logical                   :: found_im, found_er, no_match
     logical, allocatable      :: mask_sort(:)
 !
 !   external functions:
@@ -2554,7 +2554,7 @@ module diaglib
 !      print * 
 !    end if
 !
-      call sort_eigenpairs(e_red_re,e_red_im,evec_red_r,evec_red_l,ldu,ldu,n_max,lda,.true.,tol_im)
+      call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
 !
 !     double check for complex contributions in the n_max sought eigenvalues
 !
@@ -2594,65 +2594,91 @@ module diaglib
 !     diagonal
 !  
       if (it.ne.1) then  
-        call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
-!
-        found_er = .false.
-        do j = 1, n_max
-          max_idx = maxloc(abs(overlap(:,j)))
-          if (max_idx(1).ne.j) then
-            found_er = .true.
-            !call printMatrix(n_max,n_max,overlap,n_max)
-            !stop
+        mask_sort = .true.
+        no_match  = .true.
+        iter      = 0
+        do while (no_match)
+          iter = iter +1
+          if (iter .gt. 10*n_max) then
+            print *, "too many iterations in shifting away eigenvalues we dont like."
+            stop
           end if
-        end do
 !
-        call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
+          call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
 !
-        do j = 1, n_max
-          max_idx = maxloc(abs(overlap(:,j)))
-          if (max_idx(1).ne.j) then
-            found_er = .true.
-            !call printMatrix(n_max,n_max,overlap,n_max)
-            !stop
-          end if
-        end do
-        if (found_er) then
-!
-!         if error encounterd in the overlap of old and new eigenvectors, move errorneous 
-!         eigenpair to the end of the array, mask it and sort again
-!
-          print *, "old and new eigenvecs" 
-          call printVector(e_red_re,n_max)
-          call printVector(copy_eig,n_max)
-!
-!         identify difference of every old and new eigenvalue in range n_max and store 
-!         lowest difference to not shift-away sought eigenvalues, which were just returned
-!         in correct order after the diagonalization, but are correct ones.
-!
-          mask_sort = .true.
-          diff    = 0
-!
+          found_er = .false.
           do j = 1, n_max
-            do k = 1, n_max
-              temp = abs(e_red_re(j) - copy_eig(j)) 
-              if (temp.lt.diff(j) .or. j.eq.1) diff(j) = temp
-            end do
+            max_idx = maxloc(abs(overlap(:,j)))
+            if (max_idx(1).ne.j) then
+              found_er = .true.
+              !call printMatrix(n_max,n_max,overlap,n_max)
+              !stop
+            end if
           end do
 !
-!         get index of highest difference and shift eigenpair to end of array and mask it
+          call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
 !
-          max_idx = maxloc(diff)
-
+          do j = 1, n_max
+            max_idx = maxloc(abs(overlap(:,j)))
+            if (max_idx(1).ne.j) then
+              found_er = .true.
+              !call printMatrix(n_max,n_max,overlap,n_max)
+              !stop
+            end if
+          end do
 !
-!         
+          if (found_er) then
 !
-          print*, max_idx
-          print*
-          print *, "---- WARNING ----"
-          print *, "found inconsistance in old and current eigenvectors"
-          print *
-          stop
-        end if
+!           if error encounterd in the overlap of old and new eigenvectors, move errorneous 
+!           eigenpair to the end of the array, mask it and sort again
+!
+            !print *, "old and new eigenvecs " 
+            !call printVector(copy_eig,n_max)
+            !print *
+            !call printVector(e_red_re,n_max)
+!
+!           identify difference of every old and new eigenvalue in range n_max and store 
+!           lowest difference to not shift-away sought eigenvalues, which were just returned
+!           in correct order after the diagonalization, but are correct ones.
+!
+            diff    = 0
+!
+            do j = 1, n_max
+              do k = 1, ldu
+                temp = abs(e_red_re(j) - copy_eig(k)) 
+                if (temp.lt.diff(j) .or. k.eq.1) diff(j) = temp
+              end do
+            end do
+!
+!           get index of highest difference and shift eigenpair to last available entry of array 
+!           in range ldu and mask it
+!
+            max_idx = maxloc(diff )
+            fin = ldu
+            do j =1, ldu
+              if (.not. mask_sort(j) .and. fin.gt.1) then
+                fin = fin - 1
+              else if (fin.le.1) then
+                print *, "eigenvectors dont match although handling was tried."
+                stop
+              end if 
+            end do
+!
+            call swap_eigenpairs(max_idx(1),fin,ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,lda)
+            mask_sort(fin) = .false.
+!
+            
+            call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im,mask_sort)
+!
+!           
+            print*
+            print *, "---- ATTENZIONE ----"
+            print *, "handled inconsistance in old and current eigenvectors"
+            print *
+          else
+            no_match = .false.      
+          end if
+        end do
       end if
 !
 !     copy and save the new eigenvectors for the next iteration
@@ -2752,7 +2778,10 @@ module diaglib
       if (all(done(1:n_targ))) then
         ok = .true.
         if (verbose) print *, "converged =)"
-        print*
+        !print*
+        !print *, "all eigenvalues of reduced space"
+        !call printVector(e_red_re, ldu)
+        !print*
         exit
       end if
 !     
@@ -3143,7 +3172,7 @@ module diaglib
 !
   end subroutine nonsym_driver
 !
-  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh,mask_in)
+  subroutine sort_eigenpairs(n,m,wr,wl,vr,vl,n_want,ldv,ignore,thresh,mask_in)
 !
 !   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
 !   in decreasing order according to the real eigenvalues in the rang.e of n_want
@@ -3297,7 +3326,7 @@ module diaglib
     integer               :: i
 !
     do i = 1, m
-      write(*,'(E13.5)') vec(i)
+      write(*,'(F13.5)') vec(i)
     end do
 !
   end subroutine printVector

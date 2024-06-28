@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 200
-  n_want = 2
+  n      = 10000
+  n_want = 10
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -43,7 +43,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.true.,n,n_want,tol,itmax,m_max)
+    call test_nonsym(.false.,n,n_want,tol,itmax,m_max)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
