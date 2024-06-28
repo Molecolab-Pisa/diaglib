@@ -2281,7 +2281,7 @@ module diaglib
 !   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
 !
     real(dp), allocatable :: a_red_r(:,:), a_red_l(:,:), e_red_re(:), e_red_im(:), &
-                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), overlap(:,:)
+                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), copy_eig(:), overlap(:,:)
 !
 !   restarting variables
 !
@@ -2297,8 +2297,14 @@ module diaglib
     logical                   :: not_orthogonal, use_qr, micro_done, ok_lu
     integer                   :: k, i, j, max_orth, max_GS, qr_dim, it_micro, maxit_lu
 !
-    integer                   :: verbosity, max_idx(1)
+    integer                   :: verbosity
+! 
+!   variables for the sort
+!
+    integer                   :: max_idx(1)
+    real(dp)                  :: diff(n_max), temp
     logical                   :: found_im, found_er
+    logical, allocatable      :: mask_sort(:)
 !
 !   external functions:
 !   ===================
@@ -2333,7 +2339,7 @@ module diaglib
 !   imaginary parts, and its left & right eigenvectors 
 !
     allocate (a_red_r(lda,lda), a_red_l(lda,lda), e_red_re(2*lda), e_red_im(2*lda), evec_red_r(lda,lda), &
-              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), overlap(n_max,n_max), stat =istat)
+              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), copy_eig(2*lda), overlap(n_max,n_max), stat =istat)
     call check_mem(istat)
 !
 !   allocate space for orthogonalization routines
@@ -2341,6 +2347,10 @@ module diaglib
     allocate (xu(lda,n_max))
     allocate (vy(lda,n_max))
     allocate (qr(n,lda))
+!   
+!   allocate mask array for sorting routine
+!
+    allocate (mask_sort(lda))
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -2580,12 +2590,9 @@ module diaglib
       end if
 !
 !     compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
-!     to ensure correct sorting, by checking if largest absolute value of column is on the
+!     to ensure correct sorting by checking if largest absolute value of column is on the
 !     diagonal
 !  
-      !call printPythonMat(ldu,ldu,copy_r,lda)
-      !call printPythonMat(ldu,ldu,evec_red_r, lda)
-!
       if (it.ne.1) then  
         call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
 !
@@ -2610,6 +2617,36 @@ module diaglib
           end if
         end do
         if (found_er) then
+!
+!         if error encounterd in the overlap of old and new eigenvectors, move errorneous 
+!         eigenpair to the end of the array, mask it and sort again
+!
+          print *, "old and new eigenvecs" 
+          call printVector(e_red_re,n_max)
+          call printVector(copy_eig,n_max)
+!
+!         identify difference of every old and new eigenvalue in range n_max and store 
+!         lowest difference to not shift-away sought eigenvalues, which were just returned
+!         in correct order after the diagonalization, but are correct ones.
+!
+          mask_sort = .true.
+          diff    = 0
+!
+          do j = 1, n_max
+            do k = 1, n_max
+              temp = abs(e_red_re(j) - copy_eig(j)) 
+              if (temp.lt.diff(j) .or. j.eq.1) diff(j) = temp
+            end do
+          end do
+!
+!         get index of highest difference and shift eigenpair to end of array and mask it
+!
+          max_idx = maxloc(diff)
+
+!
+!         
+!
+          print*, max_idx
           print*
           print *, "---- WARNING ----"
           print *, "found inconsistance in old and current eigenvectors"
@@ -2620,8 +2657,9 @@ module diaglib
 !
 !     copy and save the new eigenvectors for the next iteration
 !
-      copy_r = evec_red_r
-      copy_l = evec_red_l
+      copy_r   = evec_red_r
+      copy_l   = evec_red_l
+      copy_eig = e_red_re
 !
 !     double check x_l^t  a  x_r = eig
 ! 
@@ -3105,16 +3143,17 @@ module diaglib
 !
   end subroutine nonsym_driver
 !
-  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh)
+  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh,mask_in)
 !
 !   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
-!   in decreasing order according to the real eigenvalues in the range of n_want
+!   in decreasing order according to the real eigenvalues in the rang.e of n_want
 ! 
     implicit none
     integer,  intent(in)      :: n, m, ldv, n_want
     real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
     real(dp), intent(in)      :: thresh
     logical,  intent(in)      :: ignore
+    logical,  optional        :: mask_in(m)
 !   
 !   local variables
 !
@@ -3124,7 +3163,13 @@ module diaglib
 !
     real(dp)                  :: dnrm2
 !
-    mask = .true.
+!   define initial mask
+!
+    if (present(mask_in)) then
+      mask = mask_in
+    else
+      mask = .true.
+    end if
 !
     do i = 1, n_want
 ! 
@@ -3152,21 +3197,7 @@ module diaglib
 !
 !       do various swaps for double value on last available position fin
 !
-        w       = wr(fin)
-        wr(fin) = wr(idx)
-        wr(idx) = w
-!
-        w       = wl(fin)
-        wl(fin) = wl(idx)
-        wl(idx) = w
-!
-        v         = vr(:,fin)
-        vr(:,fin) = vr(:,idx)
-        vr(:,idx) = v
-!    
-        v         = vl(:,fin)
-        vl(:,fin) = vl(:,idx)
-        vl(:,idx) = v
+        call swap_eigenpairs(fin,idx,n,m,wr,wl,vr,vl,ldv)
 !
 !       now search again for lowest and find automatically the corresponding 
 !       pair with imaginary contribution
@@ -3179,26 +3210,42 @@ module diaglib
 !
 !     do various swaps to move minimum value et alii on position i
 !
-      w       = wr(i)
-      wr(i)   = wr(idx)
-      wr(idx) = w
-!
-      w       = wl(i)
-      wl(i)   = wl(idx)
-      wl(idx) = w
-!
-      v         = vr(:,i)
-      vr(:,i)   = vr(:,idx)
-      vr(:,idx) = v
-!    
-      v         = vl(:,i)
-      vl(:,i)   = vl(:,idx)
-      vl(:,idx) = v
+      call swap_eigenpairs(i,idx,n,m,wr,wl,vr,vl,ldv)
 ! 
 !
     end do
 !
   end subroutine sort_eigenpairs
+!
+  subroutine swap_eigenpairs(i,j,n,m,wr,wl,vr,vl,ldv)
+!
+!   swaps m real & immaginary eigenvalues and eigenvectors of length l of the
+!   indices i and j with each other 
+!
+    implicit none
+    integer, intent(in)       :: n, m, ldv, i, j
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
+!
+    real(dp)                  :: w, v(ldv)
+!
+    w       = wr(i)
+    wr(i)   = wr(j)
+    wr(j)   = w
+!
+    w       = wl(i)
+    wl(i)   = wl(j)
+    wl(j)   = w
+!
+    v         = vr(:,i)
+    vr(:,i)   = vr(:,j)
+    vr(:,j)   = v
+!   
+    v         = vl(:,i)
+    vl(:,i)   = vl(:,j)
+    vl(:,j)   = v
+!
+    return
+  end subroutine 
 !
   subroutine checkInfo(info, occasion)
 !    
