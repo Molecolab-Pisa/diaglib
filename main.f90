@@ -11,11 +11,11 @@ program main
 !
 ! initialize:
 !
-  n      = 10000
-  n_want = 10
+  n      = 20
+  n_want = 4
   tol    = 1.0e-8_dp
   itmax  = 100
-  m_max  = 20
+  m_max  = 2
   nmult  = 0
   tdscf  = .false.
   i_alg  = 0
@@ -1111,7 +1111,7 @@ end program main
        
     1000 format(t5,55("-"),/,t3,'   nonsymmetric davidson eigensolver test run',/,t5,55("-"),/)
     1100 format(t5,55("="),/,t3,'   input information',/,t5,55("-"),/, &
-                t3,'  dimension of the full space            :   ',i4,/, &
+                t3,'  dimension of the full space            :   ',i8,/, &
                 t3,'  sought number of eigenpairs            :   ',i4,/, &
                 t3,'  number of vectors added each iteration :   ',i4,/, &
                 t3,'  convergency tolerance of resiudal norm :   ',d10.2,/, &
@@ -1133,7 +1133,7 @@ end program main
       lwork = int(lw(1))
       allocate (work(lwork)) 
       call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
-      deallocate (work)
+      deallocate (work, a_copy, wr, wi, r, l)
 !
       if (info.ne.0) then
         print *, "diagonalization of full space failed."
@@ -1175,7 +1175,7 @@ end program main
 !
   call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
 !
-  deallocate(eig, evec_r, evec_l, diagonal, a_copy, wr, wi, r, l)
+  deallocate(eig, evec_r, evec_l, diagonal)
 !
   end subroutine test_nonsym
 !

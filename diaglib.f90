@@ -2245,7 +2245,7 @@ module diaglib
 !   local variables:
 !   ================
 !
-    integer, parameter    :: min_dav = 10
+    integer, parameter    :: min_dav = 5
     integer               :: istat
 !   
 !   actual expansion space size and total dimension
@@ -2317,6 +2317,7 @@ module diaglib
 !
     dim_dav =  max(min_dav,max_dav)
     lda = dim_dav*n_max 
+    print *, lda
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -2379,7 +2380,7 @@ module diaglib
     done      = .false.
     done_lu   = .true. 
     use_qr    = .false.
-    verbosity = 0
+    verbosity = 2
     ok        = .false.
 !
     call get_time(t_tot)
@@ -2436,6 +2437,7 @@ module diaglib
 !     update the size of the expansion space.
 !
       ldu   = ldu + n_act
+      write(6,1200) ldu, i_beg, m_dim, n_rst, restart, n_act
 !
 !     perform this iteration's matrix-vector multiplications for both 
 !     right and left spaces
@@ -2471,10 +2473,9 @@ module diaglib
 !     due to whole matvec product after restart
 !
       if(restart) then 
-        do i_eig = 1, n_rst
-          a_red_r(i_eig,i_eig) = e_red_re(i_eig)
-        end do
-        restart = .false.
+        !do i_eig = 1, n_rst
+        !  a_red_r(i_eig,i_eig) = e_red_re(i_eig)
+        !end do
         n_rst   = 0
       end if
       !copy_r = a_red_r
@@ -2593,7 +2594,7 @@ module diaglib
 !     to ensure correct sorting by checking if largest absolute value of column is on the
 !     diagonal
 !  
-      if (it.ne.1) then  
+      if (it.ne.1 .and. .not. restart) then  
         mask_sort = .true.
         no_match  = .true.
         iter      = 0
@@ -2639,7 +2640,7 @@ module diaglib
 !
 !           identify difference of every old and new eigenvalue in range n_max and store 
 !           lowest difference to not shift-away sought eigenvalues, which were just returned
-!           in correct order after the diagonalization, but are correct ones.
+!           in different order after the diagonalization, but are correct ones.
 !
             diff    = 0
 !
@@ -2653,7 +2654,7 @@ module diaglib
 !           get index of highest difference and shift eigenpair to last available entry of array 
 !           in range ldu and mask it
 !
-            max_idx = maxloc(diff )
+            max_idx = maxloc(diff)
             fin = ldu
             do j =1, ldu
               if (.not. mask_sort(j) .and. fin.gt.1) then
@@ -2672,7 +2673,7 @@ module diaglib
 !
 !           
             print*
-            print *, "---- ATTENZIONE ----"
+            print *, "---- Information ----"
             print *, "handled inconsistance in old and current eigenvectors"
             print *
           else
@@ -2683,6 +2684,7 @@ module diaglib
 !
 !     copy and save the new eigenvectors for the next iteration
 !
+      restart = .false.
       copy_r   = evec_red_r
       copy_l   = evec_red_l
       copy_eig = e_red_re
@@ -2729,7 +2731,7 @@ module diaglib
 !
 !       if the eigenvalue is already converged, skip it.
 !
-        if (done(i_eig)) cycle
+        !if (done(i_eig)) cycle
 !
         call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
         call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
@@ -2829,29 +2831,8 @@ module diaglib
           print*
         end if
 !
-        !call dcopy(n*n_act,r_r(1,ind),1,space_r(1,i_beg),1)
-        !call dcopy(n*n_act,r_l(1,ind),1,space_l(1,i_beg),1)
-!
-        if (.not. symmetric) then
-!
-!         start with initial orthogonalization to improve conditioning.
-!
-!          print *, "lu before conditioning"
-!          print*
-!
-          !ok_lu = .false.
-          !call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
-!
-          !if (.not. ok_lu) then
-          !  print *, 'abort due to failure in the ortho_lu'
-          !  stop
-          !end if
-!
-        end if
-!
 !       orthogonalize the new vectors to the existing ones and 
 !       then orthonormalize them.
-!
 !
         call get_time(t1)
 !
@@ -3013,23 +2994,6 @@ module diaglib
 !
             !  deallocate (qr)
 !
-            if (.not. symmetric) then
-!
-           !   if (verbosity.gt.2) then
-           !     print *, "ortho_lu:"
-           !     print *
-           !     print *
-           !   end if
-!
-           !   ok_lu = .false.
-!
-           !   call ortho_lu(n,n_max,space_l(1,i_beg),space_r(1,i_beg),ok_lu)
-!
-           !   if (.not. ok_lu) then
-           !     print *, 'abort due to failure in the ortho_lu'
-           !     stop
-           !   end if
-            end if
 !
 !         if symmetric matrix is passed, orthogonalize new vectors with each other
 !
@@ -3119,10 +3083,15 @@ module diaglib
 !
         call dcopy(n_max*n,evec_r,1,space_r,1)
         call dcopy(n_max*n,evec_l,1,space_l,1)
+!
+        call svd_biortho(n,n_act,space_r,space_l)
+!
         aspace_r = zero
         aspace_l = zero
         a_red_r  = zero
         a_red_l  = zero
+        e_red_re  = zero
+        e_red_im  = zero
 !
 !       initialize indexes back to their starting values
 !
@@ -3136,7 +3105,7 @@ module diaglib
 !
         do i_eig = 1, n_targ
           if (done(i_eig)) then
-            n_rst = n_rst + 1
+            n_frozen = n_frozen +1
           else
             exit
           end if
@@ -3145,6 +3114,12 @@ module diaglib
         !stop
       end if
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
+      1200 format(t3, 'ldu:     ',i4,/, &
+                  t3, 'i_beg:   ', i4,/,&
+                  t3, 'm_dim:   ', i4,/,&
+                  t3, 'n_rst:   ', i4,/,&
+                  t3, 'restart: ', l4,/,&
+                  t3, 'n_act:   ', i4,/)
     end do
 !
 !   if required, print timings
