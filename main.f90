@@ -11,11 +11,11 @@ program main
 !
 ! initialize:
 !
-  n      = 20
-  n_want = 4
+  n      = 1000
+  n_want = 20
   tol    = 1.0e-8_dp
   itmax  = 100
-  m_max  = 2
+  m_max  = 20
   nmult  = 0
   tdscf  = .false.
   i_alg  = 0
@@ -301,7 +301,7 @@ end program main
 !
 !   allocations for nonsym driver
 !
-    logical               :: symmetric
+    logical               :: both
     real(dp), allocatable :: evec_r(:,:), evec_l(:,:)
 !
     external :: mmult, mprec, smult, mmult_l
@@ -407,13 +407,13 @@ end program main
 !  call nonsym driver on symmetric matrix
 !
     allocate (evec_r(n,n_eig), evec_l(n,n_eig))
-    symmetric = .true.
+    both = .false.
     !n_eig = n_want
 !
     call guess_evec(1,n,n_eig,diagonal,evec_r)
     call dcopy(n*n_eig,evec_r,1,evec_l,1)
 !
-    call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
+    call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok)
 !
     return
   end subroutine test_symm
@@ -941,14 +941,14 @@ end program main
     real(dp)                    :: lw(1), zero, one, low, up, fac, dnrm2
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:), expt(:,:), expmt(:,:)
-    logical                     :: symmetric, ok
+    logical                     :: both, ok
 !
     external :: mmult, mmult_l, mprec
 !
     use_mat   = 4
     low       = 0.0d0
     up        = 1.d-4
-    symmetric = .false.
+    both      = .true.
     i_seed    = 123
     zero      = 0.d0
     one       = 1.d0
@@ -1051,8 +1051,6 @@ end program main
         end do
       end do
 !
-      symmetric = .true.
-!
     else if (use_mat .eq. 4) then 
 !
 !   get an unsymmetric matrix by using matrix exponentials to create a similarity transform.
@@ -1112,13 +1110,13 @@ end program main
     1000 format(t5,55("-"),/,t3,'   nonsymmetric davidson eigensolver test run',/,t5,55("-"),/)
     1100 format(t5,55("="),/,t3,'   input information',/,t5,55("-"),/, &
                 t3,'  dimension of the full space            :   ',i8,/, &
-                t3,'  sought number of eigenpairs            :   ',i4,/, &
-                t3,'  number of vectors added each iteration :   ',i4,/, &
-                t3,'  convergency tolerance of resiudal norm :   ',d10.2,/, &
-                t3,'  maximum iterations                     :   ',i4,/, &
-                t3,'  size of expansion space                :   ',i4,/, &
-                t3,'  used matrix                            :   ',i4,/, &
-                t3,'  seed for matrix generation             :   ',i4,/,&
+                t3,'  sought number of eigenpairs            :   ',i8,/, &
+                t3,'  number of vectors added each iteration :   ',i8,/, &
+                t3,'  convergency tolerance of resiudal norm :   ',d8.2,/, &
+                t3,'  maximum iterations                     :   ',i8,/, &
+                t3,'  size of expansion space                :   ',i8,/, &
+                t3,'  used matrix                            :   ',i8,/, &
+                t3,'  seed for matrix generation             :   ',i8,/,&
                 t5,55("="))
     write(6,1000)
     write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed
@@ -1173,7 +1171,7 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,symmetric,ok)
+  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok)
 !
   deallocate(eig, evec_r, evec_l, diagonal)
 !
