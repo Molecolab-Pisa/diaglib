@@ -2802,6 +2802,9 @@ module diaglib
           call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
         end if
 !
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+!
         !do i = 0, n_max-1
         !  space_l(:,i_beg+i) = space_l(:,i_beg+i)/dnrm2(n,space_l(:,i_beg+i),1)
         !  space_r(:,i_beg+i) = space_r(:,i_beg+i)/dnrm2(n,space_r(:,i_beg+i),1)
@@ -2817,8 +2820,6 @@ module diaglib
           print *
         end if
 !
-        call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
 !
 !       normalize columns 
 !
@@ -2841,7 +2842,10 @@ module diaglib
         call dcopy(n_max*n,evec_r,1,space_r,1)
         call dcopy(n_max*n,evec_l,1,space_l,1)
 !
+        call get_time(t1)
         if (both) call svd_biortho(n,n_act,space_r,space_l)
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
 !
         aspace_r = zero
         aspace_l = zero
