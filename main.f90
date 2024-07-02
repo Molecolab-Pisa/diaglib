@@ -43,7 +43,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,4,.true.)
+    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,4,.true.,.false.)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -285,7 +285,7 @@ end program main
   subroutine test_symm(check_lapack,n,n_want,tol,itmax,m_max)
     use real_precision
     use utils
-    use diaglib, only : lobpcg_driver, davidson_driver, nonsym_driver
+    use diaglib, only : lobpcg_driver, davidson_driver
     implicit none
     logical,  intent(in) :: check_lapack
     integer,  intent(in) :: n, n_want, itmax, m_max
@@ -299,12 +299,7 @@ end program main
     real(dp), allocatable :: diagonal(:), eig(:), evec(:,:)
     real(dp), allocatable :: work(:), w(:), a_copy(:,:)
 !
-!   allocations for nonsym driver
-!
-    logical               :: both
-    real(dp), allocatable :: evec_r(:,:), evec_l(:,:)
-!
-    external :: mmult, mprec, smult, mmult_l
+    external :: mmult, mprec, smult
 !
     1000 format(t3,' eigenvalue # ',i6,': ',f12.6,/,t3,' eigenvector: ')
 !
@@ -358,7 +353,7 @@ end program main
 !   for better convergence, we seek more eigenpairs and stop the iterations when the
 !   required ones are converged.
 !
-    n_eig = n_want
+    n_eig = min(2*n_want, n_want + 5)
 !
 !   allocate memory for the eigenvalues and eigenvectors:
 !
@@ -366,7 +361,7 @@ end program main
 !
 !   compute a guess for the eigenvector (see guess_evec for more information)
 !
-    call guess_evec(1,n,n_eig,diagonal,evec)
+    call guess_evec(4,n,n_eig,diagonal,evec)
 !
 !   call lobpcg:
 !
@@ -386,7 +381,7 @@ end program main
 !
 !   make a guess for the eigenvector
 !
-    call guess_evec(1,n,n_eig,diagonal,evec)
+    call guess_evec(4,n,n_eig,diagonal,evec)
 !
 !   call the davidson driver:
 !
@@ -403,17 +398,6 @@ end program main
       write(10,*)
     end do
     close (10)
-!
-!  call nonsym driver on symmetric matrix
-!
-    allocate (evec_r(n,n_eig), evec_l(n,n_eig))
-    both = .false.
-    !n_eig = n_want
-!
-    call guess_evec(1,n,n_eig,diagonal,evec_r)
-    call dcopy(n*n_eig,evec_r,1,evec_l,1)
-!
-    call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok)
 !
     return
   end subroutine test_symm
@@ -925,13 +909,13 @@ end program main
     return
   end subroutine test_scflr
 !
-  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,use_mat,both)
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,use_mat,both,allsvd)
     use real_precision
     use utils
     use diaglib, only : nonsym_driver
     implicit none
     integer, intent(in) :: n, n_want, itmax, m_max, use_mat
-    logical, intent(in) :: check_lapack, both
+    logical, intent(in) :: check_lapack, both, allsvd
     real(dp), intent(in):: tol
 !
 !   test matrix
@@ -1115,9 +1099,10 @@ end program main
                 t3,'  used matrix                            :   ',i8,/, &
                 t3,'  seed for matrix generation             :   ',i8,/,&
                 t3,'  calculation of left and right pairs    :   ',l8,/,&
+                t3,'  use svd in loop in biortho_vs_x        :   ',l8,/,&
                 t5,55("="))
     write(6,1000)
-    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed, both
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed, both, allsvd
     print *
 !
 !  if required, solve the problem with a dense lapack routine:
@@ -1169,7 +1154,7 @@ end program main
 !
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok)
+  call nonsym_driver(.false.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok,allsvd)
 !
   deallocate(eig, evec_r, evec_l, diagonal)
 !

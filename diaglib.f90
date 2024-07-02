@@ -2232,8 +2232,8 @@ module diaglib
   end subroutine gen_david_driver
 !
   subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
-                            matvec,matvec_l,precnd,eig,evec_r,evec_l,both,ok)
-    logical,                        intent(in)    :: verbose, both
+                            matvec,matvec_l,precnd,eig,evec_r,evec_l,both,ok,allsvd)
+    logical,                        intent(in)    :: verbose, both, allsvd
     integer,                        intent(in)    :: n, n_targ, n_max
     integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol, shift
@@ -2291,7 +2291,7 @@ module diaglib
 ! 
 !   variables for the sort
 !
-    integer               :: max_idx(1), fin, iter
+    integer               :: max_idx(1), fin, iter, it_incons, tot_incons, max_incons
     real(dp)              :: diff(n_max), temp, t_sort(2)
     logical               :: found_im, found_er, no_match
     logical, allocatable  :: mask_sort(:)
@@ -2347,25 +2347,28 @@ module diaglib
 !
 !   clean out various quantities
 !
-    t_diag    = zero
-    t_ortho   = zero
-    t_mv      = zero
-    t_tot     = zero
-    t_sort    = zero
-    space_r   = zero
-    space_l   = zero
-    aspace_r  = zero
-    aspace_l  = zero
-    a_red     = zero
-    e_red_re  = zero
-    e_red_im  = zero
-    copy_r    = zero
-    copy_l    = zero
-    r_norm_r  = zero
-    r_norm_l  = zero
-    done      = .false.
-    verbosity = 0
-    ok        = .false.
+    t_diag      = zero
+    t_ortho     = zero
+    t_mv        = zero
+    t_tot       = zero
+    t_sort      = zero
+    space_r     = zero
+    space_l     = zero
+    aspace_r    = zero
+    aspace_l    = zero
+    a_red       = zero
+    e_red_re    = zero
+    e_red_im    = zero
+    copy_r      = zero
+    copy_l      = zero
+    r_norm_r    = zero
+    r_norm_l    = zero
+    done        = .false.
+    verbosity   = 0
+    it_incons   = 0
+    tot_incons  = 0
+    max_incons  = 0
+    ok          = .false.
 !
     call get_time(t_tot)
 !
@@ -2539,6 +2542,7 @@ module diaglib
         mask_sort = .true.
         no_match  = .true.
         iter      = 0
+        it_incons = 0
         do while (no_match)
           iter = iter +1
           if (iter .gt. 10*n_max) then
@@ -2574,6 +2578,7 @@ module diaglib
 !           lowest difference to not shift-away sought eigenvalues, which were just returned
 !           in different order after the diagonalization, but are correct ones.
 !
+            it_incons = it_incons + 1
             diff    = 0
 !
             do j = 1, n_max
@@ -2618,6 +2623,8 @@ module diaglib
             end if
           else
             no_match = .false.      
+            if (it_incons .gt. max_incons) max_incons = it_incons
+            tot_incons = tot_incons + it_incons
           end if
         end do
       end if
@@ -2760,7 +2767,7 @@ module diaglib
 !
         call get_time(t1)
         if (both) then
-          call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+          call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg),allsvd)
         else
           call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
         end if
@@ -2825,14 +2832,18 @@ module diaglib
 !
 !   if required, print timings
 !
-    1100 format(t3,'timings for davidson (cpu/wall): ',/, &
-                t3,'  matrix-vector multiplications: ',2f12.4,/, &
-                t3,'  diagonalization:               ',2f12.4,/, &
-                t3,'  orthogonalization:             ',2f12.4,/, &
-                t3,'  sorting:                       ',2f12.4,/, &
-                t3,'                                 ',24('='),/,  &
-                t3,'  total:                         ',2f12.4)
-    if (verbose) write(6,1100) t_mv, t_diag, t_ortho, t_sort, t_tot
+    1100 format(t3,'  iterations                   :',i12,/,&
+                t3,'  converged                    :',l12,/,/,&
+                t3,'  inconsistent overlaps        :',i12,/,&
+                t3,'  max inconsistent overlaps    :',i12,/,&
+                t3,'  timings for davidson (cpu/wall):',/, &
+                t3,'  matrix-vector multiplications:',2f12.4,/, &
+                t3,'  diagonalization:              ',2f12.4,/, &
+                t3,'  orthogonalization:            ',2f12.4,/, &
+                t3,'  sorting:                      ',2f12.4,/, &
+                t3,'                                ',24('='),/,  &
+                t3,'  total:                        ',2f12.4)
+    write(6,1100) it, ok, tot_incons, max_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
 !      
 !   deallocate memory
 !
@@ -3006,98 +3017,6 @@ module diaglib
     end do
 !
   end subroutine printVector
-!
-  subroutine printPythonMat(n,m,a,lda)
-!   
-! print formatted matrix
-!
-    integer , intent(in)  :: n, m, lda
-    real(dp), intent(in)  :: a(lda,m)
-!
-    integer :: i,j 
-    character(len=4000)  :: str
-    character(len=30) :: temp
-!
-    str = "mat = np.array(["
-    do i = 1, n
-      str = trim(str) // ' ' // trim("[")
-      do j = 1, m
-        write(temp, '(F14.10)') a(i,j)
-        str = trim(str) //  ' ' //trim(temp) // trim(',')
-      end do
-      str = trim(str) // ' ' //  trim("],")
-    end do
-    str = trim(str) // ' ' // trim("])")
-    print *, str
-!
-  end subroutine printPythonMat
-!
-  subroutine checkOrth1mat(mat1,n,m,mat1_name,thresh,not_orthogonal,verbose)
-! check if the vectors within the matrix are orthogonal
-!
-    implicit none
-    integer,              intent(in)      ::  m,n
-    real(dp),             intent(in)      ::  thresh, mat1(n,m)
-    character(len=*),     intent(in)      ::  mat1_name
-    logical,              intent(inout)   ::  not_orthogonal
-    logical,              intent(in)      ::  verbose
-    real(dp)                              ::  dot_prod
-    integer :: i,j 
-
-    do i = 1, m
-      do j = 1, m
-        if (j .NE. i) then
-          dot_prod  = abs(dot_product( mat1(:,j), mat1(:,i) ))
-          if ( dot_prod .GT. thresh ) then
-            not_orthogonal = .true.
-            if (verbose) then 
-              print *
-              print *, '--- WARNING ---'
-              print *, 'vector ', i, ' of matrix ', mat1_name, ' is not orthogonal to vector ', j, ' of matrix', mat1_name
-              print *, 'Result of dot product: ', dot_prod
-              print *
-            end if
-          end if
-        end if
-      end do
-    end do
-
-  end subroutine checkOrth1mat
-!
-  subroutine checkOrth2mat(mat1, m1, mat1_name, mat2, m2, mat2_name, n, thresh, not_orthogonal, verbose)
-!    
-! check if vectors of two matrices are orthogonal
-!
-    implicit none
-    integer,              intent(in)      :: m1, m2, n
-    real(dp),             intent(in)      :: thresh, mat1(n,m1), mat2(n,m2)
-    character(len=*),     intent(in)      :: mat1_name, mat2_name
-    real(dp)                              :: dot_prod
-    integer                               :: i,j 
-    logical,              intent(inout)   :: not_orthogonal
-    logical,              intent(in)      :: verbose
-!
-    do i = 1, m1
-      do j = 1, m2
-        dot_prod = abs(dot_product( mat2(:,j), mat1(:,i) ))
-        if ( dot_prod .GT. thresh ) then
-          not_orthogonal = .true.
-          if (verbose) then
-            print *
-            print *, '--- WARNING ---'
-            print *, 'vector ', i, ' of matrix ', mat1_name, ' is not orthogonal to vector ', j, ' of matrix', mat2_name
-            print *, 'Result of dot product:', dot_prod
-            print *
-            !call printVector(mat1(:,i),n)
-            !print *
-            !call printVector(mat2(:,j),n)
-          end if 
-        end if
-      end do
-    end do
-    !if (not_orthogonal) stop 'Not ortho'
-!
-  end subroutine checkOrth2mat
 !
 ! orthogonalization routines:
 ! ===========================
@@ -3583,11 +3502,12 @@ module diaglib
     return
   end subroutine ortho_lu
 !
-  subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
+  subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur,allsvd)
     implicit none
     integer,                  intent(in)    :: n, m, k
     real(dp), dimension(n,m), intent(in)    :: xl, xr
     real(dp), dimension(n,k), intent(inout) :: ul, ur
+    logical,                  intent(in)    :: allsvd
 !
 !   local variables:
 !
@@ -3597,7 +3517,6 @@ module diaglib
     real(dp), allocatable :: xu(:,:)
 !
     integer, parameter    :: maxit = 20
-    logical, parameter    :: allsvd = .false.
     real(dp)              :: dnrm2
 !
     allocate (xu(m,k), stat = istat)
