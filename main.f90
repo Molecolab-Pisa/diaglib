@@ -12,7 +12,7 @@ program main
 ! initialize:
 !
   n      = 2000
-  n_want = 20
+  n_want = 10
   tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
@@ -43,7 +43,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.false.,n,n_want,tol,itmax,m_max)
+    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,4,.true.)
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -925,30 +925,28 @@ end program main
     return
   end subroutine test_scflr
 !
-  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max)
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,use_mat,both)
     use real_precision
     use utils
     use diaglib, only : nonsym_driver
     implicit none
-    integer, intent(in) :: n, n_want, itmax, m_max
-    logical, intent(in) :: check_lapack
+    integer, intent(in) :: n, n_want, itmax, m_max, use_mat
+    logical, intent(in) :: check_lapack, both
     real(dp), intent(in):: tol
 !
 !   test matrix
 !
-    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig, use_mat
+    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig
     integer, allocatable        :: seed(:)
     real(dp)                    :: lw(1), zero, one, low, up, fac, dnrm2
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
                                     p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:), expt(:,:), expmt(:,:)
-    logical                     :: both, ok
+    logical                     :: ok
 !
     external :: mmult, mmult_l, mprec
 !
-    use_mat   = 4
     low       = 0.0d0
     up        = 1.d-4
-    both      = .false.
     i_seed    = 123
     zero      = 0.d0
     one       = 1.d0
@@ -1095,7 +1093,6 @@ end program main
       print *, "no valid matrix choice in test_nonsym."
       stop
     end if
-    !call printMatrix(n,n,a,n)
 !
     deallocate (p, t, diag, expmt, expt, a_copy)
 !
@@ -1112,14 +1109,15 @@ end program main
                 t3,'  dimension of the full space            :   ',i8,/, &
                 t3,'  sought number of eigenpairs            :   ',i8,/, &
                 t3,'  number of vectors added each iteration :   ',i8,/, &
-                t3,'  convergency tolerance of resiudal norm :   ',d8.2,/, &
+                t3,'  convergency tolerance of residual norm :   ',d8.2,/, &
                 t3,'  maximum iterations                     :   ',i8,/, &
                 t3,'  size of expansion space                :   ',i8,/, &
                 t3,'  used matrix                            :   ',i8,/, &
                 t3,'  seed for matrix generation             :   ',i8,/,&
+                t3,'  calculation of left and right pairs    :   ',l8,/,&
                 t5,55("="))
     write(6,1000)
-    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed, both
     print *
 !
 !  if required, solve the problem with a dense lapack routine:
