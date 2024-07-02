@@ -43,7 +43,8 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then
-    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,4,.true.,.false.)
+    !call test_nonsym(.false.,n,n_want,tol,itmax,m_max,4,.true.,.false.)
+    call eval_nonsym()
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -909,18 +910,40 @@ end program main
     return
   end subroutine test_scflr
 !
-  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,use_mat,both,allsvd)
+  subroutine eval_nonsym()
+    use real_precision
+    use utils
+    implicit none
+    integer  :: n, itmax, m_max, n_want, use_mat, iseed
+    real(dp) :: tol
+    logical  :: both, allsvd
+!
+! TODO implement reading of input file
+    n       = 2000
+    n_want  = 10
+    tol     = 1.0e-8_dp
+    itmax   = 100
+    m_max   = 20
+    use_mat = 4
+    both    = .true.
+    allsvd  = .false.
+    iseed   = 123
+!
+    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,iseed,use_mat,both,allsvd)
+  end subroutine
+!
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,iseed,use_mat,both,allsvd)
     use real_precision
     use utils
     use diaglib, only : nonsym_driver
     implicit none
-    integer, intent(in) :: n, n_want, itmax, m_max, use_mat
+    integer, intent(in) :: n, n_want, itmax, m_max, iseed, use_mat
     logical, intent(in) :: check_lapack, both, allsvd
     real(dp), intent(in):: tol
 !
 !   test matrix
 !
-    integer                     :: i, j, info, ipiv(n), lwork, i_seed, seed_size, n_eig
+    integer                     :: i, j, info, ipiv(n), lwork, seed_size, n_eig
     integer, allocatable        :: seed(:)
     real(dp)                    :: lw(1), zero, one, low, up, fac, dnrm2
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
@@ -931,7 +954,6 @@ end program main
 !
     low       = 0.0d0
     up        = 1.d-4
-    i_seed    = 123
     zero      = 0.d0
     one       = 1.d0
 !
@@ -955,7 +977,7 @@ end program main
 !
       call random_seed(size=seed_size)
       allocate(seed(seed_size))
-      seed = i_seed
+      seed = iseed
       call random_seed(put=seed)
       call random_number(t)
       do i = 1, n
@@ -1002,7 +1024,7 @@ end program main
 !
       call random_seed(size=seed_size)
       allocate(seed(seed_size))
-      seed = i_seed
+      seed = iseed
       call random_seed(put=seed)
       call random_number(t)
       deallocate(seed)
@@ -1044,7 +1066,7 @@ end program main
 ! 
       call random_seed(size=seed_size)
       allocate(seed(seed_size))
-      seed = i_seed
+      seed = iseed
       call random_seed(put=seed)
       deallocate(seed)
 !
@@ -1102,7 +1124,7 @@ end program main
                 t3,'  use svd in loop in biortho_vs_x        :   ',l8,/,&
                 t5,55("="))
     write(6,1000)
-    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,i_seed, both, allsvd
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed, both, allsvd
     print *
 !
 !  if required, solve the problem with a dense lapack routine:
