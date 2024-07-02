@@ -2488,12 +2488,12 @@ module diaglib
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      if (both) then
-        call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
-      else
-        evec_red_r = a_red_r
-        call dsyev('v','l',ldu,evec_red_r,lda,e_red_re,work,lwork,info)
-      end if
+      !if (both) then
+      call dgeev('v','v',ldu,a_red_r,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+       !else
+      !  evec_red_r = a_red_r
+      !  call dsyev('v','l',ldu,evec_red_r,lda,e_red_re,work,lwork,info)
+      !end if
 !
 !     debug symmetric case
 !
@@ -2525,138 +2525,136 @@ module diaglib
 !
 !     test sort function with test set
 !
-      if (both) then
-        call get_time(t1)
-        call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
-        call get_time(t2)
-        t_sort = t_sort + t2 - t1
+      call get_time(t1)
+      call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
+      call get_time(t2)
+      t_sort = t_sort + t2 - t1
 !
-!       double check for complex contributions in the n_max sought eigenvalues
+!     double check for complex contributions in the n_max sought eigenvalues
 !
-        found_im = .false.
-        do j = 1, n_max
-          if (e_red_im(j).gt.tol_im) found_im = .true.
-        end do
+      found_im = .false.
+      do j = 1, n_max
+        if (e_red_im(j).gt.tol_im) found_im = .true.
+      end do
 !
-        if (found_im.and.verbose) then
-          print *
-          print *, "complex contribution in sought eigenvalues"
-          print*
-        end if
+      if (found_im.and.verbose) then
+        print *
+        print *, "complex contribution in sought eigenvalues"
+        print*
+      end if
 !
-        if (verbosity.ge.2) then
-          print *
-          print *, "eigenvalues after sort real and imaginary"
-          call printVector(e_red_re, ldu)
-          print *
-          call printVector(e_red_im, ldu)
-          print *
-        end if
+      if (verbosity.ge.2) then
+        print *
+        print *, "eigenvalues after sort real and imaginary"
+        call printVector(e_red_re, ldu)
+        print *
+        call printVector(e_red_im, ldu)
+        print *
+      end if
 !
 !
-        if (verbosity.ge.2) then
-          print *, "evec r + l after sort + eigenvecs"
-          call printMatrix(ldu,ldu,evec_red_r,lda)
-          print *
-          call printMatrix(ldu,ldu,evec_red_l,lda)
-          print *
-          call printVector(e_red_re,ldu)
-          print *
-        end if
+      if (verbosity.ge.2) then
+        print *, "evec r + l after sort + eigenvecs"
+        call printMatrix(ldu,ldu,evec_red_r,lda)
+        print *
+        call printMatrix(ldu,ldu,evec_red_l,lda)
+        print *
+        call printVector(e_red_re,ldu)
+        print *
+      end if
 !
-!       compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
-!       to ensure correct sorting by checking if largest absolute value of column is on the
-!       diagonal
+!     compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
+!     to ensure correct sorting by checking if largest absolute value of column is on the
+!     diagonal
 !  
-        if (it.ne.1 .and. .not. restart) then  
-          mask_sort = .true.
-          no_match  = .true.
-          iter      = 0
-          do while (no_match)
-            iter = iter +1
-            if (iter .gt. 10*n_max) then
-              print *, "too many iterations in shifting away eigenvalues we dont like."
-              stop
-            end if
+      if (it.ne.1 .and. .not. restart) then  
+        mask_sort = .true.
+        no_match  = .true.
+        iter      = 0
+        do while (no_match)
+          iter = iter +1
+          if (iter .gt. 10*n_max) then
+            print *, "too many iterations in shifting away eigenvalues we dont like."
+            stop
+          end if
 !
-            call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
+          call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
 !
-            found_er = .false.
-            do j = 1, n_max
-              max_idx = maxloc(abs(overlap(:,j)))
-              if (max_idx(1).ne.j) then
-                found_er = .true.
-                !call printMatrix(n_max,n_max,overlap,n_max)
-                !stop
-              end if
-            end do
-!
-            call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
-!
-            do j = 1, n_max
-              max_idx = maxloc(abs(overlap(:,j)))
-              if (max_idx(1).ne.j) then
-                found_er = .true.
-                !call printMatrix(n_max,n_max,overlap,n_max)
-                !stop
-              end if
-            end do
-!
-            if (found_er) then
-!
-!             if error encounterd in the overlap of old and new eigenvectors, move errorneous 
-!             eigenpair to the end of the array, mask it and sort again
-!
-!             identify difference of every old and new eigenvalue in range n_max and store 
-!             lowest difference to not shift-away sought eigenvalues, which were just returned
-!             in different order after the diagonalization, but are correct ones.
-!
-              diff    = 0
-!
-              do j = 1, n_max
-                do k = 1, ldu
-                  temp = abs(e_red_re(j) - copy_eig(k)) 
-                  if (temp.lt.diff(j) .or. k.eq.1) diff(j) = temp
-                end do
-              end do
-!
-!             get index of highest difference and shift eigenpair to last available entry of array 
-!             in range ldu and mask it
-!
-              max_idx = maxloc(diff)
-              fin = ldu
-              do j =1, ldu
-                if (.not. mask_sort(j) .and. fin.gt.1) then
-                  fin = fin - 1
-                else if (fin.le.1) then
-                  print *, "eigenvectors dont match although handling was tried."
-                  stop
-                end if 
-              end do
-!
-              call get_time(t1)
-              call swap_eigenpairs(max_idx(1),fin,ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,lda)
-              call get_time(t2)
-              t_sort = t_sort + t2 - t1
-              mask_sort(fin) = .false.
-!
-              call get_time(t1)
-              call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im,mask_sort)
-              call get_time(t2)
-              t_sort = t_sort + t2 - t1
-!
-!             
-              if (verbosity.gt.2) then
-                print*
-                print *, "---- Information ----"
-                print *, "handled inconsistance in old and current eigenvectors"
-                print *
-              end if
-            else
-              no_match = .false.      
+          found_er = .false.
+          do j = 1, n_max
+            max_idx = maxloc(abs(overlap(:,j)))
+            if (max_idx(1).ne.j) then
+              found_er = .true.
+              !call printMatrix(n_max,n_max,overlap,n_max)
+              !stop
             end if
           end do
-        end if
+!
+          call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
+!
+          do j = 1, n_max
+            max_idx = maxloc(abs(overlap(:,j)))
+            if (max_idx(1).ne.j) then
+              found_er = .true.
+              !call printMatrix(n_max,n_max,overlap,n_max)
+              !stop
+            end if
+          end do
+!
+          if (found_er) then
+!
+!           if error encounterd in the overlap of old and new eigenvectors, move errorneous 
+!           eigenpair to the end of the array, mask it and sort again
+!
+!           identify difference of every old and new eigenvalue in range n_max and store 
+!           lowest difference to not shift-away sought eigenvalues, which were just returned
+!           in different order after the diagonalization, but are correct ones.
+!
+            diff    = 0
+!
+            do j = 1, n_max
+              do k = 1, ldu
+                temp = abs(e_red_re(j) - copy_eig(k)) 
+                if (temp.lt.diff(j) .or. k.eq.1) diff(j) = temp
+              end do
+            end do
+!
+!           get index of highest difference and shift eigenpair to last available entry of array 
+!           in range ldu and mask it
+!
+            max_idx = maxloc(diff)
+            fin = ldu
+            do j =1, ldu
+              if (.not. mask_sort(j) .and. fin.gt.1) then
+                fin = fin - 1
+              else if (fin.le.1) then
+                print *, "eigenvectors dont match although handling was tried."
+                stop
+              end if 
+            end do
+!
+            call get_time(t1)
+            call swap_eigenpairs(max_idx(1),fin,ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,lda)
+            call get_time(t2)
+            t_sort = t_sort + t2 - t1
+            mask_sort(fin) = .false.
+!
+            call get_time(t1)
+            call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im,mask_sort)
+            call get_time(t2)
+            t_sort = t_sort + t2 - t1
+!
+!           
+            if (verbosity.gt.2) then
+              print*
+              print *, "---- Information ----"
+              print *, "handled inconsistance in old and current eigenvectors"
+              print *
+            end if
+          else
+            no_match = .false.      
+          end if
+        end do
       end if
 !
 !     copy and save the new eigenvectors for the next iteration

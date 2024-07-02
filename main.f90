@@ -11,7 +11,7 @@ program main
 !
 ! initialize:
 !
-  n      = 1000
+  n      = 2000
   n_want = 20
   tol    = 1.0e-8_dp
   itmax  = 100
@@ -948,7 +948,7 @@ end program main
     use_mat   = 4
     low       = 0.0d0
     up        = 1.d-4
-    both      = .true.
+    both      = .false.
     i_seed    = 123
     zero      = 0.d0
     one       = 1.d0
