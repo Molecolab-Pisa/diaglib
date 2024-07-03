@@ -914,20 +914,50 @@ end program main
     use real_precision
     use utils
     implicit none
-    integer  :: n, itmax, m_max, n_want, use_mat, iseed
+    integer  :: n, itmax, m_max, n_want, use_mat, iseed, ios, pos, i
     real(dp) :: tol
     logical  :: both, allsvd
+    character(len=30) :: line, value_str
 !
-! TODO implement reading of input file
-    n       = 2000
-    n_want  = 10
-    tol     = 1.0e-8_dp
-    itmax   = 100
-    m_max   = 20
-    use_mat = 4
-    both    = .true.
-    allsvd  = .false.
-    iseed   = 123
+!   read input file 
+!
+    open(unit = 10, file = 'diaglib.in', status = 'old', action = 'read', iostat = ios)
+    if (ios /= 0) then
+        print *, 'Error opening file: diaglib.in does not exist.'
+        stop
+    endif
+!
+    do i = 1, 9
+!
+!     read the line from the file
+!
+      read(10, '(A)', iostat=ios) line
+      if (ios /= 0) then
+          print *, 'Error reading file'
+          stop
+      endif
+!
+
+      ! Find the position of the equal sign
+      pos = index(line, '=')
+
+      ! Extract the value from the line starting after the equal sign
+      value_str = adjustl(line(pos+1:))
+
+      ! Convert the string to an integer
+      if (i.eq.1) read(value_str, *) n
+      if (i.eq.2) read(value_str, *) n_want
+      if (i.eq.3) read(value_str, *) tol
+      if (i.eq.4) read(value_str, *) itmax
+      if (i.eq.5) read(value_str, *) m_max
+      if (i.eq.6) read(value_str, *) use_mat
+      if (i.eq.7) read(value_str, *) both
+      if (i.eq.8) read(value_str, *) allsvd
+      if (i.eq.9) read(value_str, *) iseed
+      
+    end do
+
+    close(10)
 !
     call test_nonsym(.false.,n,n_want,tol,itmax,m_max,iseed,use_mat,both,allsvd)
   end subroutine
@@ -1095,6 +1125,55 @@ end program main
 !
       a_copy = matmul(a,expt)
       a      = matmul(expmt,a_copy) 
+!
+    else if (use_mat .eq. 5) then
+!
+!     get a symmetric matrix
+!
+      do i = 1, n
+        a(i,i) = real(i,kind=dp) + 1.0d0
+        do j = i, n
+          if (j.ne.i) then
+            a(i,j) = 1.0d0 / (dble(i + j))
+            a(j,i) = a(i,j)
+          end if
+        end do
+      end do
+!
+!     apply similarity transform
+! 
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = iseed
+      call random_seed(put=seed)
+      deallocate(seed)
+!
+      call random_number(t)
+!
+!     make sure that the matrix has a small norm:
+!
+      fac  = dnrm2(n*n,t,1)
+      fac  = 0.01_dp / fac
+      t    = fac * t
+!
+!     uncomment the following line to obtain a unitary transformation!
+!
+!     tmat = tmat - transpose(tmat)
+!
+!     compute exp(tmat):
+!
+      call matexp(n,t,expt)
+!
+!     compute exp(- tmat):
+!
+      t   = - t
+      call matexp(n,t,expmt)
+!
+!     a = exp(-t) a exp(t)
+!
+      a_copy = matmul(a,expt)
+      a      = matmul(expmt,a_copy) 
+!
     else
       print *, "no valid matrix choice in test_nonsym."
       stop
@@ -1121,11 +1200,12 @@ end program main
                 t3,'  used matrix                            :   ',i8,/, &
                 t3,'  seed for matrix generation             :   ',i8,/,&
                 t3,'  calculation of left and right pairs    :   ',l8,/,&
-                t3,'  use svd in loop in biortho_vs_x        :   ',l8,/,&
+                t3,'  use loop over svd in biortho_vs_x      :   ',l8,/,&
                 t5,55("="))
     write(6,1000)
-    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed, both, allsvd
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,both,allsvd
     print *
+    !stop
 !
 !  if required, solve the problem with a dense lapack routine:
 !
@@ -1173,10 +1253,10 @@ end program main
 !
   call guess_evec(1,n,n_eig,diagonal,evec_r)
   call dcopy(n*n_eig,evec_r,1,evec_l,1)
-!
 !   call driver nonsym
 !
   call nonsym_driver(.false.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok,allsvd)
+!
 !
   deallocate(eig, evec_r, evec_l, diagonal)
 !

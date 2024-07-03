@@ -2291,7 +2291,7 @@ module diaglib
 ! 
 !   variables for the sort
 !
-    integer               :: max_idx(1), fin, iter, it_incons, tot_incons, max_incons
+    integer               :: max_idx(1), fin, iter, it_incons, tot_incons, max_incons, frst_incons
     real(dp)              :: diff(n_max), temp, t_sort(2)
     logical               :: found_im, found_er, no_match
     logical, allocatable  :: mask_sort(:)
@@ -2365,9 +2365,9 @@ module diaglib
     r_norm_l    = zero
     done        = .false.
     verbosity   = 0
-    it_incons   = 0
     tot_incons  = 0
     max_incons  = 0
+    frst_incons = 0
     ok          = .false.
 !
     call get_time(t_tot)
@@ -2580,6 +2580,7 @@ module diaglib
 !
             it_incons = it_incons + 1
             diff    = 0
+            if (frst_incons.eq.0) frst_incons = it 
 !
             do j = 1, n_max
               do k = 1, ldu
@@ -2832,18 +2833,19 @@ module diaglib
 !
 !   if required, print timings
 !
-    1100 format(t3,'  iterations                   :',i12,/,&
-                t3,'  converged                    :',l12,/,/,&
-                t3,'  inconsistent overlaps        :',i12,/,&
-                t3,'  max inconsistent overlaps    :',i12,/,&
-                t3,'  timings for davidson (cpu/wall):',/, &
-                t3,'  matrix-vector multiplications:',2f12.4,/, &
-                t3,'  diagonalization:              ',2f12.4,/, &
-                t3,'  orthogonalization:            ',2f12.4,/, &
-                t3,'  sorting:                      ',2f12.4,/, &
-                t3,'                                ',24('='),/,  &
-                t3,'  total:                        ',2f12.4)
-    write(6,1100) it, ok, tot_incons, max_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
+    1100 format(t3,'  iterations                      : ',i12,/,&
+                t3,'  converged                       : ',l12,/,/,&
+                t3,'  inconsistent overlaps           : ',i12,/,&
+                t3,'  max inconsistent overlaps       : ',i12,/,&
+                t3,'  1st inconsistent overlap        : ',i12,/,&
+                t3,'  timings for davidson (cpu/wall) : ',/, &
+                t3,'  matrix-vector multiplications   : ',2f12.4,/, &
+                t3,'  diagonalization                 : ',2f12.4,/, &
+                t3,'  orthogonalization               : ',2f12.4,/, &
+                t3,'  sorting                         : ',2f12.4,/, &
+                t3,'                                   ',24('='),/,  &
+                t3,'  total                           : ',2f12.4)
+    write(6,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
 !      
 !   deallocate memory
 !
