@@ -1204,8 +1204,6 @@ end program main
                 t5,55("="))
     write(6,1000)
     write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,both,allsvd
-    print *
-    !stop
 !
 !  if required, solve the problem with a dense lapack routine:
 !
@@ -1244,6 +1242,18 @@ end program main
 !
       1300 format(t5,55("-"),/,t3,'   nonsymmetric davidson results',/,t5,55("-"),/)
       write(6,1300)
+!
+!   print output file
+!
+    open (unit = 10, file = 'diaglib.out', form = 'formatted', access = 'sequential')
+    write(10,1000)
+    write(10,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,both,allsvd
+    if (check_lapack) write(10,1200)
+    if (check_lapack) write(10,*)
+    write(10,*)
+    write(10,1300)
+    close (10)
+    print *
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !

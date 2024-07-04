@@ -157,7 +157,7 @@ module diaglib
 ! timings:
 !
   real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &
-                            t_mv(2), t_tot(2)
+                            t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
 !
 ! subroutines:
 ! ============
@@ -2296,6 +2296,12 @@ module diaglib
     logical               :: found_im, found_er, no_match
     logical, allocatable  :: mask_sort(:)
 !
+    character(len=:), allocatable   :: outputfile
+    character(len=256)    :: line
+    character(len=1)      :: newline
+    integer, parameter    :: buffer_size = 256
+    integer               :: ios, file_length
+!
 !   external functions:
 !   ===================
 !
@@ -2370,7 +2376,7 @@ module diaglib
     frst_incons = 0
     ok          = .false.
 !
-    call get_time(t_tot)
+    call get_time(t_tot1)
 !
 !   check weather we have a guess for the eigenvectors in evec, and
 !   weather it is orthonormal.
@@ -2830,6 +2836,8 @@ module diaglib
       end if
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
     end do
+    call get_time(t_tot2)
+    t_tot = t_tot2 - t_tot1
 !
 !   if required, print timings
 !
@@ -2846,6 +2854,30 @@ module diaglib
                 t3,'                                   ',24('='),/,  &
                 t3,'  total                           : ',2f12.4)
     write(6,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
+!
+!   read in output file and print total output
+!
+    file_length = 0
+    allocate(character(len=0) :: outputfile)
+    newline = achar(10)
+!
+    open(unit=10, file='diaglib.out', status='old', action='read')
+    do 
+      read(10, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      file_length = file_length + len_trim(line) + 1
+      outputfile = outputfile  // trim(line) // newline
+    end do
+    close (10)
+!
+!   print final output file
+!
+    
+    open (unit = 10, file = 'diaglib.out', status = 'replace', form = 'formatted', access = 'sequential')
+    write(10,'(A)') outputfile
+    write(10,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
+    write(10,*)
+    close (10)
 !      
 !   deallocate memory
 !
