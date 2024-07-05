@@ -2857,27 +2857,27 @@ module diaglib
 !
 !   read in output file and print total output
 !
-    file_length = 0
-    allocate(character(len=0) :: outputfile)
-    newline = achar(10)
-!
-    open(unit=10, file='diaglib.out', status='old', action='read')
-    do 
-      read(10, '(A)', iostat=ios) line
-      if (ios /= 0) exit
-      file_length = file_length + len_trim(line) + 1
-      outputfile = outputfile  // trim(line) // newline
-    end do
-    close (10)
+!    file_length = 0
+!    allocate(character(len=0) :: outputfile)
+!    newline = achar(10)
+!!
+!    open(unit=10, file='diaglib.out', status='old', action='read')
+!    do 
+!      read(10, '(A)', iostat=ios) line
+!      if (ios /= 0) exit
+!      file_length = file_length + len_trim(line) + 1
+!      outputfile = outputfile  // trim(line) // newline
+!    end do
+!    close (10)
 !
 !   print final output file
 !
     
-    open (unit = 10, file = 'diaglib.out', status = 'replace', form = 'formatted', access = 'sequential')
-    write(10,'(A)') outputfile
-    write(10,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
-    write(10,*)
-    close (10)
+!    open (unit = 10, file = 'diaglib.out', status = 'replace', form = 'formatted', access = 'sequential')
+!    write(10,'(A)') outputfile
+!    write(10,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
+!    write(10,*)
+!    close (10)
 !      
 !   deallocate memory
 !
