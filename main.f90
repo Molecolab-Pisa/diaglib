@@ -954,7 +954,6 @@ end program main
       if (i.eq.7) read(value_str, *) both
       if (i.eq.8) read(value_str, *) allsvd
       if (i.eq.9) read(value_str, *) iseed
-      
     end do
 
     close(10)
@@ -1227,7 +1226,6 @@ end program main
       1200 format(t5,55("-"),/,t3,'   eigenvalues of lapack full space diagonalization',/,t5,55("-"))
       write(6,1200)
       call printMatrix(n_want,1,wr,n)
-      
       print *
       print *
     end if 
@@ -1357,6 +1355,7 @@ end program main
 ! 
 !     identify minimal value and mask first position for next iteration
 !
+print*, wr
       min_idx = minloc(wr, mask=mask) 
       idx     = min_idx(1)
 !
