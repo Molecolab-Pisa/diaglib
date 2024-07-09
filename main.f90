@@ -917,6 +917,7 @@ end program main
     integer  :: n, itmax, m_max, n_want, use_mat, iseed, ios, pos, i
     real(dp) :: tol
     logical  :: both, allsvd
+    character(len=1) :: side
     character(len=30) :: line, value_str
 !
 !   read input file 
@@ -951,23 +952,25 @@ end program main
       if (i.eq.4) read(value_str, *) itmax
       if (i.eq.5) read(value_str, *) m_max
       if (i.eq.6) read(value_str, *) use_mat
-      if (i.eq.7) read(value_str, *) both
+      if (i.eq.7) read(value_str, *) side
       if (i.eq.8) read(value_str, *) allsvd
       if (i.eq.9) read(value_str, *) iseed
     end do
 
     close(10)
 !
-    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,iseed,use_mat,both,allsvd)
+    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,iseed,use_mat,side,allsvd)
   end subroutine
 !
-  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,iseed,use_mat,both,allsvd)
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,iseed,use_mat,side,allsvd)
     use real_precision
     use utils
     use diaglib, only : nonsym_driver
     implicit none
     integer, intent(in) :: n, n_want, itmax, m_max, iseed, use_mat
-    logical, intent(in) :: check_lapack, both, allsvd
+    character(len=1), intent(in)    :: side
+    logical, intent(in) :: check_lapack, allsvd
+
     real(dp), intent(in):: tol
 !
 !   test matrix
@@ -1198,11 +1201,11 @@ end program main
                 t3,'  size of expansion space                :   ',i8,/, &
                 t3,'  used matrix                            :   ',i8,/, &
                 t3,'  seed for matrix generation             :   ',i8,/,&
-                t3,'  calculation of left and right pairs    :   ',l8,/,&
+                t3,'  calculation of left and right pairs    :   ',a8,/,&
                 t3,'  use loop over svd in biortho_vs_x      :   ',l8,/,&
                 t5,55("="))
     write(6,1000)
-    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,both,allsvd
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,side,allsvd
 !
 !  if required, solve the problem with a dense lapack routine:
 !
@@ -1263,7 +1266,7 @@ end program main
   call dcopy(n*n_eig,evec_r,1,evec_l,1)
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,both,ok,allsvd)
+  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok,allsvd)
 !
 !
   deallocate(eig, evec_r, evec_l, diagonal)

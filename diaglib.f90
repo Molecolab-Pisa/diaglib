@@ -2232,11 +2232,12 @@ module diaglib
   end subroutine gen_david_driver
 !
   subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
-                            matvec,matvec_l,precnd,eig,evec_r,evec_l,both,ok,allsvd)
-    logical,                        intent(in)    :: verbose, both, allsvd
+                            matvec,matvec_l,precnd,eig,evec_r,evec_l,side,ok,allsvd)
+    logical,                        intent(in)    :: verbose, allsvd
     integer,                        intent(in)    :: n, n_targ, n_max
     integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol, shift
+    character(len=1),               intent(in)    :: side
     real(dp), dimension(n_max),     intent(inout) :: eig
     real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
     logical,                        intent(inout) :: ok
@@ -2289,7 +2290,6 @@ module diaglib
 !
 !   variables for left, right, or both eigenvectors
 !
-    character(len=1)      :: side
     logical               :: left, right, consecutive
 !
     integer               :: verbosity, k, i, j
@@ -2380,8 +2380,9 @@ module diaglib
     max_incons  = 0
     frst_incons = 0
     ok          = .false.
-    side        = "r" 
-    
+    right       = .false.
+    left        = .false.
+    consecutive = .false.
 !
     call get_time(t_tot1)
 !
@@ -2401,15 +2402,17 @@ module diaglib
 !
 !     overwrite for present handling with logical both
 !
-      if (both) then
-        right = .true.
-        left  = .true.
-      else
-        !right = .true.
-        !left  = .false.
-        right = .false.
-        left  = .true.
-      end if 
+!      if (both) then
+!        right = .true.
+!        left  = .true.
+!      else
+!        !right = .true.
+!        !left  = .false.
+!        right = .false.
+!        left  = .true.
+!      end if 
+    print*, "right", right
+    print*, "left", left
 !
 !   check weather we have a guess for the eigenvectors in evec, and
 !   weather it is orthonormal.
@@ -2510,7 +2513,7 @@ module diaglib
 !
 !     diagonalize the reduced matrix
 !
-      if (left) a_red = transpose(a_red)
+      if (left .and. .not. right) a_red = transpose(a_red)
       call get_time(t1)
       call dgeev('v','v',ldu,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
       call get_time(t2)
