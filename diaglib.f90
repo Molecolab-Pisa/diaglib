@@ -2287,6 +2287,11 @@ module diaglib
 !
     logical               :: restart
 !
+!   variables for left, right, or both eigenvectors
+!
+    character(len=1)      :: side
+    logical               :: left, right, consecutive
+!
     integer               :: verbosity, k, i, j
 ! 
 !   variables for the sort
@@ -2375,20 +2380,48 @@ module diaglib
     max_incons  = 0
     frst_incons = 0
     ok          = .false.
+    side        = "r" 
+    
 !
     call get_time(t_tot1)
+!
+!   extract from the input which eigenvectors shall be computed in which way
+!     r = only right eigenpairs
+!     l = only left eigenpairs
+!     s = both eigenpairs in simultaneous manner
+!     c = both eigenpairs in consecutive manner
+!
+      if (side == "r") right = .true.
+      if (side == "l") left  = .true.
+      if (side == "s") then
+        right = .true.
+        left  = .true. 
+      end if
+      if (side == "c")  consecutive = .true.
+!
+!     overwrite for present handling with logical both
+!
+      if (both) then
+        right = .true.
+        left  = .true.
+      else
+        !right = .true.
+        !left  = .false.
+        right = .false.
+        left  = .true.
+      end if 
 !
 !   check weather we have a guess for the eigenvectors in evec, and
 !   weather it is orthonormal.
 !   if evec is zero, create a random guess
 !
-    call check_guess(n,n_max,evec_r)
-    if (both) call check_guess(n,n_max,evec_l)
+    if (right) call check_guess(n,n_max,evec_r)
+    if (left)  call check_guess(n,n_max,evec_l)
 !
 !   move guess into the expansion spaces
 !
-    call dcopy(n*n_max,evec_r,1,space_r,1)
-    if (both) call dcopy(n*n_max,evec_l,1,space_l,1)
+    if (right) call dcopy(n*n_max,evec_r,1,space_r,1)
+    if (left)  call dcopy(n*n_max,evec_l,1,space_l,1)
 !
 !   initialize the number of active vectors and the associated indices.
 !
@@ -2408,10 +2441,10 @@ module diaglib
 !   main loop
 !
     1030 format(t5,'Davidson-nonsym iterations (tol=',d10.2,'):',/, &
-                t5,'------------------------------------------------------------------',/, &
-                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
-                t5,'------------------------------------------------------------------')
-    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+                t5,'------------------------------------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms(right)              rms(left)     max ok',/, &
+                t5,'------------------------------------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,2d12.4,l3)
 ! 
     if (verbose) write(6,1030) tol
 !   
@@ -2434,8 +2467,8 @@ module diaglib
 !     right and left spaces
 !
       call get_time(t1)
-      call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
-      if (both) call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
+      if (right) call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
+      if (left)  call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
       call get_time(t2)
       t_mv = t_mv + t2 -t1
 !
@@ -2460,10 +2493,12 @@ module diaglib
 !
 !     get the reduced matrix
 !
-      if (both) then
+      if (left .and. right) then 
         call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_r,n,zero,a_red,lda)
-      else
+      else if (right) then
         call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
+      else if (left) then
+        call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_l,n,zero,a_red,lda)
       end if
 !
       if (verbosity.ge.1) then
@@ -2475,6 +2510,7 @@ module diaglib
 !
 !     diagonalize the reduced matrix
 !
+      if (left) a_red = transpose(a_red)
       call get_time(t1)
       call dgeev('v','v',ldu,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
       call get_time(t2)
@@ -2648,8 +2684,8 @@ module diaglib
 !
       eig = e_red_re(1:n_max)
 !
-      call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
-      if (both) call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
+      if (right) call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
+      if (left)  call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
 !
       if (verbosity.ge.2) then
         print *
@@ -2667,8 +2703,8 @@ module diaglib
 !
 !     compute the residuals, and their rms and sup norms
 !
-      call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
-      if (both) call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
+      if (right) call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
+      if (left)  call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
 !
       do i_eig = 1, n_targ
 !
@@ -2676,10 +2712,12 @@ module diaglib
 !
         if (done(i_eig)) cycle
 !
-        call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
-        r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
-        r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
-        if (both) then
+        if (right) then
+          call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
+          r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
+          r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
+        end if
+        if (left) then
           call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
           r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
           r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
@@ -2717,7 +2755,7 @@ module diaglib
       if (verbose) then
         if (verbosity.ge.1) print *, "interim info"
         do i_eig = 1, n_targ
-          write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_r(:,i_eig), done(i_eig)
+          write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_r(:,i_eig), r_norm_l(:,i_eig), done(i_eig)
         end do
         write(6,*)
       end if 
@@ -2752,8 +2790,8 @@ module diaglib
           end if
         end do
         ind   = n_max - n_act + 1
-        call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
-        if (both) call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
+        if (right) call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
+        if (left)  call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
 !
         if (verbosity.ge.2) then
           print*
@@ -2773,10 +2811,12 @@ module diaglib
 !       Gram-Schmit orthogonalization of residual to the respective subspace 
 !
         call get_time(t1)
-        if (both) then
+        if (right .and. left) then
           call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg),allsvd)
-        else
+        else if (right) then
           call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
+        else if (left) then
+          call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
         end if
         call get_time(t2)
 !
@@ -2800,10 +2840,10 @@ module diaglib
 !       put current eigenvectors into the first position of tne
 !       expansion space
 !
-        call dcopy(n_max*n,evec_r,1,space_r,1)
-        if (both) call dcopy(n_max*n,evec_l,1,space_l,1)
+        if (right) call dcopy(n_max*n,evec_r,1,space_r,1)
+        if (left)  call dcopy(n_max*n,evec_l,1,space_l,1)
 !
-        if (both) then
+        if (right .and. left) then
           call get_time(t1)
           call svd_biortho(n,n_act,space_r,space_l)
           call get_time(t2)
