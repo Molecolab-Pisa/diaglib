@@ -2359,7 +2359,6 @@ module diaglib
 !
 !   set some quantities
 !
-    t_tot       = zero
     verbosity   = 0
     ok          = .false.
     right       = .false.
@@ -2367,23 +2366,25 @@ module diaglib
     consecutive = .false.
     do_davidson = .true.
 !
-    call get_time(t_tot1)
-!
 !   extract from the input which eigenvectors shall be computed in which way
 !     r = only right eigenpairs
 !     l = only left eigenpairs
 !     s = both eigenpairs in simultaneous manner
 !     c = both eigenpairs in consecutive manner, start with right
 !
-      if (side == "r") right = .true.
-      if (side == "l") left  = .true.
-      if (side == "s") then
+      if (side == "r") then 
+        right = .true.
+      else if (side == "l") then 
+        left  = .true.
+      else if (side == "s") then
         right = .true.
         left  = .true. 
-      end if
-      if (side == "c") then 
+      else if (side == "c") then 
         consecutive = .true.
         right = .true.
+      else
+        print *, "choice for side is not correct. can be r,l,s,c."
+        stop
       end if
 !
 !   check weather we have a guess for the eigenvectors in evec, and
@@ -2399,6 +2400,7 @@ module diaglib
 ! 
 !     clean out various quantities
 !
+      t_tot       = zero
       t_diag      = zero
       t_ortho     = zero
       t_mv        = zero
@@ -2414,10 +2416,14 @@ module diaglib
       copy_l      = zero
       r_norm_r    = zero
       r_norm_l    = zero
+      r_r         = zero
+      r_l         = zero
       done        = .false.
       tot_incons  = 0
       max_incons  = 0
       frst_incons = 0
+!
+      call get_time(t_tot1)
 !
 !     move guess into the expansion spaces
 !
@@ -2497,7 +2503,7 @@ module diaglib
         else if (right) then
           call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
         else if (left) then
-          call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_l,n,zero,a_red,lda)
+          call dgemm('t','n',ldu,ldu,n,one,aspace_l,n,space_l,n,zero,a_red,lda)
         end if
 !
         if (verbosity.ge.1) then
@@ -2509,7 +2515,6 @@ module diaglib
 !
 !       diagonalize the reduced matrix
 !
-        if (left .and. .not. right) a_red = transpose(a_red)
         call get_time(t1)
         call dgeev('v','v',ldu,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
         call get_time(t2)
@@ -2893,6 +2898,7 @@ module diaglib
       if (side.eq.'r' .or. side.eq.'l' .or. side.eq.'s') do_davidson = .false.
       if (consecutive) then
         if (left) then
+          left = .false.
           do_davidson = .false.
         else
           right = .false.
@@ -2900,18 +2906,30 @@ module diaglib
 !
 !         use evec_r as guess for evec_l
 !
-!         call dcopy(n*n_max,evec_r,1,evec_l,1)
+         !call dcopy(n*n_max,evec_r,1,evec_l,1)
         end if  
         
       end if
     end do
 !
-!   check if l^T A r = eig
+!   final orthogonalization of  evec_r and evec_l, if both were computed.
 !
-    !r_r = zero
-    !call matvec(n,n_max,evec_r,r_r)
-    !call dgemm('t','n',n_max,n_max,n,one,evec_l,n,r_r,n,zero,overlap,n_max)
-    call printMatrix(n_max,n_max,overlap,n_max)
+    if (consecutive .or. left .and. right) then
+      call get_time(t1)
+      call svd_biortho(n,n_max,evec_l,evec_r)
+      call get_time(t2)
+      t_ortho = t_ortho + t2 - t1
+!
+      if (verbosity.gt.1) then
+        print *
+        print *, "compute eigenvalues by eig = l^T A r."
+        r_r = zero
+        call matvec(n,n_max,evec_r,r_r)
+        call dgemm('t','n',n_max,n_max,n,one,evec_l,n,r_r,n,zero,overlap,n_max)
+        call printMatrix(n_max,n_max,overlap,n_max)
+        print *
+      end if 
+    end if
 !
     1100 format(t3,'  iterations                      : ',i12,/,&
                 t3,'  converged                       : ',l12,/,/,&
@@ -3098,7 +3116,7 @@ module diaglib
 !
     do i = 1, n
       do j = 1, m
-        write(*,'(E15.5)', advance='no') A(i,j)
+        write(*,'(F15.8)', advance='no') A(i,j)
         if (j .lt. m) then
           write(*, '(A)', advance='no') ' '
         end if

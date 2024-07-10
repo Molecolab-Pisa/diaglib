@@ -1216,7 +1216,6 @@ end program main
       lwork = int(lw(1))
       allocate (work(lwork)) 
       call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
-      deallocate (work, a_copy, wr, wi, r, l)
 !
       if (info.ne.0) then
         print *, "diagonalization of full space failed."
@@ -1231,6 +1230,7 @@ end program main
       call printMatrix(n_want,1,wr,n)
       print *
       print *
+      deallocate (work, a_copy, wr, wi, r, l)
     end if 
 !
 !   allocate and gather the diagonal
@@ -1266,7 +1266,7 @@ end program main
   call dcopy(n*n_eig,evec_r,1,evec_l,1)
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok,allsvd)
+  call nonsym_driver(.false.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok,allsvd)
 !
 !
   deallocate(eig, evec_r, evec_l, diagonal)
@@ -1309,20 +1309,20 @@ end program main
     return
   end subroutine matexp
 !
-  subroutine printMatrix(n,m,A,lda) 
+  subroutine printMatrix(n,m,mat,lda) 
 !   
 ! print formatted matrix
 !
     use real_precision
     implicit none
     integer , intent(in)  :: n, m, lda
-    real(dp), intent(in)  :: A(lda,lda)
+    real(dp), intent(in)  :: mat(lda,lda)
 !
     integer :: i, j
 !
     do i = 1, n
       do j = 1, m
-        write(*,'(F12.5)', advance='no') A(i,j)
+        write(*,'(F12.8)', advance='no') mat(i,j)
         if (j .lt. m) then
           write(*, '(A)', advance='no') ' '
         end if
@@ -1358,7 +1358,6 @@ end program main
 ! 
 !     identify minimal value and mask first position for next iteration
 !
-print*, wr
       min_idx = minloc(wr, mask=mask) 
       idx     = min_idx(1)
 !
