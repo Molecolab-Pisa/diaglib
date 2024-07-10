@@ -2290,7 +2290,8 @@ module diaglib
 !
 !   variables for left, right, or both eigenvectors
 !
-    logical               :: left, right, consecutive
+    logical               :: left, right, consecutive, do_davidson
+    integer               :: i_dav, maxit_dav  
 !
     integer               :: verbosity, k, i, j
 ! 
@@ -2356,33 +2357,15 @@ module diaglib
     tol_max = 10.0_dp * tol
     tol_im  = 1.d-12
 !
-!   clean out various quantities
+!   set some quantities
 !
-    t_diag      = zero
-    t_ortho     = zero
-    t_mv        = zero
     t_tot       = zero
-    t_sort      = zero
-    space_r     = zero
-    space_l     = zero
-    aspace_r    = zero
-    aspace_l    = zero
-    a_red       = zero
-    e_red_re    = zero
-    e_red_im    = zero
-    copy_r      = zero
-    copy_l      = zero
-    r_norm_r    = zero
-    r_norm_l    = zero
-    done        = .false.
     verbosity   = 0
-    tot_incons  = 0
-    max_incons  = 0
-    frst_incons = 0
     ok          = .false.
     right       = .false.
     left        = .false.
     consecutive = .false.
+    do_davidson = .true.
 !
     call get_time(t_tot1)
 !
@@ -2390,7 +2373,7 @@ module diaglib
 !     r = only right eigenpairs
 !     l = only left eigenpairs
 !     s = both eigenpairs in simultaneous manner
-!     c = both eigenpairs in consecutive manner
+!     c = both eigenpairs in consecutive manner, start with right
 !
       if (side == "r") right = .true.
       if (side == "l") left  = .true.
@@ -2398,21 +2381,10 @@ module diaglib
         right = .true.
         left  = .true. 
       end if
-      if (side == "c")  consecutive = .true.
-!
-!     overwrite for present handling with logical both
-!
-!      if (both) then
-!        right = .true.
-!        left  = .true.
-!      else
-!        !right = .true.
-!        !left  = .false.
-!        right = .false.
-!        left  = .true.
-!      end if 
-    print*, "right", right
-    print*, "left", left
+      if (side == "c") then 
+        consecutive = .true.
+        right = .true.
+      end if
 !
 !   check weather we have a guess for the eigenvectors in evec, and
 !   weather it is orthonormal.
@@ -2421,468 +2393,525 @@ module diaglib
     if (right) call check_guess(n,n_max,evec_r)
     if (left)  call check_guess(n,n_max,evec_l)
 !
-!   move guess into the expansion spaces
-!
-    if (right) call dcopy(n*n_max,evec_r,1,space_r,1)
-    if (left)  call dcopy(n*n_max,evec_l,1,space_l,1)
-!
 !   initialize the number of active vectors and the associated indices.
 !
-    n_act = n_max
-    i_beg = 1
-    ind   = 1
-!
-!   initialize the counter for the expansion of the subspace
-!
-    m_dim = 1
-    ldu   = 0
-!
-!   initialize to false the restart
-!
-    restart = .false.
-!
-!   main loop
-!
-    1030 format(t5,'Davidson-nonsym iterations (tol=',d10.2,'):',/, &
-                t5,'------------------------------------------------------------------------------------------------',/, &
-                t7,'  iter  root              eigenvalue','         rms(right)              rms(left)     max ok',/, &
-                t5,'------------------------------------------------------------------------------------------------')
-    1040 format(t9,i4,2x,i4,f24.12,2d12.4,2d12.4,l3)
+    do while (do_davidson)
 ! 
-    if (verbose) write(6,1030) tol
-!   
-    do it = 1, max_iter
+!     clean out various quantities
 !
-!     header
+      t_diag      = zero
+      t_ortho     = zero
+      t_mv        = zero
+      t_sort      = zero
+      space_r     = zero
+      space_l     = zero
+      aspace_r    = zero
+      aspace_l    = zero
+      a_red       = zero
+      e_red_re    = zero
+      e_red_im    = zero
+      copy_r      = zero
+      copy_l      = zero
+      r_norm_r    = zero
+      r_norm_l    = zero
+      done        = .false.
+      tot_incons  = 0
+      max_incons  = 0
+      frst_incons = 0
 !
-      if (verbosity.ge.1) then
-        print *
-        1000 format(20("="),/,t3,'Iteration',i3,/,20("="))
-        print 1000, it
-        print*
-      end if
+!     move guess into the expansion spaces
 !
-!     update the size of the expansion space.
+      if (right) call dcopy(n*n_max,evec_r,1,space_r,1)
+      if (left)  call dcopy(n*n_max,evec_l,1,space_l,1)
 !
-      ldu   = ldu + n_act
+      n_act = n_max
+      i_beg = 1
+      ind   = 1
 !
-!     perform this iteration's matrix-vector multiplications for both 
-!     right and left spaces
+!     initialize the counter for the expansion of the subspace
 !
-      call get_time(t1)
-      if (right) call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
-      if (left)  call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
-      call get_time(t2)
-      t_mv = t_mv + t2 -t1
+      m_dim = 1
+      ldu   = 0
 !
-      if (verbosity.ge.2) then
-        1200 format(t3, 'ldu:     ',i4,/, &
-                    t3, 'i_beg:   ', i4,/,&
-                    t3, 'm_dim:   ', i4,/,&
-                    t3, 'restart: ', l4,/,&
-                    t3, 'n_act:   ', i4,/)
-        write(6,1200) ldu, i_beg, m_dim, restart, n_act
-        print *, "space r+l"
-        call printMatrix(n,ldu,space_r,n)
-        print *
-        call printMatrix(n,ldu,space_l,n)
-        print *
-        print *, "aspace r+l"
-        call printMatrix(n,ldu,aspace_r,n)
-        print *
-        call printMatrix(n,ldu,aspace_l,n)
-        print *
-      end if
-!
-!     get the reduced matrix
-!
-      if (left .and. right) then 
-        call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_r,n,zero,a_red,lda)
-      else if (right) then
-        call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
-      else if (left) then
-        call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_l,n,zero,a_red,lda)
-      end if
-!
-      if (verbosity.ge.1) then
-        print *
-        print *, "print reduced space a:"
-        call printMatrix(ldu,ldu,a_red,lda)
-        print *
-      end if
-!
-!     diagonalize the reduced matrix
-!
-      if (left .and. .not. right) a_red = transpose(a_red)
-      call get_time(t1)
-      call dgeev('v','v',ldu,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
-      call get_time(t2)
-!
-      t_diag = t_diag + t2 - t1
-! 
-!     check if diagonalization terminated with info = 0
-!
-      if (info.ne.0) then
-        print *, "diagonalization of reduced space failed."
-        stop
-      end if
-!
-      if (verbosity.ge.2) then
-        print *, "before sorting"
-        print *, "evec r + l"
-        call printMatrix(ldu,ldu,evec_red_r,lda)
-        print *
-        call printMatrix(ldu,ldu,evec_red_l,lda)
-        print *
-        print*, "eig"
-        call printVector(e_red_re,ldu)
-        print *
-      end if
-!
-!     sort lowest eigenpairs in increasing order in range n_targ 
-!
-      call get_time(t1)
-      call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
-      call get_time(t2)
-      t_sort = t_sort + t2 - t1
-!
-!     double check for complex contributions in the n_max sought eigenvalues
-!
-      found_im = .false.
-      do j = 1, n_max
-        if (e_red_im(j).gt.tol_im) found_im = .true.
-      end do
-!
-      if (found_im.and.verbose) then
-        print *
-        print *, "complex contribution in sought eigenvalues"
-        print*
-      end if
-!
-      if (verbosity.ge.2) then
-        print *
-        print *, "eigenvalues after sort real and imaginary"
-        call printVector(e_red_re, ldu)
-        print *
-        call printVector(e_red_im, ldu)
-        print *
-      end if
-!
-!
-      if (verbosity.ge.2) then
-        print *, "evec r + l after sort + eigenvecs"
-        call printMatrix(ldu,ldu,evec_red_r,lda)
-        print *
-        call printMatrix(ldu,ldu,evec_red_l,lda)
-        print *
-        call printVector(e_red_re,ldu)
-        print *
-      end if
-!
-!     compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
-!     to ensure correct sorting by checking if largest absolute value of column is on the
-!     diagonal
-!  
-      if (it.ne.1 .and. .not. restart) then  
-        mask_sort = .true.
-        no_match  = .true.
-        iter      = 0
-        it_incons = 0
-        do while (no_match)
-          iter = iter +1
-          if (iter .gt. 10*n_max) then
-            print *, "too many iterations in shifting away eigenvalues that dont match to the ones of the previous iteration."
-            stop
-          end if
-!
-          call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
-!
-          found_er = .false.
-          do j = 1, n_max
-            max_idx = maxloc(abs(overlap(:,j)))
-            if (max_idx(1).ne.j) then
-              found_er = .true.
-            end if
-          end do
-!
-          call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
-!
-          do j = 1, n_max
-            max_idx = maxloc(abs(overlap(:,j)))
-            if (max_idx(1).ne.j) then
-              found_er = .true.
-            end if
-          end do
-!
-          if (found_er) then
-!
-!           if error encounterd in the overlap of old and new eigenvectors, move errorneous 
-!           eigenpair to the end of the array, mask it and sort again
-!
-!           identify difference of every old and new eigenvalue in range n_max and store 
-!           lowest difference to not shift-away sought eigenvalues, which were just returned
-!           in different order after the diagonalization, but are correct ones.
-!
-            it_incons = it_incons + 1
-            diff    = 0
-            if (frst_incons.eq.0) frst_incons = it 
-!
-            do j = 1, n_max
-              do k = 1, ldu
-                temp = abs(e_red_re(j) - copy_eig(k)) 
-                if (temp.lt.diff(j) .or. k.eq.1) diff(j) = temp
-              end do
-            end do
-!
-!           get index of highest difference and shift eigenpair to last available entry of array 
-!           in range ldu and mask it
-!
-            max_idx = maxloc(diff)
-            fin = ldu
-            do j =1, ldu
-              if (.not. mask_sort(j) .and. fin.gt.1) then
-                fin = fin - 1
-              else if (fin.le.1) then
-                print *, "eigenvectors dont match although handling was tried."
-                stop
-              end if 
-            end do
-!
-            call get_time(t1)
-            call swap_eigenpairs(max_idx(1),fin,ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,lda)
-            call get_time(t2)
-!
-            t_sort = t_sort + t2 - t1
-            mask_sort(fin) = .false.
-!
-            call get_time(t1)
-            call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im,mask_sort)
-            call get_time(t2)
-!
-            t_sort = t_sort + t2 - t1
-!           
-            if (verbosity.gt.2) then
-              print*
-              print *, "---- Information ----"
-              print *, "handled inconsistance in old and current eigenvectors"
-              print *
-            end if
-          else
-            no_match = .false.      
-            if (it_incons .gt. max_incons) max_incons = it_incons
-            tot_incons = tot_incons + it_incons
-          end if
-        end do
-      end if
-!
-!     copy and save the new eigenvectors for the next iteration
+!     initialize to false the restart
 !
       restart = .false.
-      copy_r   = evec_red_r
-      copy_l   = evec_red_l
-      copy_eig = e_red_re
 !
-!     extract the eigenvalues and compute the ritz approximation to the 
-!     eigenvectors
+!     main loop
 !
-      eig = e_red_re(1:n_max)
-!
-      if (right) call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
-      if (left)  call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
-!
-      if (verbosity.ge.2) then
-        print *
-        print *, "extracted eigenvals"
-        print *
-        call printVector(eig, n_max)
-        print *
-!
-        print *, "ritz"
-        call printMatrix(n,n_max,evec_r,n)
-        print *
-        call printMatrix(n,n_max,evec_l,n)
-        print *
-      end if
-!
-!     compute the residuals, and their rms and sup norms
-!
-      if (right) call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
-      if (left)  call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
-!
-      do i_eig = 1, n_targ
-!
-!       if the eigenvalue is already converged, skip it.
-!
-        if (done(i_eig)) cycle
-!
-        if (right) then
-          call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
-          r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
-          r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
-        end if
-        if (left) then
-          call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
-          r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
-          r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
-        end if 
-!
-      end do
-!
-      if (verbosity.ge.2) then
-        print*
-        print*, "residual right and left"
-        call printMatrix(n,n_max,r_r,n)
-        print*
-        call printMatrix(n,n_max,r_l,n)
-        print*
-      end if
-!
-!     check convergency. look the first contiguous converged eigenvalues
-!     by setting the logical array "done" to true
-!
-      do i_eig = 1, n_targ
-        if (done(i_eig)) cycle
-        done(i_eig)     = r_norm_r(1,i_eig).lt.tol_rms .and.&
-                          r_norm_r(2,i_eig).lt.tol_max .and.&
-                          r_norm_l(1,i_eig).lt.tol_rms .and.& 
-                          r_norm_l(2,i_eig).lt.tol_max .and.&    
-                          it.gt.1                               
-        if (.not.done(i_eig)) then
-          done(i_eig+1:n_max) = .false.
-          exit
-        end if
-      end do
-!
-!     print some information
-!
-      if (verbose) then
-        if (verbosity.ge.1) print *, "interim info"
-        do i_eig = 1, n_targ
-          write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_r(:,i_eig), r_norm_l(:,i_eig), done(i_eig)
-        end do
-        write(6,*)
-      end if 
-!
-      if (all(done(1:n_targ))) then
-        ok = .true.
-        if (verbose) print *, "converged =)"
-        exit
-      end if
+      1030 format(t5,'Davidson-nonsym iterations (tol=',d10.2,', right =',l2,', left =',l2,'):',/, &
+                  t5,'------------------------------------------------------------------------------------------------',/, &
+                  t7,'  iter  root              eigenvalue','         rms(right)              rms(left)     max ok',/, &
+                  t5,'------------------------------------------------------------------------------------------------')
+      1040 format(t9,i4,2x,i4,f24.12,2d12.4,2d12.4,l3)
+! 
+      if (verbose) write(6,1030) tol, right, left
 !     
-!     check weather an update is required.
-!     if not, perform a davidson restart
+      do it = 1, max_iter
 !
-      if (m_dim .lt. dim_dav) then 
+!       header
 !
-!       compute the preconditioned residuals using davidson's procedure
-!       note that this is done with a user-supplied subroutine, that can
-!       be generalized to experiment with fancy preconditioners that may
-!       be more effective than the diagonal one, as in the original 
-!       algorithm.
+        if (verbosity.ge.1) then
+          print *
+          1000 format(20("="),/,t3,'Iteration',i3,/,20("="))
+          print 1000, it
+          print*
+        end if
 !
-        m_dim = m_dim + 1
-        i_beg = i_beg + n_act
-        n_act = n_max
-        n_frozen = 0
-        do i_eig = 1, n_targ
-          if (done(i_eig)) then
-            n_act = n_act - 1
-            n_frozen = n_frozen + 1
-          else
-            exit
-          end if
+!       update the size of the expansion space.
+!
+        ldu   = ldu + n_act
+!
+!       perform this iteration's matrix-vector multiplications for both 
+!       right and left spaces
+!
+        call get_time(t1)
+        if (right) call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
+        if (left)  call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
+        call get_time(t2)
+        t_mv = t_mv + t2 -t1
+!
+        if (verbosity.ge.2) then
+          1200 format(t3, 'ldu:     ',i4,/, &
+                      t3, 'i_beg:   ', i4,/,&
+                      t3, 'm_dim:   ', i4,/,&
+                      t3, 'restart: ', l4,/,&
+                      t3, 'n_act:   ', i4,/)
+          write(6,1200) ldu, i_beg, m_dim, restart, n_act
+          print *, "space r+l"
+          call printMatrix(n,ldu,space_r,n)
+          print *
+          call printMatrix(n,ldu,space_l,n)
+          print *
+          print *, "aspace r+l"
+          call printMatrix(n,ldu,aspace_r,n)
+          print *
+          call printMatrix(n,ldu,aspace_l,n)
+          print *
+        end if
+!
+!       get the reduced matrix
+!
+        if (left .and. right) then 
+          call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_r,n,zero,a_red,lda)
+        else if (right) then
+          call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
+        else if (left) then
+          call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_l,n,zero,a_red,lda)
+        end if
+!
+        if (verbosity.ge.1) then
+          print *
+          print *, "print reduced space a:"
+          call printMatrix(ldu,ldu,a_red,lda)
+          print *
+        end if
+!
+!       diagonalize the reduced matrix
+!
+        if (left .and. .not. right) a_red = transpose(a_red)
+        call get_time(t1)
+        call dgeev('v','v',ldu,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+        call get_time(t2)
+!
+        t_diag = t_diag + t2 - t1
+! 
+!       check if diagonalization terminated with info = 0
+!
+        if (info.ne.0) then
+          print *, "diagonalization of reduced space failed."
+          stop
+        end if
+!
+        if (verbosity.ge.2) then
+          print *, "before sorting"
+          print *, "evec r + l"
+          call printMatrix(ldu,ldu,evec_red_r,lda)
+          print *
+          call printMatrix(ldu,ldu,evec_red_l,lda)
+          print *
+          print*, "eig"
+          call printVector(e_red_re,ldu)
+          print *
+        end if
+!
+!       sort lowest eigenpairs in increasing order in range n_targ 
+!
+        call get_time(t1)
+        call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
+        call get_time(t2)
+        t_sort = t_sort + t2 - t1
+!
+!       double check for complex contributions in the n_max sought eigenvalues
+!
+        found_im = .false.
+        do j = 1, n_max
+          if (e_red_im(j).gt.tol_im) found_im = .true.
         end do
-        ind   = n_max - n_act + 1
-        if (right) call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
-        if (left)  call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
+!
+        if (found_im.and.verbose) then
+          print *
+          print *, "complex contribution in sought eigenvalues"
+          print*
+        end if
+!
+        if (verbosity.ge.2) then
+          print *
+          print *, "eigenvalues after sort real and imaginary"
+          call printVector(e_red_re, ldu)
+          print *
+          call printVector(e_red_im, ldu)
+          print *
+        end if
+!
+!
+        if (verbosity.ge.2) then
+          print *, "evec r + l after sort + eigenvecs"
+          call printMatrix(ldu,ldu,evec_red_r,lda)
+          print *
+          call printMatrix(ldu,ldu,evec_red_l,lda)
+          print *
+          call printVector(e_red_re,ldu)
+          print *
+        end if
+!
+!       compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
+!       to ensure correct sorting by checking if largest absolute value of column is on the
+!       diagonal
+!  
+        if (it.ne.1 .and. .not. restart) then  
+          mask_sort = .true.
+          no_match  = .true.
+          iter      = 0
+          it_incons = 0
+          do while (no_match)
+            iter = iter +1
+            if (iter .gt. 10*n_max) then
+              print *, "too many iterations in shifting away eigenvalues that dont match to the ones of the previous iteration."
+              stop
+            end if
+!
+            call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
+!
+            found_er = .false.
+            do j = 1, n_max
+              max_idx = maxloc(abs(overlap(:,j)))
+              if (max_idx(1).ne.j) then
+                found_er = .true.
+              end if
+            end do
+!
+            call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
+!
+            do j = 1, n_max
+              max_idx = maxloc(abs(overlap(:,j)))
+              if (max_idx(1).ne.j) then
+                found_er = .true.
+              end if
+            end do
+!
+            if (found_er) then
+!
+!             if error encounterd in the overlap of old and new eigenvectors, move errorneous 
+!             eigenpair to the end of the array, mask it and sort again
+!
+!             identify difference of every old and new eigenvalue in range n_max and store 
+!             lowest difference to not shift-away sought eigenvalues, which were just returned
+!             in different order after the diagonalization, but are correct ones.
+!
+              it_incons = it_incons + 1
+              diff    = 0
+              if (frst_incons.eq.0) frst_incons = it 
+!
+              do j = 1, n_max
+                do k = 1, ldu
+                  temp = abs(e_red_re(j) - copy_eig(k)) 
+                  if (temp.lt.diff(j) .or. k.eq.1) diff(j) = temp
+                end do
+              end do
+!
+!             get index of highest difference and shift eigenpair to last available entry of array 
+!             in range ldu and mask it
+!
+              max_idx = maxloc(diff)
+              fin = ldu
+              do j =1, ldu
+                if (.not. mask_sort(j) .and. fin.gt.1) then
+                  fin = fin - 1
+                else if (fin.le.1) then
+                  print *, "eigenvectors dont match although handling was tried."
+                  stop
+                end if 
+              end do
+!
+              call get_time(t1)
+              call swap_eigenpairs(max_idx(1),fin,ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,lda)
+              call get_time(t2)
+!
+              t_sort = t_sort + t2 - t1
+              mask_sort(fin) = .false.
+!
+              call get_time(t1)
+              call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im,mask_sort)
+              call get_time(t2)
+!
+              t_sort = t_sort + t2 - t1
+!             
+              if (verbosity.gt.2) then
+                print*
+                print *, "---- Information ----"
+                print *, "handled inconsistance in old and current eigenvectors"
+                print *
+              end if
+            else
+              no_match = .false.      
+              if (it_incons .gt. max_incons) max_incons = it_incons
+              tot_incons = tot_incons + it_incons
+            end if
+          end do
+        end if
+!
+!       copy and save the new eigenvectors for the next iteration
+!
+        restart = .false.
+        copy_r   = evec_red_r
+        copy_l   = evec_red_l
+        copy_eig = e_red_re
+!
+!       extract the eigenvalues and compute the ritz approximation to the 
+!       eigenvectors
+!
+        eig = e_red_re(1:n_max)
+!
+        if (right) call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
+        if (left)  call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
+!
+        if (verbosity.ge.2) then
+          print *
+          print *, "extracted eigenvals"
+          print *
+          call printVector(eig, n_max)
+          print *
+!
+          print *, "ritz"
+          call printMatrix(n,n_max,evec_r,n)
+          print *
+          call printMatrix(n,n_max,evec_l,n)
+          print *
+        end if
+!
+!       compute the residuals, and their rms and sup norms
+!
+        if (right) call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
+        if (left)  call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
+!
+        do i_eig = 1, n_targ
+!
+!         if the eigenvalue is already converged, skip it.
+!
+          if (done(i_eig)) cycle
+!
+          if (right) then
+            call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
+            r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
+            r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
+          end if
+          if (left) then
+            call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
+            r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
+            r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
+          end if 
+!
+        end do
 !
         if (verbosity.ge.2) then
           print*
-          print *, "precondition:"
-          print *
-          call printMatrix(n,n_act,space_r(1,i_beg),n)
+          print*, "residual right and left"
+          call printMatrix(n,n_max,r_r,n)
           print*
-          print*
-          call printMatrix(n,n_act,space_l(1,i_beg),n)
+          call printMatrix(n,n_max,r_l,n)
           print*
         end if
 !
-!       orthogonalize the new vectors to the existing ones of the respective other
-!       space and orthogonalize set of new vectors among each other
-!
-!
-!       Gram-Schmit orthogonalization of residual to the respective subspace 
-!
-        call get_time(t1)
-        if (right .and. left) then
-          call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg),allsvd)
-        else if (right) then
-          call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
-        else if (left) then
-          call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
-        end if
-        call get_time(t2)
-!
-        t_ortho = t_ortho + t2 - t1
-!
-!       normalize columns 
-!
-        if (verbosity.gt.2) then
-          print *, "orthogonalized space r"
-          call printMatrix(n,ldu+n_max,space_r,n)
-          print *, "orthogonalized space l"
-          call printMatrix(n,ldu+n_max,space_l,n)
-        end if
-!
-      else 
-        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
-        n_act   = n_max
-        space_r = zero
-        space_l = zero
-!
-!       put current eigenvectors into the first position of tne
-!       expansion space
-!
-        if (right) call dcopy(n_max*n,evec_r,1,space_r,1)
-        if (left)  call dcopy(n_max*n,evec_l,1,space_l,1)
-!
-        if (right .and. left) then
-          call get_time(t1)
-          call svd_biortho(n,n_act,space_r,space_l)
-          call get_time(t2)
-          t_ortho = t_ortho + t2 - t1
-        end if
-!
-        aspace_r  = zero
-        aspace_l  = zero
-        a_red     = zero
-        e_red_re  = zero
-        e_red_im  = zero
-!
-!       initialize indexes back to their starting values
-!
-        ldu   = 0
-        i_beg = 1
-        m_dim = 1
-!
-!       counting how many matvec we can skip at the next
-!       iteration
+!       check convergency. look the first contiguous converged eigenvalues
+!       by setting the logical array "done" to true
 !
         do i_eig = 1, n_targ
-          if (done(i_eig)) then
-            n_frozen = n_frozen +1
-          else
+          if (done(i_eig)) cycle
+          done(i_eig)     = r_norm_r(1,i_eig).lt.tol_rms .and.&
+                            r_norm_r(2,i_eig).lt.tol_max .and.&
+                            r_norm_l(1,i_eig).lt.tol_rms .and.& 
+                            r_norm_l(2,i_eig).lt.tol_max .and.&    
+                            it.gt.1                               
+          if (.not.done(i_eig)) then
+            done(i_eig+1:n_max) = .false.
             exit
           end if
         end do
-        restart = .true.
-      end if
-      if (verbose) write(6,1050) n_targ, n_act, n_frozen
-    end do
-    call get_time(t_tot2)
-    t_tot = t_tot2 - t_tot1
 !
-!   if required, print timings
+!       print some information
+!
+        if (verbose) then
+          if (verbosity.ge.1) print *, "interim info"
+          do i_eig = 1, n_targ
+            write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_l(:,i_eig), r_norm_r(:,i_eig), done(i_eig)
+          end do
+          write(6,*)
+        end if 
+!
+        if (all(done(1:n_targ))) then
+          ok = .true.
+          if (verbose) print *, "converged =)"
+          exit
+        end if
+!       
+!       check weather an update is required.
+!       if not, perform a davidson restart
+!
+        if (m_dim .lt. dim_dav) then 
+!
+!         compute the preconditioned residuals using davidson's procedure
+!         note that this is done with a user-supplied subroutine, that can
+!         be generalized to experiment with fancy preconditioners that may
+!         be more effective than the diagonal one, as in the original 
+!         algorithm.
+!
+          m_dim = m_dim + 1
+          i_beg = i_beg + n_act
+          n_act = n_max
+          n_frozen = 0
+          do i_eig = 1, n_targ
+            if (done(i_eig)) then
+              n_act = n_act - 1
+              n_frozen = n_frozen + 1
+            else
+              exit
+            end if
+          end do
+          ind   = n_max - n_act + 1
+          if (right) call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
+          if (left)  call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
+!
+          if (verbosity.ge.2) then
+            print*
+            print *, "precondition:"
+            print *
+            call printMatrix(n,n_act,space_r(1,i_beg),n)
+            print*
+            print*
+            call printMatrix(n,n_act,space_l(1,i_beg),n)
+            print*
+          end if
+!
+!         orthogonalize the new vectors to the existing ones of the respective other
+!         space and orthogonalize set of new vectors among each other
+!
+!
+!         Gram-Schmit orthogonalization of residual to the respective subspace 
+!
+          call get_time(t1)
+          if (right .and. left) then
+            call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg),allsvd)
+          else if (right) then
+            call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
+          else if (left) then
+            call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
+          end if
+          call get_time(t2)
+!
+          t_ortho = t_ortho + t2 - t1
+!
+!         normalize columns 
+!
+          if (verbosity.gt.2) then
+            print *, "orthogonalized space r"
+            call printMatrix(n,ldu+n_max,space_r,n)
+            print *, "orthogonalized space l"
+            call printMatrix(n,ldu+n_max,space_l,n)
+          end if
+!
+        else 
+          if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+          n_act   = n_max
+          space_r = zero
+          space_l = zero
+!
+!         put current eigenvectors into the first position of tne
+!         expansion space
+!
+          if (right) call dcopy(n_max*n,evec_r,1,space_r,1)
+          if (left)  call dcopy(n_max*n,evec_l,1,space_l,1)
+!
+          if (right .and. left) then
+            call get_time(t1)
+            call svd_biortho(n,n_act,space_r,space_l)
+            call get_time(t2)
+            t_ortho = t_ortho + t2 - t1
+          end if
+!
+          aspace_r  = zero
+          aspace_l  = zero
+          a_red     = zero
+          e_red_re  = zero
+          e_red_im  = zero
+!
+!         initialize indexes back to their starting values
+!
+          ldu   = 0
+          i_beg = 1
+          m_dim = 1
+!
+!         counting how many matvec we can skip at the next
+!         iteration
+!
+          do i_eig = 1, n_targ
+            if (done(i_eig)) then
+              n_frozen = n_frozen +1
+            else
+              exit
+            end if
+          end do
+          restart = .true.
+        end if
+        if (verbose) write(6,1050) n_targ, n_act, n_frozen
+      end do
+! 
+!     end of davidson, print results
+!
+      call get_time(t_tot2)
+      t_tot = t_tot2 - t_tot1
+!
+!     if required, print timings
+!
+      print * 
+      write(6,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
+      print * 
+      print * 
+!
+!     stop after one davidson evaluation or do a second one if side = consecutive 
+!
+      if (side.eq.'r' .or. side.eq.'l' .or. side.eq.'s') do_davidson = .false.
+      if (consecutive) then
+        if (left) then
+          do_davidson = .false.
+        else
+          right = .false.
+          left  = .true.
+!
+!         use evec_r as guess for evec_l
+!
+!         call dcopy(n*n_max,evec_r,1,evec_l,1)
+        end if  
+        
+      end if
+    end do
+!
+!   check if l^T A r = eig
+!
+    !r_r = zero
+    !call matvec(n,n_max,evec_r,r_r)
+    !call dgemm('t','n',n_max,n_max,n,one,evec_l,n,r_r,n,zero,overlap,n_max)
+    call printMatrix(n_max,n_max,overlap,n_max)
 !
     1100 format(t3,'  iterations                      : ',i12,/,&
                 t3,'  converged                       : ',l12,/,/,&
@@ -2896,7 +2925,6 @@ module diaglib
                 t3,'  sorting                         : ',2f12.4,/, &
                 t3,'                                   ',24('='),/,  &
                 t3,'  total                           : ',2f12.4)
-    write(6,1100) it, ok, tot_incons, max_incons, frst_incons, t_mv, t_diag, t_ortho, t_sort, t_tot
 !
 !   read in output file and print total output
 !
