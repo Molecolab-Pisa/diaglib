@@ -2292,6 +2292,7 @@ module diaglib
 !
     logical               :: left, right, consecutive, do_davidson
     integer               :: i_dav, maxit_dav  
+    real(dp)              :: eig_r(n_targ)
 !
     integer               :: verbosity, k, i, j
 ! 
@@ -2900,9 +2901,18 @@ module diaglib
         if (left) then
           left = .false.
           do_davidson = .false.
+!
+!         check if energies are same
+!
+          if (maxval(eig_r - eig) .gt. 1.d-11) then
+            print *, "eigenvalues in the consecutive computation of right and left eigenpairs do not match." 
+            stop
+          end if
+!
         else
           right = .false.
           left  = .true.
+          eig_r = eig
 !
 !         use evec_r as guess for evec_l
 !
