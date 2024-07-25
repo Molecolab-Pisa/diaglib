@@ -3152,7 +3152,7 @@ module diaglib
 !         use evec_r as guess for evec_l
 !
           call ortho_cd(n,n_max,evec_r,yy,ok) 
-          call dcopy(n*n_max,evec_r,1,evec_l,1) 
+          !call dcopy(n*n_max,evec_r,1,evec_l,1) 
         end if  
         
       end if

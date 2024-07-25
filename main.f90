@@ -102,12 +102,11 @@ end program main
     real(dp),  dimension(n,m), intent(in)    :: x
     real(dp),  dimension(n,m), intent(inout) :: ax
 !
-    real(dp), dimension(n,n)                 :: a_t 
     integer :: i, j, icol
 !
 !   transpose the matrix
 !
-    a_t = transpose(a)
+    !a_t = transpose(a)
     nmult = nmult + m
     do icol = 1, m
       ax(:,icol) = matmul(a_t,x(:,icol))
@@ -1239,6 +1238,12 @@ end program main
     do i = 1,n
       diagonal(i) = a(i,i)
     end do
+!
+!   compute the transpose of a once and keep it in memory
+!
+    allocate( a_t(n,n))
+    a_t = transpose(a)
+!
     !n_eig =  min(3*n_want, n_want + 5)
 !
       1300 format(t5,55("-"),/,t3,'   nonsymmetric davidson results',/,t5,55("-"),/)
