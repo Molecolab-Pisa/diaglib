@@ -1266,7 +1266,7 @@ end program main
   call dcopy(n*n_eig,evec_r,1,evec_l,1)
 !   call driver nonsym
 !
-  call nonsym_driver(.false.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok,allsvd)
+  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok,allsvd)
 !
 !
   deallocate(eig, evec_r, evec_l, diagonal)

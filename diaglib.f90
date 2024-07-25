@@ -2268,7 +2268,7 @@ module diaglib
     integer               :: it, i_eig
 !   
     real(dp)              :: sqrtn, tol_rms, tol_max, tol_im
-    real(dp)              :: xx(1)
+    real(dp)              :: xx(1), yy
 !
 !   arrays to control convergence and orthoginalization
 !
@@ -2282,7 +2282,7 @@ module diaglib
 !   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
 !
     real(dp), allocatable :: a_red(:,:), e_red_re(:), e_red_im(:), &
-                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), copy_eig(:), overlap(:,:)
+                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), copy_eig(:)
 !
 !   restarting variables
 !
@@ -2299,15 +2299,17 @@ module diaglib
 !   variables for the sort
 !
     integer               :: max_idx(1), fin, iter, it_incons, tot_incons, max_incons, frst_incons
-    real(dp)              :: diff(n_max), temp, t_sort(2)
-    logical               :: found_im, found_er, no_match
-    logical, allocatable  :: mask_sort(:)
+    real(dp)              :: diff(n_max), temp, t_sort(2), sum_r, sum_l
+    logical               :: found_im, found_er, no_match, double_r, double_l, ortho_ok
+    logical, allocatable  :: mask_sort(:), mask_overlap(:)
 !
     character(len=:), allocatable   :: outputfile
     character(len=256)    :: line
     character(len=1)      :: newline
     integer, parameter    :: buffer_size = 256
     integer               :: ios, file_length
+    real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), max_overlap(:,:), overlap_diff(:)
+    real(dp),allocatable  :: perm_temp(:,:)
 !
 !   external functions:
 !   ===================
@@ -2318,8 +2320,8 @@ module diaglib
 !   computing actual size of the expansion space, checking that
 !   the input makes sense.
 !
-    dim_dav =  max(min_dav,max_dav)
-    lda     = dim_dav*n_max 
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max  
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -2342,14 +2344,17 @@ module diaglib
 !   imaginary parts, and its left & right eigenvectors 
 !
     allocate (a_red(lda,lda), e_red_re(2*lda), e_red_im(2*lda), evec_red_r(lda,lda), &
-              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), copy_eig(2*lda), overlap(n_max,n_max), stat =istat)
+              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), copy_eig(2*lda), stat =istat)
     call check_mem(istat)
 !
 !   allocate space for orthogonalization routines
 !
 !   allocate mask array for sorting routine
-!
-    allocate (mask_sort(lda))
+
+    allocate (mask_sort(lda), max_overlap(n_max,10), overlap_diff(n_max), overlap(2*n_max,2*n_max), &
+      perm_mat(2*n_max,2*n_max), evec_temp(lda,n_max), eig_temp(lda), mask_overlap(2*n_max), stat = istat)
+    allocate(perm_temp(2*n_max,2*n_max))
+    call check_mem(istat)
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -2507,8 +2512,10 @@ module diaglib
           call dgemm('t','n',ldu,ldu,n,one,aspace_l,n,space_l,n,zero,a_red,lda)
         end if
 !
-        if (verbosity.ge.1) then
+        if (verbosity.ge.2) then
           print *
+          print *, "o computed reduced matrix"
+          print * 
           print *, "print reduced space a:"
           call printMatrix(ldu,ldu,a_red,lda)
           print *
@@ -2529,6 +2536,11 @@ module diaglib
           stop
         end if
 !
+        if (verbosity.ge.1) then
+          print *
+          print *, "o diagonalized reduced space"
+          print *
+        end if
         if (verbosity.ge.2) then
           print *, "before sorting"
           print *, "evec r + l"
@@ -2541,12 +2553,32 @@ module diaglib
           print *
         end if
 !
-!       sort lowest eigenpairs in increasing order in range n_targ 
+!       sort lowest eigenpairs in increasing order in range 2*n_max  
 !
         call get_time(t1)
-        call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
+        if (it.gt.1 .and. .not. restart) then
+          call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max+n_act,lda,.true.,tol_im)
+          if (verbosity .ge. 1) then
+            print *
+            print *, "o sorted in range 2*n_max"
+            print *
+          end if
+        else if (it.eq.1 .or. restart) then
+          call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
+          if (verbosity .ge. 1) then
+            print *
+            print *, "o sorted in range n_max"
+            print *
+          end if
+        end if
         call get_time(t2)
         t_sort = t_sort + t2 - t1
+!
+        if (verbosity.ge.1) then
+          print *
+          print *, "o sorted eigenpairs"
+          print *
+        end if
 !
 !       double check for complex contributions in the n_max sought eigenvalues
 !
@@ -2572,7 +2604,7 @@ module diaglib
 !
 !
         if (verbosity.ge.2) then
-          print *, "evec r + l after sort + eigenvecs"
+          print *, "evec r + l and  eigs fter sort + eigenvecs"
           call printMatrix(ldu,ldu,evec_red_r,lda)
           print *
           call printMatrix(ldu,ldu,evec_red_l,lda)
@@ -2583,48 +2615,164 @@ module diaglib
 !
 !       compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
 !       to ensure correct sorting by checking if largest absolute value of column is on the
-!       diagonal
+!       diagonal. if not, use the indices of the largest elements to construct a permutation
+!       matrix to resort the eigenpairs according to the overlap.
 !  
         if (it.ne.1 .and. .not. restart) then  
           mask_sort = .true.
           no_match  = .true.
           iter      = 0
           it_incons = 0
-          do while (no_match)
-            iter = iter +1
-            if (iter .gt. 10*n_max) then
-              print *, "too many iterations in shifting away eigenvalues that dont match to the ones of the previous iteration."
-              stop
+          !do while (no_match)
+          !  iter = iter + 1
+          !  print *, iter
+          !  if (iter .gt. 5*n_max) then
+          !  print *, "too many iterations in shifting away eigenvalues that dont match to the ones of the previous iteration."
+          !  stop
+          !end if
+!
+!         compute overlap for the right eigenvectors and extract the indice and value of the largest
+!         and second largest overlap
+!
+          call dgemm('t','n',2*n_max,2*n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,2*n_max)
+!
+          found_er = .false.
+          do j = 1, n_max
+            mask_overlap = .true.
+            max_idx = maxloc(abs(overlap(:,j)))
+            !print*, j, "overlap diag right:", overlap(j,j)
+            max_overlap(j,1)  = real(max_idx(1), kind=dp)
+            max_overlap(j,2) = overlap(j,j)
+            max_overlap(j,3) = overlap(max_idx(1),j)
+            mask_overlap(max_idx) = .false.
+!           
+!           identify if a swapping is necessary
+!
+            if (max_idx(1).ne.j) then
+              !print*, "overlap max:",max_idx(1), overlap(max_idx(1),j) 
+              !print *, "differenze:", abs(abs(overlap(max_idx(1),j))- abs(overlap(j,j) ))
+              !if (abs(abs(overlap(max_idx(1),j))- abs(overlap(j,j)) ).ge.0.05d0) then
+                found_er = .true.
+              !  print *, "take care"
+              !else
+              !  max_overlap(j,1)  = j
+              !end if
             end if
+            max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
+            max_overlap(j,4)  = real(max_idx(1), kind=dp)
+            max_overlap(j,5) = overlap(max_idx(1),j)
+          end do
 !
-            call dgemm('t','n',n_max,n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,n_max)
+!         compute overlap for the left eigenvectors
 !
-            found_er = .false.
-            do j = 1, n_max
-              max_idx = maxloc(abs(overlap(:,j)))
-              if (max_idx(1).ne.j) then
-                found_er = .true.
+          call dgemm('t','n',2*n_max,2*n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,2*n_max)
+!
+          do j = 1, n_max
+            mask_overlap = .true.
+            max_idx = maxloc(abs(overlap(:,j)))
+            !print*, j, "overlap diag left:", overlap(j,j)
+            max_overlap(j,6)  = real(max_idx(1), kind=dp)
+            max_overlap(j,7) = overlap(j,j)
+            max_overlap(j,8) = overlap(max_idx(1),j)
+            mask_overlap(max_idx) = .false.
+            if (max_idx(1).ne.j) then
+              found_er = .true.
+            end if
+            max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
+            max_overlap(j,9)  = real(max_idx(1), kind=dp)
+            max_overlap(j,10) = overlap(max_idx(1),j)
+          end do
+          !print *, "max_overlap:"
+          !call printMatrix(n_max,5,max_overlap,n_max)
+          !print *
+          !call printMatrix(n_max,5,max_overlap(1,6),n_max)
+!
+!         check if no indices were assigned twice
+!
+          double_r = .false.
+          double_l = .false.
+          do j=1, n_max
+            do k=1, n_max
+              if (k .ne. j .and. max_overlap(j,1) .eq. max_overlap(k,1)) then 
+                double_r = .true.
               end if
             end do
-!
-            call dgemm('t','n',n_max,n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,n_max)
-!
-            do j = 1, n_max
-              max_idx = maxloc(abs(overlap(:,j)))
-              if (max_idx(1).ne.j) then
-                found_er = .true.
+          end do
+          do j=1, n_max
+            do k=1, n_max
+              if (k .ne. j .and. max_overlap(j,6) .eq. max_overlap(k,6)) then 
+                double_l = .true.
               end if
             end do
+          end do
 !
-            if (found_er) then
+          if (double_r .and. .not. double_l) then
+            max_overlap(:,1) = max_overlap(:,6)
+          else if (double_l .and. .not. double_r) then
+            max_overlap(:,6) = max_overlap(:,1)
+          else if (double_r .and. double_l) then
 !
-!             if error encounterd in the overlap of old and new eigenvectors, move errorneous 
-!             eigenpair to the end of the array, mask it and sort again
+!           check which second largest overlap is larger and take this indice as max_overlap.
+!           try for right side only, if no result, dont swap anything and try to continue 
+!           without swapping
+!
+            do j=1, n_max
+              do k=1, n_max
+                if (k .ne. j .and. max_overlap(j,1) .eq. max_overlap(k,1)) then 
+                  if (max_overlap(j,5) .gt. max_overlap(k,5)) then
+                    max_overlap(j,1) = max_overlap(j,4)
+                  else
+                    max_overlap(k,1) = max_overlap(k,4)
+                  end if
+                end if
+              end do
+            end do
+!
+!           check again if they are the same indices in the max_overlap for the right side.
+!           if no, then take these indices for the right and left side. if yes, try without 
+!           swapping
+!
+            double_r = .false.
+            do j=1, n_max
+              do k=1, n_max
+                if (k .ne. j .and. max_overlap(j,1) .eq. max_overlap(k,1)) then 
+                  double_r = .true.
+                end if
+              end do
+            end do
+            if (double_r) then
+              if (verbosity.ge.1) print *, "sorting failed. Try without swapping the eigenpairs according to the eigenvectors."
+              do j=1, n_max
+                max_overlap(j,1) = real(j, kind=dp)
+                max_overlap(j,6) = real(j, kind=dp)
+              end do
+            else
+              max_overlap(:,6) = max_overlap(:,1)
+            end if  
+          end if
+!
+!         check if maximum indices from right and left eigenvectors are the same
+!
+          overlap_diff = max_overlap(:,1) - max_overlap(:,6)
+          if (dnrm2(n_max,overlap_diff,1 ) .ne. 0) then
+            if (sum(max_overlap(:,1)) .gt. sum(max_overlap(:,6))) then
+              max_overlap(:,6) = max_overlap(:,1)
+            else
+              max_overlap(:,1) = max_overlap(:,1)
+            end if
+          end if
+!
+          if (found_er) then
 !
 !             identify difference of every old and new eigenvalue in range n_max and store 
 !             lowest difference to not shift-away sought eigenvalues, which were just returned
 !             in different order after the diagonalization, but are correct ones.
 !
+!           identify difference of every old and new eigenvalue in range n_max and store 
+!           lowest difference to not shift-away sought eigenvalues, which were just returned
+!           in different order after the diagonalization, but are correct ones.
+!
+            if (.false.) then
               it_incons = it_incons + 1
               diff    = 0
               if (frst_incons.eq.0) frst_incons = it 
@@ -2663,18 +2811,65 @@ module diaglib
 !
               t_sort = t_sort + t2 - t1
 !             
-              if (verbosity.gt.2) then
+              if (verbosity.gt.1) then
                 print*
                 print *, "---- Information ----"
                 print *, "handled inconsistance in old and current eigenvectors"
                 print *
               end if
             else
-              no_match = .false.      
-              if (it_incons .gt. max_incons) max_incons = it_incons
-              tot_incons = tot_incons + it_incons
+!
+!             now permute eigenvectors according to the maxiumum overlap.
+!             get permutation matrix first
+!
+              perm_mat = zero 
+              do j=1, n_max
+                perm_mat(int(max_overlap(j,1)),j) = one
+              end do
+              !call printMatrix(2*n_max,2*n_max,perm_mat,2*n_max)
+              perm_temp = transpose(perm_mat)
+              !print *, "perm_temp"
+              !call printMatrix(2*n_max,2*n_max,perm_temp,2*n_max)
+              !!stop
+!
+!             now permute left & right eigenvectors and imaginary & real eigenvalues
+!
+              call dgemm('n','n',ldu,n_max,2*n_max,one,evec_red_r,lda,perm_mat,2*n_max,zero,evec_temp,lda)
+              call dcopy(ldu*n_max,evec_temp,1,evec_red_r,1)
+              call dgemm('n','n',ldu,n_max,2*n_max,one,evec_red_l,lda,perm_mat,2*n_max,zero,evec_temp,lda)
+              call dcopy(ldu*n_max,evec_temp,1,evec_red_l,1)
+              !call dgemv('t',n_max,2*n_max,one,perm_mat,2*n_max,e_red_re,1,zero,eig_temp,1)
+              call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_re,1,zero,eig_temp,1)
+              !print *, "temp eig re"
+              !call printVector(eig_temp,2*n_max)
+              call dcopy(n_max,eig_temp,1,e_red_re,1)
+              call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_im,1,zero,eig_temp,1)
+              !call dgemv('t',n_max,2*n_max,one,perm_mat,2*n_max,e_red_im,1,zero,eig_temp,1)
+              !print *, "temp eig im"
+              !call printVector(eig_temp,2*n_max)
+              call dcopy(n_max,eig_temp,1,e_red_im,1)
+!
+              !print *, "print eigenvectors"
+              !call printMatrix(ldu,n_max,evec_red_r,lda)
+              !print * 
+              !call printMatrix(ldu,n_max,evec_red_l,lda)
+              !print *, "eigs"
+              !call printVector(e_red_re,2*n_max)
+              !print * 
+              !call printVector(e_red_im,2*n_max)
             end if
-          end do
+          else
+            !no_match = .false.      
+            if (it_incons .gt. max_incons) max_incons = it_incons
+            tot_incons = tot_incons + it_incons
+          end if
+          !end do
+        end if
+!
+        if (verbosity.ge.1) then
+          print *
+          print *, "o sorted away eigenpairs, that lead in wrong direction"
+          print *
         end if
 !
 !       copy and save the new eigenvectors for the next iteration
@@ -2692,6 +2887,11 @@ module diaglib
         if (right) call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
         if (left)  call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
 !
+        if (verbosity.ge.1) then
+          print *
+          print *, "o computed ritz approximation"
+          print *
+        end if
         if (verbosity.ge.2) then
           print *
           print *, "extracted eigenvals"
@@ -2730,6 +2930,12 @@ module diaglib
 !
         end do
 !
+        if (verbosity.ge.1) then
+          print *
+          print *, "o computed residual"
+          print *
+        end if
+!
         if (verbosity.ge.2) then
           print*
           print*, "residual right and left"
@@ -2754,6 +2960,12 @@ module diaglib
             exit
           end if
         end do
+!
+        if (verbosity.ge.1) then
+          print *
+          print *, "o computed convergency criterion"
+          print *
+        end if
 !
 !       print some information
 !
@@ -2798,6 +3010,12 @@ module diaglib
           if (right) call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
           if (left)  call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
 !
+          if (verbosity.ge.1) then
+            print *
+            print *, "o computed precondition"
+            print *
+          end if
+!
           if (verbosity.ge.2) then
             print*
             print *, "precondition:"
@@ -2829,6 +3047,12 @@ module diaglib
 !
 !         normalize columns 
 !
+          if (verbosity.ge.1) then
+            print *
+            print *, "o performed orthogonalization"
+            print *
+          end if
+!
           if (verbosity.gt.2) then
             print *, "orthogonalized space r"
             call printMatrix(n,ldu+n_max,space_r,n)
@@ -2848,12 +3072,23 @@ module diaglib
           if (right) call dcopy(n_max*n,evec_r,1,space_r,1)
           if (left)  call dcopy(n_max*n,evec_l,1,space_l,1)
 !
+          ortho_ok = .false.
+          call get_time(t1)
           if (right .and. left) then
-            call get_time(t1)
             call svd_biortho(n,n_act,space_r,space_l)
-            call get_time(t2)
-            t_ortho = t_ortho + t2 - t1
+          else if (right) then 
+            call ortho_cd(n,n_act,space_r,yy,ok) 
+          else if (left) then 
+            call ortho_cd(n,n_act,space_l,yy,ok) 
           end if
+          call get_time(t2)
+          t_ortho = t_ortho + t2 - t1
+!
+          if (verbosity.ge.1) then
+            print *
+            print *, "o orthogonalized ritz approximations in Davidson restart"
+            print *
+          end if 
 !
           aspace_r  = zero
           aspace_l  = zero
@@ -2916,7 +3151,8 @@ module diaglib
 !
 !         use evec_r as guess for evec_l
 !
-         !call dcopy(n*n_max,evec_r,1,evec_l,1)
+          call ortho_cd(n,n_max,evec_r,yy,ok) 
+          call dcopy(n*n_max,evec_r,1,evec_l,1) 
         end if  
         
       end if
@@ -2930,13 +3166,19 @@ module diaglib
       call get_time(t2)
       t_ortho = t_ortho + t2 - t1
 !
+      if (verbosity.ge.1) then
+        print *
+        print *, "o performed final orthogonalization in consecutive davidson"
+        print *
+      end if
+!
       if (verbosity.gt.1) then
         print *
         print *, "compute eigenvalues by eig = l^T A r."
-        r_r = zero
-        call matvec(n,n_max,evec_r,r_r)
-        call dgemm('t','n',n_max,n_max,n,one,evec_l,n,r_r,n,zero,overlap,n_max)
-        call printMatrix(n_max,n_max,overlap,n_max)
+        !r_r = zero
+        !call matvec(n,n_max,evec_r,r_r)
+        !call dgemm('t','n',n_max,n_max,n,one,evec_l,n,r_r,n,zero,overlap,n_max)
+        !call printMatrix(n_max,n_max,overlap,n_max)
         print *
       end if 
     end if
