@@ -2291,19 +2291,16 @@ module diaglib
 !   variables for left, right, or both eigenvectors
 !
     logical               :: left, right, consecutive, do_davidson
-    integer               :: i_dav, maxit_dav  
     real(dp)              :: eig_r(n_targ)
 !
     integer               :: verbosity, k, i, j
 ! 
 !   variables for the sort
 !
-    integer               :: max_idx(1), fin
-    real(dp)              :: diff(n_max), temp, t_sort(2), sum_r, sum_l
+    integer               :: max_idx(1)
     logical               :: found_im, found_er, double_r, double_l, ortho_ok
-    logical, allocatable  :: mask_sort(:), mask_overlap(:)
+    logical, allocatable  :: mask_overlap(:)
 !
-    integer               :: ios, file_length
     real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), overlap_diff(:)
     real(dp)              :: overlap_idx_r(2,n_max), overlap_val_r(2,n_max), overlap_self_l(n_max), &
                               overlap_idx_l(2,n_max), overlap_val_l(2,n_max), overlap_self_r(n_max)
@@ -2349,7 +2346,7 @@ module diaglib
 !
 !   allocate mask array for sorting routine
 
-    allocate (mask_sort(lda), overlap_diff(n_max), overlap(2*n_max,2*n_max), &
+    allocate (overlap_diff(n_max), overlap(2*n_max,2*n_max), &
       perm_mat(2*n_max,2*n_max), evec_temp(lda,n_max), eig_temp(lda), mask_overlap(2*n_max), stat = istat)
     allocate(perm_temp(2*n_max,2*n_max))
     call check_mem(istat)
@@ -2489,7 +2486,6 @@ module diaglib
 !       sort lowest eigenpairs in increasing order in range 2*n_max to ensure that all n_max 
 !       sought eigenpairs are in the range 2*n_max
 !
-        call get_time(t1)
         if (it.gt.1 .and. .not. restart) then
           call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max+n_act,lda,.true.,tol_im)
 !
@@ -2497,10 +2493,6 @@ module diaglib
           call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
 !
         end if
-        call get_time(t2)
-!
-        t_sort = t_sort + t2 - t1
-!
 !       double check for complex contributions in the n_max sought eigenvalues
 !
         found_im = .false.
@@ -2520,7 +2512,6 @@ module diaglib
 !       matrix to resort the eigenpairs according to the overlap.
 !  
         if (it.ne.1 .and. .not. restart) then  
-          mask_sort = .true.
 !
 !         compute overlap for the right eigenvectors and extract the indice and value of the largest
 !         and second largest overlap
