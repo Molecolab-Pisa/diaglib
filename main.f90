@@ -11,7 +11,7 @@ program main
 !
 ! initialize:
 !
-  n      = 2000
+  n      = 1000
   n_want = 10
   tol    = 1.0e-8_dp
   itmax  = 100
@@ -28,12 +28,11 @@ program main
               t3,'   2 for symmetric generalized eigenvalue problems ',/, &
               t3,'   3 for linear-response equations (SCF-like)',/, &
               t3,'   4 for linear-response equations (CASSCF-like)',/, &
-              t3,'   5 for unsymmetric eigenvalue problems.')
+              t3,'   6 for unsymmetric eigenvalue problems')
   write(6,1000)
-  !read(5,*) iwhat
+  read(5,*) iwhat
   write(6,*)
 !
- iwhat=5
   if (iwhat.eq.1) then 
     call test_symm(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.2) then 
@@ -42,9 +41,8 @@ program main
     call test_scflr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
-  else if (iwhat.eq.5) then
-    !call test_nonsym(.false.,n,n_want,tol,itmax,m_max,4,.true.,.false.)
-    call eval_nonsym()
+  else if (iwhat.eq.6) then
+    call test_nonsym(.true.,n,n_want,tol,itmax,m_max,"c")
   else
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -909,72 +907,24 @@ end program main
     return
   end subroutine test_scflr
 !
-  subroutine eval_nonsym()
-    use real_precision
-    use utils
-    implicit none
-    integer  :: n, itmax, m_max, n_want, use_mat, iseed, ios, pos, i
-    real(dp) :: tol
-    logical  :: both, allsvd
-    character(len=1) :: side
-    character(len=30) :: line, value_str
-!
-!   read input file 
-!
-    open(unit = 10, file = 'diaglib.in', status = 'old', action = 'read', iostat = ios)
-    if (ios /= 0) then
-        print *, 'Error opening file: diaglib.in does not exist.'
-        stop
-    endif
-!
-    do i = 1, 9
-!
-!     read the line from the file
-!
-      read(10, '(A)', iostat=ios) line
-      if (ios /= 0) then
-          print *, 'Error reading file'
-          stop
-      endif
-!
-
-      ! Find the position of the equal sign
-      pos = index(line, '=')
-
-      ! Extract the value from the line starting after the equal sign
-      value_str = adjustl(line(pos+1:))
-
-      ! Convert the string to an integer
-      if (i.eq.1) read(value_str, *) n
-      if (i.eq.2) read(value_str, *) n_want
-      if (i.eq.3) read(value_str, *) tol
-      if (i.eq.4) read(value_str, *) itmax
-      if (i.eq.5) read(value_str, *) m_max
-      if (i.eq.6) read(value_str, *) use_mat
-      if (i.eq.7) read(value_str, *) side
-      if (i.eq.8) read(value_str, *) allsvd
-      if (i.eq.9) read(value_str, *) iseed
-    end do
-
-    close(10)
-!
-    call test_nonsym(.false.,n,n_want,tol,itmax,m_max,iseed,use_mat,side,allsvd)
-  end subroutine
-!
-  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,iseed,use_mat,side,allsvd)
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,side)
     use real_precision
     use utils
     use diaglib, only : nonsym_driver
     implicit none
-    integer, intent(in) :: n, n_want, itmax, m_max, iseed, use_mat
+    integer, intent(in) :: n, n_want, itmax, m_max
     character(len=1), intent(in)    :: side
-    logical, intent(in) :: check_lapack, allsvd
+    logical, intent(in) :: check_lapack
 
     real(dp), intent(in):: tol
 !
-!   test matrix
+!   set up one of the four test matrices (use_mat)
+!   1 = positive definite matrix
+!   2 = symmetric matrix with small perturbations on the off-diagonals
+!   3 = symmetric matrix
+!   4 = EOM-like matrix with similarity transformation
 !
-    integer                     :: i, j, info, ipiv(n), lwork, seed_size, n_eig
+    integer                     :: i, j, info, ipiv(n), lwork, seed_size, n_eig, iseed, use_mat
     integer, allocatable        :: seed(:)
     real(dp)                    :: lw(1), zero, one, low, up, fac, dnrm2
     real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
@@ -984,9 +934,11 @@ end program main
     external :: mmult, mmult_l, mprec
 !
     low       = 0.0d0
-    up        = 1.d-4
+    up        = 1.d-2
     zero      = 0.d0
     one       = 1.d0
+    iseed     = 1
+    use_mat   = 4
 !
 !   allocate memory to get the matrix
 !
@@ -1088,47 +1040,6 @@ end program main
 !
     else if (use_mat .eq. 4) then 
 !
-!   get an unsymmetric matrix by using matrix exponentials to create a similarity transform.
-!
-      a = 0.0_dp
-      do i = 1, n
-        a(i,i) = real(i,kind=dp) + 1.0_dp
-      end do
-! 
-      call random_seed(size=seed_size)
-      allocate(seed(seed_size))
-      seed = iseed
-      call random_seed(put=seed)
-      deallocate(seed)
-!
-      call random_number(t)
-!
-!     make sure that the matrix has a small norm:
-!
-      fac  = dnrm2(n*n,t,1)
-      fac  = 0.01_dp / fac
-      t    = fac * t
-!
-!     uncomment the following line to obtain a unitary transformation!
-!
-!     tmat = tmat - transpose(tmat)
-!
-!     compute exp(tmat):
-!
-      call matexp(n,t,expt)
-!
-!     compute exp(- tmat):
-!
-      t   = - t
-      call matexp(n,t,expmt)
-!
-!     a = exp(-t) a exp(t)
-!
-      a_copy = matmul(a,expt)
-      a      = matmul(expmt,a_copy) 
-!
-    else if (use_mat .eq. 5) then
-!
 !     get a symmetric matrix
 !
       do i = 1, n
@@ -1190,7 +1101,7 @@ end program main
 !   print some information
 !
        
-    1000 format(t5,55("-"),/,t3,'   nonsymmetric davidson eigensolver test run',/,t5,55("-"),/)
+    1000 format(t5,55("-"),/,t3,'   nonsymmetric Davidson eigensolver test run',/,t5,55("-"),/)
     1100 format(t5,55("="),/,t3,'   input information',/,t5,55("-"),/, &
                 t3,'  dimension of the full space            :   ',i8,/, &
                 t3,'  sought number of eigenpairs            :   ',i8,/, &
@@ -1201,10 +1112,9 @@ end program main
                 t3,'  used matrix                            :   ',i8,/, &
                 t3,'  seed for matrix generation             :   ',i8,/,&
                 t3,'  calculation of left and right pairs    :   ',a8,/,&
-                t3,'  use loop over svd in biortho_vs_x      :   ',l8,/,&
                 t5,55("="))
     write(6,1000)
-    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,side,allsvd
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,side
 !
 !  if required, solve the problem with a dense lapack routine:
 !
@@ -1226,8 +1136,8 @@ end program main
       print *
       1200 format(t5,55("-"),/,t3,'   eigenvalues of lapack full space diagonalization',/,t5,55("-"))
       write(6,1200)
-      call printMatrix(n_want,1,wr,n)
       print *
+      print *, wr(:n_want)
       print *
       deallocate (work, a_copy, wr, wi, r, l)
     end if 
@@ -1246,20 +1156,8 @@ end program main
 !
     !n_eig =  min(3*n_want, n_want + 5)
 !
-      1300 format(t5,55("-"),/,t3,'   nonsymmetric davidson results',/,t5,55("-"),/)
+      1300 format(t5,55("-"),/,t3,'   nonsymmetric Davidson results',/,t5,55("-"),/)
       write(6,1300)
-!
-!   print output file
-!
-!    open (unit = 10, file = 'diaglib.out', form = 'formatted', access = 'sequential')
-!    write(10,1000)
-!    write(10,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,both,allsvd
-!    if (check_lapack) write(10,1200)
-!    if (check_lapack) write(10,*)
-!    write(10,*)
-!    write(10,1300)
-!    close (10)
-    print *
 !
 !   allocate memory for the eigenvalues and eigenvectors
 !
@@ -1269,9 +1167,10 @@ end program main
 !
   call guess_evec(1,n,n_eig,diagonal,evec_r)
   call dcopy(n*n_eig,evec_r,1,evec_l,1)
+!
 !   call driver nonsym
 !
-  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok,allsvd)
+  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok)
 !
 !
   deallocate(eig, evec_r, evec_l, diagonal)
@@ -1313,29 +1212,6 @@ end program main
     deallocate (x,y)
     return
   end subroutine matexp
-!
-  subroutine printMatrix(n,m,mat,lda) 
-!   
-! print formatted matrix
-!
-    use real_precision
-    implicit none
-    integer , intent(in)  :: n, m, lda
-    real(dp), intent(in)  :: mat(lda,lda)
-!
-    integer :: i, j
-!
-    do i = 1, n
-      do j = 1, m
-        write(*,'(F12.8)', advance='no') mat(i,j)
-        if (j .lt. m) then
-          write(*, '(A)', advance='no') ' '
-        end if
-      end do
-      print *
-    end do
-!
-  end subroutine printMatrix
 !
   subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh)
 !

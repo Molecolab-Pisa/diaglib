@@ -2232,8 +2232,8 @@ module diaglib
   end subroutine gen_david_driver
 !
   subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
-                            matvec,matvec_l,precnd,eig,evec_r,evec_l,side,ok,allsvd)
-    logical,                        intent(in)    :: verbose, allsvd
+                            matvec,matvec_l,precnd,eig,evec_r,evec_l,side,ok)
+    logical,                        intent(in)    :: verbose
     integer,                        intent(in)    :: n, n_targ, n_max
     integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol, shift
@@ -2787,7 +2787,7 @@ module diaglib
 !
           call get_time(t1)
           if (right .and. left) then
-            call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg),allsvd)
+            call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
           else if (right) then
             call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
           else if (left) then
@@ -3518,12 +3518,11 @@ module diaglib
     return
   end subroutine ortho_lu
 !
-  subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur,allsvd)
+  subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
     implicit none
     integer,                  intent(in)    :: n, m, k
     real(dp), dimension(n,m), intent(in)    :: xl, xr
     real(dp), dimension(n,k), intent(inout) :: ul, ur
-    logical,                  intent(in)    :: allsvd
 !
 !   local variables:
 !
@@ -3555,12 +3554,12 @@ module diaglib
 !     now, orthogonalize ur and ul. 
 !     if allsvd is true, biorthogonalize them (to be tested)
 !
-      if (allsvd) then 
-        call svd_biortho(n,k,ul,ur)
-      else
+!      if (allsvd) then 
+!        call svd_biortho(n,k,ul,ur)
+!      else
         call ortho_cd(n,k,ul,xx,ok)
         call ortho_cd(n,k,ur,xx,ok)
-      end if
+!      end if
 !
 !     compute the overlap between the orthonormalized ul, ur and xr, xl
 !
@@ -3574,7 +3573,8 @@ module diaglib
 !
 !   if we didn't make the vectors already biorthogonal, do it now:
 !
-    if (.not. allsvd) call svd_biortho(n,k,ul,ur)
+!    if (.not. allsvd) call svd_biortho(n,k,ul,ur)
+     call svd_biortho(n,k,ul,ur)
 !
     deallocate (xu)
     return
