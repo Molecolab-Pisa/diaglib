@@ -12,8 +12,8 @@ program main
 ! initialize:
 !
   n      = 1000
-  n_want = 20
-  tol    = 1.0e-10_dp
+  n_want = 10
+  tol    = 1.0e-8_dp
   itmax  = 100
   m_max  = 20
   nmult  = 0
@@ -27,7 +27,8 @@ program main
               t3,'   1 for symmetric eigenvalue problems ',/, &
               t3,'   2 for symmetric generalized eigenvalue problems ',/, &
               t3,'   3 for linear-response equations (SCF-like)',/, &
-              t3,'   4 for linear-response equations (CASSCF-like).')
+              t3,'   4 for linear-response equations (CASSCF-like)',/, &
+              t3,'   6 for unsymmetric eigenvalue problems')
   write(6,1000)
   read(5,*) iwhat
   write(6,*)
@@ -40,8 +41,10 @@ program main
     call test_scflr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
-  else 
-    write(6,*) ' invalid selectrion. aborting ...'
+  else if (iwhat.eq.6) then
+    call test_nonsym(.true.,n,n_want,tol,itmax,m_max,"c")
+  else
+    write(6,*) ' invalid selection. aborting ...'
   end if
 !
 end program main
@@ -85,6 +88,29 @@ end program main
     end do
     return
   end subroutine mmult
+!
+  subroutine mmult_l(n,m,x,ax)
+    use utils
+    implicit none
+!
+!   simple-minded matrix-vector multiplication routine, that needs to be passed as 
+!   an argument to lobpcg
+!
+    integer,                   intent(in)    :: n, m
+    real(dp),  dimension(n,m), intent(in)    :: x
+    real(dp),  dimension(n,m), intent(inout) :: ax
+!
+    integer :: i, j, icol
+!
+!   transpose the matrix
+!
+    !a_t = transpose(a)
+    nmult = nmult + m
+    do icol = 1, m
+      ax(:,icol) = matmul(a_t,x(:,icol))
+    end do
+    return
+  end subroutine mmult_l
 !
   subroutine smult(n,m,x,sx)
     use utils
@@ -134,7 +160,11 @@ end program main
 !
     do icol = 1, m
       do i = 1, n
-        if (abs(a(i,i)+fac).gt.tol) px(i,icol) = x(i,icol)/(a(i,i) + fac)
+        if (abs(a(i,i)+fac).gt.tol) then
+          px(i,icol) = x(i,icol)/(a(i,i) + fac)
+        else
+          px(i,icol) = x(i,icol)
+        end if
       end do
     end do
     return
@@ -876,6 +906,408 @@ end program main
 !
     return
   end subroutine test_scflr
+!
+  subroutine test_nonsym(check_lapack,n,n_want,tol,itmax,m_max,side)
+    use real_precision
+    use utils
+    use diaglib, only : nonsym_driver
+    implicit none
+    integer, intent(in) :: n, n_want, itmax, m_max
+    character(len=1), intent(in)    :: side
+    logical, intent(in) :: check_lapack
+
+    real(dp), intent(in):: tol
+!
+!   set up one of the four test matrices (use_mat)
+!   1 = positive definite matrix
+!   2 = symmetric matrix with small perturbations on the off-diagonals
+!   3 = symmetric matrix
+!   4 = EOM-like matrix with similarity transformation
+!
+    integer                     :: i, j, info, ipiv(n), lwork, seed_size, n_eig, iseed, use_mat
+    integer, allocatable        :: seed(:)
+    real(dp)                    :: lw(1), zero, one, low, up, fac, dnrm2
+    real(dp), allocatable       :: work(:), a_copy(:,:), r(:,:), l(:,:), wr(:), wi(:), diag(:,:), t(:,:), &
+                                    p(:,:),eig(:), evec_r(:,:), evec_l(:,:), diagonal(:), expt(:,:), expmt(:,:)
+    logical                     :: ok
+!
+    external :: mmult, mmult_l, mprec
+!
+    low       = 0.0d0
+    up        = 1.d-2
+    zero      = 0.d0
+    one       = 1.d0
+    iseed     = 1
+    use_mat   = 4
+!
+!   allocate memory to get the matrix
+!
+    allocate (a(n,n), diag(n,n), t(n,n), p(n,n), expt(n,n), expmt(n,n), a_copy(n,n))
+!    
+    diag = zero
+!
+!   choice of the test matrix (1 = nonsym, 2 = nonsym (pertubation on sym), 3 = sym)
+!
+    if (use_mat .eq. 1) then
+!
+!     build a nonsymmetric matrix 
+!
+!     generate diagonal matrix:   diag(i,i) = 2 + i
+!
+      forall(i = 1:n) diag(i, i) = real(2 + i, kind=dp)
+!
+!     generate random matrix:     t = random
+!
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = iseed
+      call random_seed(put=seed)
+      call random_number(t)
+      do i = 1, n
+        t(i,i) = t(i,i) + dble(100+i)
+      end do
+      deallocate(seed)
+!
+!     ensure positive definite:   p = t^T * t
+!
+      call dgemm('t','n',n,n,n,one,t,n,t,n,zero,p,n)
+      a = p
+!
+!     get it's invert by using lu decomposition
+!
+      call dgetrf(n,n,a,n,ipiv,info)
+      call dgetri(n,a,n,ipiv,lw,-1,info)
+      lwork = int(lw(1))
+      allocate(work(lwork))
+      call dgetri(n,a,n,ipiv,work,lwork,info)
+      deallocate(work)   
+!      
+!     get final matrix:           a = p * diag * p^-1
+!
+      call dgemm('n','n',n,n,n,one,p,n,diag,n,zero,t,n)
+      call dgemm('n','n',n,n,n,one,t,n,a,n,zero,p,n)
+      a = p
+!
+    else if (use_mat .eq. 2) then
+!
+!   get a symmetric matrix
+!
+      do i = 1, n
+        do j = i, n
+          if (j == i) then
+            a(i,j) = i + 1.0d0
+          else if (j > i) then
+            a(i,j) = 1.0d0 / (dble(i + j))
+            a(j,i) = a(i,j)
+          end if
+        end do
+      end do
+!
+!     generate random matrix :     t = random
+!
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = iseed
+      call random_seed(put=seed)
+      call random_number(t)
+      deallocate(seed)
+!
+!     adapt to range low:up and set diagonal to zero
+!
+      t = low + (up-low) * t
+!
+      do i = 1, n
+        t(i,i) = zero
+      end do
+!
+!     introduce perturbation on matrix
+!
+      a = a + t
+!
+    else if (use_mat .eq. 3) then 
+!
+!   get a symmetric matrix
+!
+      do i = 1, n
+        a(i,i) = real(i,kind=dp) + 1.0d0
+        do j = i, n
+          if (j.ne.i) then
+            a(i,j) = 1.0d0 / (dble(i + j))
+            a(j,i) = a(i,j)
+          end if
+        end do
+      end do
+!
+    else if (use_mat .eq. 4) then 
+!
+!     get a symmetric matrix
+!
+      do i = 1, n
+        a(i,i) = real(i,kind=dp) + 1.0d0
+        do j = i, n
+          if (j.ne.i) then
+            a(i,j) = 1.0d0 / (dble(i + j))
+            a(j,i) = a(i,j)
+          end if
+        end do
+      end do
+!
+!     apply similarity transform
+! 
+      call random_seed(size=seed_size)
+      allocate(seed(seed_size))
+      seed = iseed
+      call random_seed(put=seed)
+      deallocate(seed)
+!
+      call random_number(t)
+!
+!     make sure that the matrix has a small norm:
+!
+      fac  = dnrm2(n*n,t,1)
+      fac  = 0.01_dp / fac
+      t    = fac * t
+!
+!     uncomment the following line to obtain a unitary transformation!
+!
+!     tmat = tmat - transpose(tmat)
+!
+!     compute exp(tmat):
+!
+      call matexp(n,t,expt)
+!
+!     compute exp(- tmat):
+!
+      t   = - t
+      call matexp(n,t,expmt)
+!
+!     a = exp(-t) a exp(t)
+!
+      a_copy = matmul(a,expt)
+      a      = matmul(expmt,a_copy) 
+!
+    else
+      print *, "no valid matrix choice in test_nonsym."
+      stop
+    end if
+!
+    deallocate (p, t, diag, expmt, expt, a_copy)
+!
+!   for better convergence, we seek more eigenpairs and stop the iterations when 
+!   the required ones are converged
+!
+    n_eig =  n_want 
+!
+!   print some information
+!
+       
+    1000 format(t5,55("-"),/,t3,'   nonsymmetric Davidson eigensolver test run',/,t5,55("-"),/)
+    1100 format(t5,55("="),/,t3,'   input information',/,t5,55("-"),/, &
+                t3,'  dimension of the full space            :   ',i8,/, &
+                t3,'  sought number of eigenpairs            :   ',i8,/, &
+                t3,'  number of vectors added each iteration :   ',i8,/, &
+                t3,'  convergency tolerance of residual norm :   ',d8.2,/, &
+                t3,'  maximum iterations                     :   ',i8,/, &
+                t3,'  size of expansion space                :   ',i8,/, &
+                t3,'  used matrix                            :   ',i8,/, &
+                t3,'  seed for matrix generation             :   ',i8,/,&
+                t3,'  calculation of left and right pairs    :   ',a8,/,&
+                t5,55("="))
+    write(6,1000)
+    write(6,1100) n,n_want,n_eig,tol,itmax,m_max,use_mat,iseed,side
+!
+!  if required, solve the problem with a dense lapack routine:
+!
+    if (check_lapack) then
+      allocate (a_copy(n,n), wr(n), wi(n), r(n,n), l(n,n))
+      a_copy = a
+      call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,lw,-1,info)
+      lwork = int(lw(1))
+      allocate (work(lwork)) 
+      call dgeev('v','v',n,a_copy,n,wr,wi,l,n,r,n,work,lwork,info)
+!
+      if (info.ne.0) then
+        print *, "diagonalization of full space failed."
+        stop
+      end if
+!
+      call sort_eigenpairs(wr,wi,r,l,n,n,n,n,.true.,1.d-16)
+!
+      print *
+      1200 format(t5,55("-"),/,t3,'   eigenvalues of lapack full space diagonalization',/,t5,55("-"))
+      write(6,1200)
+      print *
+      print *, wr(:n_want)
+      print *
+      deallocate (work, a_copy, wr, wi, r, l)
+    end if 
+!
+!   allocate and gather the diagonal
+!
+    allocate (diagonal(n))
+    do i = 1,n
+      diagonal(i) = a(i,i)
+    end do
+!
+!   compute the transpose of a once and keep it in memory
+!
+    allocate( a_t(n,n))
+    a_t = transpose(a)
+!
+    !n_eig =  min(3*n_want, n_want + 5)
+!
+      1300 format(t5,55("-"),/,t3,'   nonsymmetric Davidson results',/,t5,55("-"),/)
+      write(6,1300)
+!
+!   allocate memory for the eigenvalues and eigenvectors
+!
+    allocate (eig(n), evec_r(n,n_eig), evec_l(n,n_eig))
+!
+!   compute a guess for the eigenvector (see guess_evec for more information)
+!
+  call guess_evec(1,n,n_eig,diagonal,evec_r)
+  call dcopy(n*n_eig,evec_r,1,evec_l,1)
+!
+!   call driver nonsym
+!
+  call nonsym_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0d0,mmult,mmult_l,mprec,eig,evec_r,evec_l,side,ok)
+!
+!
+  deallocate(eig, evec_r, evec_l, diagonal)
+!
+  end subroutine test_nonsym
+!
+  subroutine matexp(n,mat,expmat)
+    use real_precision
+    implicit none
+    integer,                  intent(in)    :: n
+    real(dp), dimension(n,n), intent(in)    :: mat 
+    real(dp), dimension(n,n), intent(inout) :: expmat
+!
+    integer  :: i, iter
+    real(dp) :: del_norm, fac
+    real(dp) :: dnrm2
+    external :: dnrm2
+!
+    real(dp), allocatable :: x(:,:), y(:,:)
+!
+    integer,  parameter :: maxit = 100
+    real(dp), parameter :: tol = 1.0d-20
+!
+    allocate (x(n,n), y(n,n))
+!
+    expmat = 0.0_dp
+    x      = 0.0_dp
+    do i = 1, n
+      x(i,i) = 1.0_dp
+    end do
+!
+    do iter = 1, maxit
+      del_norm = dnrm2(n*n,x,1)
+      expmat = expmat + x
+      if (del_norm.lt.tol) exit
+      x = matmul(mat,x) / real (iter, kind=dp)
+    end do
+!
+    deallocate (x,y)
+    return
+  end subroutine matexp
+!
+  subroutine sort_eigenpairs(wr,wl,vr,vl,n,m,n_want,ldv,ignore,thresh)
+!
+!   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
+!   in decreasing order according to the real eigenvalues in the range of n_want
+! 
+    use real_precision
+    implicit none
+    integer,  intent(in)      :: n, m, ldv, n_want
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
+    real(dp), intent(in)      :: thresh
+    logical,  intent(in)      :: ignore
+!   
+!   local variables
+!
+    real(dp)                  :: w, v(ldv)
+    integer                   :: i, j, idx, min_idx(1), fin
+    logical                   :: mask(m)
+!
+    real(dp)                  :: dnrm2
+!
+    mask = .true.
+!
+    do i = 1, n_want
+! 
+!     identify minimal value and mask first position for next iteration
+!
+      min_idx = minloc(wr, mask=mask) 
+      idx     = min_idx(1)
+!
+!     check complex contribution, if so, move it to with to the last position 
+!     of the array and mask it. search again for lowest eigenvalue and 
+!     continue with that.
+!
+      if (ignore .and. abs(wl(idx)) > thresh) then
+        fin = m
+!
+        do j = 1, m
+          if (.not. mask(fin)) then
+            fin = fin - 1
+          else 
+            exit
+          end if
+        end do
+!
+        mask(fin) = .false.
+!
+!       do various swaps for double value on last available position fin
+!
+        w       = wr(fin)
+        wr(fin) = wr(idx)
+        wr(idx) = w
+!
+        w       = wl(fin)
+        wl(fin) = wl(idx)
+        wl(idx) = w
+!
+        v         = vr(:,fin)
+        vr(:,fin) = vr(:,idx)
+        vr(:,idx) = v
+!    
+        v         = vl(:,fin)
+        vl(:,fin) = vl(:,idx)
+        vl(:,idx) = v
+!
+!       now search again for lowest and find automatically the corresponding 
+!       pair with imaginary contribution
+!
+        min_idx = minloc(wr, mask=mask) 
+        idx     = min_idx(1)
+      end if
+!
+      mask(i) = .false.
+!
+!     do various swaps to move minimum value et alii on position i
+!
+      w       = wr(i)
+      wr(i)   = wr(idx)
+      wr(idx) = w
+!
+      w       = wl(i)
+      wl(i)   = wl(idx)
+      wl(idx) = w
+!
+      v         = vr(:,i)
+      vr(:,i)   = vr(:,idx)
+      vr(:,idx) = v
+!    
+      v         = vl(:,i)
+      vl(:,i)   = vl(:,idx)
+      vl(:,idx) = v
+! 
+!
+    end do
+!
+  end subroutine sort_eigenpairs
 !
   subroutine guess_evec(iwhat,n,m,diagonal,evec)
     use real_precision
