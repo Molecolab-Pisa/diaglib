@@ -2737,7 +2737,6 @@ module diaglib
 !
         if (all(done(1:n_targ))) then
           ok = .true.
-          if (verbose) print *, "converged =)"
           exit
         end if
 !       
