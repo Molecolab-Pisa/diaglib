@@ -2298,13 +2298,15 @@ module diaglib
 ! 
 !   variables for the sort
 !
-    integer               :: max_idx(1), fin, iter, it_incons, tot_incons, max_incons, frst_incons
+    integer               :: max_idx(1), fin
     real(dp)              :: diff(n_max), temp, t_sort(2), sum_r, sum_l
-    logical               :: found_im, found_er, no_match, double_r, double_l, ortho_ok
+    logical               :: found_im, found_er, double_r, double_l, ortho_ok
     logical, allocatable  :: mask_sort(:), mask_overlap(:)
 !
     integer               :: ios, file_length
-    real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), max_overlap(:,:), overlap_diff(:)
+    real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), overlap_diff(:)
+    real(dp)              :: overlap_idx_r(2,n_max), overlap_val_r(2,n_max), overlap_self_l(n_max), &
+                              overlap_idx_l(2,n_max), overlap_val_l(2,n_max), overlap_self_r(n_max)
     real(dp),allocatable  :: perm_temp(:,:)
 !
 !   external functions:
@@ -2347,7 +2349,7 @@ module diaglib
 !
 !   allocate mask array for sorting routine
 
-    allocate (mask_sort(lda), max_overlap(n_max,10), overlap_diff(n_max), overlap(2*n_max,2*n_max), &
+    allocate (mask_sort(lda), overlap_diff(n_max), overlap(2*n_max,2*n_max), &
       perm_mat(2*n_max,2*n_max), evec_temp(lda,n_max), eig_temp(lda), mask_overlap(2*n_max), stat = istat)
     allocate(perm_temp(2*n_max,2*n_max))
     call check_mem(istat)
@@ -2417,9 +2419,6 @@ module diaglib
       r_r         = zero
       r_l         = zero
       done        = .false.
-      tot_incons  = 0
-      max_incons  = 0
-      frst_incons = 0
 !
       call get_time(t_tot1)
 !
@@ -2522,8 +2521,6 @@ module diaglib
 !  
         if (it.ne.1 .and. .not. restart) then  
           mask_sort = .true.
-          no_match  = .true.
-          iter      = 0
 !
 !         compute overlap for the right eigenvectors and extract the indice and value of the largest
 !         and second largest overlap
@@ -2534,9 +2531,9 @@ module diaglib
           do j = 1, n_max
             mask_overlap = .true.
             max_idx = maxloc(abs(overlap(:,j)))
-            max_overlap(j,1)  = real(max_idx(1), kind=dp)
-            max_overlap(j,2) = overlap(j,j)
-            max_overlap(j,3) = overlap(max_idx(1),j)
+            overlap_idx_r(j,1)  = real(max_idx(1), kind=dp)
+            overlap_self_r(j) = overlap(j,j)
+            overlap_val_r(j,1) = overlap(max_idx(1),j)
             mask_overlap(max_idx) = .false.
 !           
 !           identify if a swapping is necessary
@@ -2548,8 +2545,8 @@ module diaglib
 !           extract index and value of second larges overlap
 !
             max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
-            max_overlap(j,4)  = real(max_idx(1), kind=dp)
-            max_overlap(j,5) = overlap(max_idx(1),j)
+            overlap_idx_r(j,2)  = real(max_idx(1), kind=dp)
+            overlap_val_r(j,2) = overlap(max_idx(1),j)
           end do
 !
 !         compute overlap for the left eigenvectors
@@ -2559,9 +2556,9 @@ module diaglib
           do j = 1, n_max
             mask_overlap = .true.
             max_idx = maxloc(abs(overlap(:,j)))
-            max_overlap(j,6)  = real(max_idx(1), kind=dp)
-            max_overlap(j,7) = overlap(j,j)
-            max_overlap(j,8) = overlap(max_idx(1),j)
+            overlap_idx_l(j,1)  = real(max_idx(1), kind=dp)
+            overlap_self_l(j) = overlap(j,j)
+            overlap_val_l(j,1) = overlap(max_idx(1),j)
             mask_overlap(max_idx) = .false.
 !           
 !           identify if a swapping is necessary
@@ -2573,8 +2570,8 @@ module diaglib
 !           extract index and value of second largest overlap
 !
             max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
-            max_overlap(j,9)  = real(max_idx(1), kind=dp)
-            max_overlap(j,10) = overlap(max_idx(1),j)
+            overlap_idx_l(j,2)  = real(max_idx(1), kind=dp)
+            overlap_val_l(j,2) = overlap(max_idx(1),j)
           end do
 !
 !         check if no indices were assigned twice as maximum overlap
@@ -2583,14 +2580,14 @@ module diaglib
           double_l = .false.
           do j=1, n_max
             do k=1, n_max
-              if (k .ne. j .and. max_overlap(j,1) .eq. max_overlap(k,1)) then 
+              if (k .ne. j .and. overlap_idx_r(j,1) .eq. overlap_idx_r(k,1)) then 
                 double_r = .true.
               end if
             end do
           end do
           do j=1, n_max
             do k=1, n_max
-              if (k .ne. j .and. max_overlap(j,6) .eq. max_overlap(k,6)) then 
+              if (k .ne. j .and. overlap_idx_l(j,1) .eq. overlap_idx_l(k,6)) then 
                 double_l = .true.
               end if
             end do
@@ -2599,9 +2596,9 @@ module diaglib
 !         try easy fix, by just taking the permutation idices of the other eigenvector side
 !
           if (double_r .and. .not. double_l) then
-            max_overlap(:,1) = max_overlap(:,6)
+            overlap_idx_r(:,1) = overlap_idx_l(:,1)
           else if (double_l .and. .not. double_r) then
-            max_overlap(:,6) = max_overlap(:,1)
+            overlap_idx_l(:,1) = overlap_idx_r(:,1)
           else if (double_r .and. double_l) then
 !
 !           check which second largest overlap is larger and take this indice as max_overlap.
@@ -2610,11 +2607,11 @@ module diaglib
 !
             do j=1, n_max
               do k=1, n_max
-                if (k .ne. j .and. max_overlap(j,1) .eq. max_overlap(k,1)) then 
-                  if (max_overlap(j,5) .gt. max_overlap(k,5)) then
-                    max_overlap(j,1) = max_overlap(j,4)
+                if (k .ne. j .and. overlap_idx_r(j,1) .eq. overlap_idx_r(k,1)) then 
+                  if (overlap_val_r(j,2) .gt. overlap_val_r(k,2)) then
+                    overlap_idx_r(j,1) = overlap_idx_r(j,2)
                   else
-                    max_overlap(k,1) = max_overlap(k,4)
+                    overlap_idx_r(k,1) = overlap_idx_r(k,2)
                   end if
                 end if
               end do
@@ -2627,29 +2624,29 @@ module diaglib
             double_r = .false.
             do j=1, n_max
               do k=1, n_max
-                if (k .ne. j .and. max_overlap(j,1) .eq. max_overlap(k,1)) then 
+                if (k .ne. j .and. overlap_idx_r(j,1) .eq. overlap_idx_r(k,1)) then 
                   double_r = .true.
                 end if
               end do
             end do
             if (double_r) then
               do j=1, n_max
-                max_overlap(j,1) = real(j, kind=dp)
-                max_overlap(j,6) = real(j, kind=dp)
+                overlap_idx_r(j,1) = real(j, kind=dp)
+                overlap_idx_l(j,1) = real(j, kind=dp)
               end do
             else
-              max_overlap(:,6) = max_overlap(:,1)
+              overlap_idx_l(:,1) = overlap_idx_r(:,1)
             end if  
           end if
 !
 !         check if maximum indices from right and left eigenvectors are the same
 !
-          overlap_diff = max_overlap(:,1) - max_overlap(:,6)
+          overlap_diff = overlap_idx_r(:,1) - overlap_idx_l(:,1)
           if (dnrm2(n_max,overlap_diff,1 ) .ne. 0) then
-            if (sum(max_overlap(:,1)) .gt. sum(max_overlap(:,6))) then
-              max_overlap(:,6) = max_overlap(:,1)
+            if (sum(overlap_val_r(:,1)) .gt. sum(overlap_val_l(:,1))) then
+              overlap_idx_l(:,1) = overlap_idx_r(:,1)
             else
-              max_overlap(:,1) = max_overlap(:,1)
+              overlap_idx_r(:,1) = overlap_idx_l(:,1)
             end if
           end if
 !
@@ -2660,7 +2657,7 @@ module diaglib
 !
               perm_mat = zero 
               do j=1, n_max
-                perm_mat(int(max_overlap(j,1)),j) = one
+                perm_mat(int(overlap_idx_r(j,1)),j) = one
               end do
               perm_temp = transpose(perm_mat)
 !
