@@ -11,11 +11,11 @@ program main
 !
 ! initialize:
 !
-  n      = 1000
-  n_want = 100
-  tol    = 1.0e-6_dp
+  n      = 100 
+  n_want = 10
+  tol    = 1.0e-8_dp
   itmax  = 1000
-  m_max  = 10
+  m_max  = 5
   nmult  = 0
   tdscf  = .false.
   i_alg  = 0
@@ -52,7 +52,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then 
-    call test_caslr_complex(.false.,n,n_want,tol,itmax,m_max)
+    call test_caslr_complex(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.6) then 
     call test_symm_complex(.true.,n,n_want,tol,itmax,m_max)
   else 
@@ -311,6 +311,7 @@ end program main
 !
       call dgemm('n','n',n,m,n,1.0_dp,apbre,n,x1,n,0.0_dp,y,n)
       call dgemm('n','n',n,m,n,-1.0_dp,ambim,n,x2,n,1.0_dp,y,n)
+!
     else if (reim.eq.1) then
 !
 !     here we want to compute sigma_im+ = (A+B)im*Vre+ - (A-B)re*Vim+
@@ -1142,6 +1143,7 @@ end program main
     integer               :: n2, n4, n_eig
     real(dp)              :: sqrttwo, lw(1)
     real(dp), allocatable :: evecre(:,:), evecim(:,:), eig(:), diagonal(:), evec(:,:)
+    real(dp), allocatable :: evecre_(:,:), evecim_(:,:), eig_(:), evec_(:,:)
     real(dp), allocatable :: work(:), w(:)
 !
 !   lapack matrices 
@@ -1179,7 +1181,7 @@ end program main
 !
 !   debug: test
 !
-!    allocate(prod(n4,n4), prod2(n4,n4))
+!    allocate(prod(n4), prod2(n4))
 !    prod    = 0.0_dp
 !    prod2   = 0.0_dp
 !
@@ -1226,7 +1228,7 @@ end program main
       end do 
     end do
     do i = 1, n
-      sigmare(i,i) = sigmare(i,i) + 10.0_dp
+      sigmare(i,i) = sigmare(i,i) + 50.0_dp
     end do
 !  
 !   build antisymmetric delta:
@@ -1250,6 +1252,18 @@ end program main
 !   build a and b:
 !   A is hermitian, B is symmetric
 !  
+!
+!   to extremely simplify the problem with a unitary-Lambda matrix
+!
+!    apbre = 0.0_dp
+!    ambre = 0.0_dp
+!    apbim = 0.0_dp
+!    ambim = 0.0_dp
+!    do i = 1, n
+!      apbre(i,i) = 1.0_dp
+!      ambre(i,i) = 1.0_dp
+!    end do
+!    
     aare = 0.0_dp
     aaim = 0.0_dp
     bbre = 0.0_dp
@@ -1266,6 +1280,16 @@ end program main
     end do
     apbim = aaim + bbim
     ambim = aaim - bbim
+!
+!   to simplify the problem with an SCF-like metric
+!
+!    sigmare = 0.0_dp
+!    sigmaim = 0.0_dp
+!    do i = 1, n
+!      sigmare(i,i) = 1.0_dp
+!    end do
+!    deltare = 0.0_dp 
+!    deltaim = 0.0_dp 
 !  
 !   build sigma + delta and sigma - delta
 !  
@@ -1274,38 +1298,27 @@ end program main
     spdim = sigmaim + deltaim
     smdim = sigmaim - deltaim 
 !
-!   to simplify the problem with an SCF-like metric
-!
-!     sigmare = 0.0_dp
-!     sigmaim = 0.0_dp
-!     do i = 1, n
-!       sigmare(i,i) = 1.0_dp
-!       sigmaim(i,i) = 1.0_dp  
-!     end do
-!     deltare = 0.0_dp 
-!     deltaim = 0.0_dp 
-!
-!     build the complete matrices:
-!    
-      allocate (are(n2,n2), aim(n2,n2), sre(n2,n2), sim(n2,n2))
-!     real part 
-      are(1:n,   1:n)    = aare
-      are(n+1:n2,n+1:n2) = aare
-      are(1:n,   n+1:n2) = bbre
-      are(n+1:n2,1:n)    = bbre
-      sre(1:n,   1:n)    = sigmare
-      sre(n+1:n2,n+1:n2) = - sigmare
-      sre(1:n,   n+1:n2) = deltare
-      sre(n+1:n2,1:n)    = - deltare
-!     imaginary part       
-      aim(1:n,   1:n)    = aaim
-      aim(n+1:n2,n+1:n2) = - aaim
-      aim(1:n,   n+1:n2) = bbim
-      aim(n+1:n2,1:n)    = - bbim
-      sim(1:n,   1:n)    = sigmaim
-      sim(n+1:n2,n+1:n2) = sigmaim
-      sim(1:n,   n+1:n2) = deltaim
-      sim(n+1:n2,1:n)    = deltaim
+!   build the complete matrices:
+!   
+    allocate (are(n2,n2), aim(n2,n2), sre(n2,n2), sim(n2,n2))
+!   real part 
+    are(1:n,   1:n)    = aare
+    are(n+1:n2,n+1:n2) = aare
+    are(1:n,   n+1:n2) = bbre
+    are(n+1:n2,1:n)    = bbre
+    sre(1:n,   1:n)    = sigmare
+    sre(n+1:n2,n+1:n2) = - sigmare
+    sre(1:n,   n+1:n2) = deltare
+    sre(n+1:n2,1:n)    = - deltare
+!   imaginary part       
+    aim(1:n,   1:n)    = aaim
+    aim(n+1:n2,n+1:n2) = - aaim
+    aim(1:n,   n+1:n2) = bbim
+    aim(n+1:n2,1:n)    = - bbim
+    sim(1:n,   1:n)    = sigmaim
+    sim(n+1:n2,n+1:n2) = sigmaim
+    sim(1:n,   n+1:n2) = deltaim
+    sim(n+1:n2,1:n)    = deltaim
 !
     if (check_lapack) then
 !
@@ -1315,7 +1328,7 @@ end program main
 !
 !     debug: test
 !
-      allocate (lambdafull(n4,n4), omegafull(n4,n4))
+!      allocate (lambdafull(n4,n4), omegafull(n4,n4))
 !
 !     build the 4nx4n matrices lambda and omega 
 !
@@ -1330,8 +1343,8 @@ end program main
 !
 !     debug: test
 !
-!      lambdafull = lambda4
-!      omegafull  = omega4
+      lambdafull = lambda4
+      omegafull  = omega4
 !      
 !     if required, solve the generalized eigenvalue problem with a dense
 !     lapack routine:
@@ -1344,7 +1357,7 @@ end program main
 !     write the results on a file for comparison.
 !
       open (unit = 10, file = 'lapack_complex.txt', form = 'formatted', access = 'sequential')
-      do i = 1, n_want
+      do i = 1, 2*n_want, 2
         write(10,1000) i, 1.0_dp/w(n4-i+1)
 !
 !       fix the phase so that the first element of the eigenvector is positive.
@@ -1374,11 +1387,15 @@ end program main
 !   required ones are converged.
 !
     n_eig = min(2*n_want, n_want + 5)
-    n_eig = n_want*2 
+    n_eig = n_want !+ 2 
+    !n_eig = n
 !
 !   allocate memory for the eigenvectors and eigenvalues:
 !
     allocate (evecre(n2,n_eig), evecim(n2,n_eig), eig(n_eig), evec(n4,n_eig))
+    allocate (evecre_(n2,2*n_eig), evecim_(n2,2*n_eig), eig_(2*n_eig), evec_(n4,2*n_eig))
+!    pwhat = 5
+!    if (pwhat .eq. 5) goto 999 
 !
 !   make a guess for the eigenvector 
 !
@@ -1419,15 +1436,17 @@ end program main
       write(10,*)
     end do
     close (10)
+!    stop
+!    999 continue
 !
 !   make a guess for the eigenvector
 !
-    call guess_evec(3,n4,n_eig,diagonal,evec)
+!    call guess_evec(2,n4,2*n_eig,diagonal,evec_)
 !
 !   evec structure: X = (Yr Zr Yi -Zi) 
 !
-    evecre = evec(1:n2,:)
-    evecim = evec(n2+1:n4,:)
+!    evecre_ = evec_(1:n2,:)
+!    evecim_ = evec_(n2+1:n4,:)
 !
 !   call the modified solver:
 !
@@ -1439,9 +1458,35 @@ end program main
     write(6,*) '   ------------------------------------------------------------------' 
     write(6,*) 
 !
+!    if (pwhat .eq. 5) goto 998 
+!
+!   make a guess for the eigenvector
+!
+!    call guess_evec(2,n4,2*n_eig,diagonal,evec_)
+!!
+!!   evec structure: X = (Yr Zr Yi -Zi) 
+!!
+!    evecre_ = evec_(1:n2,:)
+!    evecim_ = evec_(n2+1:n4,:)
+!!
+!    call smogd_complex_old(.true.,n,n2,2*n_want,2*n_eig,itmax,tol,m_max,apbvec_complex,ambvec_complex, &
+!                           spdvec_complex,smdvec_complex, & 
+!                           lrprec_2_complex,eig_,evecre_,evecim_,ok)
+!
+!    998 continue 
+!
+!   make a guess for the eigenvector
+!
+!    call guess_evec(3,n4,n_eig,diagonal,evec)
+!
+!   evec structure: X = (Yr Zr Yi -Zi) 
+!
+    evecre = evec(1:n2,:)
+    evecim = evec(n2+1:n4,:)
+!
     call caslr_complex_eff_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_complex,ambvec_complex, &
-                                     spdvec_complex,smdvec_complex, & 
-                                     lrprec_2_complex,eig,evecre,evecim,ok)
+                                  spdvec_complex,smdvec_complex, & 
+                                  lrprec_2_complex,eig,evecre,evecim,ok)
 !
 !   write the converged results on file for comparison:
 !
