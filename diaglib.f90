@@ -162,7 +162,7 @@ module diaglib
 ! timings:
 !
   real(dp)                  :: t1(2), t2(2), t_diag(2), t_ortho(2), &
-                               t_mv(2), t_tot(2)
+                               t_mv(2), t_red(2), t_tot(2)
 !
 ! subroutines:
 ! ============
@@ -1050,10 +1050,18 @@ module diaglib
 ! This formalism ensures the orthogonality of the expansion vectors.
 !
 ! Solving the augmented form of the LR-eqs leads to degenerate coupled-eigenvalues, 
-! which belong to different eigenvector: 
+! which belong to different eigenvectors: 
 !
-! X1 = ( Yr Zr Yi -Zi), 
-! X2 = (-Yi Zi Yr  Zr).
+! X' = ( Yr Zr Yi -Zi), 
+! X'' = (-Yi Zi Yr  Zr).
+!
+! In order to avoid any numerical issue/instability we managed to use only the expansion
+! vectors related to the first eigenvector (X'), and to retrieve from them the second
+! members of the couples (related to X''). This is possible thanks to some relations which 
+! correlate the (+)' set with the (-)'' set (and viceversa).
+! Using this new strategy not only did allow us to stabilize the algorithm but also to 
+! further reduced the cost; obtaining a reduced problem as expensive as the non-complex
+! counterpart.
 !
 ! As was already done in the "REAL" solver (caslr_driver) we only manage to deal with
 ! a reduced form of the expansion vectors; 
@@ -1108,10 +1116,10 @@ module diaglib
 !
 !   real
     real(dp), allocatable :: vpre(:,:), vmre(:,:), lvpre(:,:), lvmre(:,:), bvpre(:,:), bvmre(:,:)
-    real(dp), allocatable :: rpre(:,:), rmre(:,:), rrre(:,:), r_norm(:,:)
+    real(dp), allocatable :: rpre(:,:), rmre(:,:), r_norm(:,:)
 !   imaginary
     real(dp), allocatable :: vpim(:,:), vmim(:,:), lvpim(:,:), lvmim(:,:), bvpim(:,:), bvmim(:,:)
-    real(dp), allocatable :: rpim(:,:), rmim(:,:), rrim(:,:)
+    real(dp), allocatable :: rpim(:,:), rmim(:,:) 
 !
 !   new strategy
 ! 
@@ -1130,11 +1138,7 @@ module diaglib
     real(dp), allocatable :: a_red(:,:), a_copy(:,:), s_red(:,:), s_copy(:,:), e_red(:)
     real(dp), allocatable :: epmat(:,:),   emmat(:,:),   smat(:,:)
     real(dp), allocatable :: epmatre(:,:), emmatre(:,:), smatre(:,:)
-    real(dp), allocatable :: epmatim(:,:), emmatim(:,:), smatim(:,:), eigenvector(:,:)
-!
-!   debug
-!
-    real(dp), allocatable :: vpp(:,:), vmm(:,:), overlap(:,:)
+    real(dp), allocatable :: epmatim(:,:), smatim(:,:)
 !    
 !   restarting variables
 !
@@ -1167,13 +1171,8 @@ module diaglib
 !
     allocate (vpre(n,lda), vpim(n,lda), vmre(n,lda), vmim(n,lda), lvpre(n,lda), lvpim(n,lda), lvmre(n,lda), lvmim(n,lda), &
               bvpre(n,lda), bvpim(n,lda), bvmre(n,lda), bvmim(n,lda), &
-              rpre(n,n_max), rpim(n,n_max), rmre(n,n_max), rmim(n,n_max), rrre(n,n_max), rrim(n,n_max), stat = istat)
+              rpre(n,n_max), rpim(n,n_max), rmre(n,n_max), rmim(n,n_max), stat = istat)
     call check_mem(istat)
-!
-!   new strategy
-!
-!    allocate (vpre2(n,lda), vpim2(n,lda), vmre2(n,lda), vmim2(n,lda), stat = istat)
-!    call check_mem(istat)
 !
 !   allocate memory for convergence check
 !
@@ -1184,18 +1183,13 @@ module diaglib
 !
     allocate (a_red(lda4,lda4), a_copy(lda4,lda4), s_red(lda4,lda4), s_copy(lda4,lda4), &
               e_red(lda4), epmat(lda2,lda2), epmatre(lda2,lda2), epmatim(lda2,lda2), emmat(lda2,lda2), &
-              emmatre(lda2,lda2), emmatim(lda2,lda2), smat(lda2,lda2), smatre(lda2,lda2), smatim(lda2,lda2), stat=istat) 
+              emmatre(lda2,lda2), smat(lda2,lda2), smatre(lda2,lda2), smatim(lda2,lda2), stat=istat) 
     call check_mem(istat)
 !
 !   allocate memory for the plus and minus eigenvector components:
 !
     allocate (up(lda2,n_max), um(lda2,n_max), eigpre(n,n_max), eigpim(n,n_max), eigmre(n,n_max), eigmim(n,n_max), & 
               up_(lda,n_max), um_(lda,n_max), bpre(n,n_max), bpim(n,n_max), bmre(n,n_max), bmim(n,n_max), stat = istat)
-    call check_mem(istat)
-!
-!   debug
-!
-    allocate (vpp(n2,lda), vmm(n2,lda), overlap(2*n_max,2*n_max), stat=istat)
     call check_mem(istat)
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
@@ -1210,18 +1204,12 @@ module diaglib
     t_diag    = zero
     t_ortho   = zero
     t_mv      = zero
+    t_red     = zero
     t_tot     = zero
     vpre      = zero
     vpim      = zero
     vmre      = zero
     vmim      = zero
-!
-!   new strategy
-!
-    !vpre2     = zero
-    !vpim2     = zero
-    !vmre2     = zero
-    !vmim2     = zero
 !
     bvpre     = zero
     bvpim     = zero
@@ -1236,18 +1224,6 @@ module diaglib
     done      = .false.
 !
     call get_time(t_tot)
-    !allocate(eigenvector(2*n2,n_max))
-    !do i_eig = 1, n_max
-    !  eigenvector(1:n2,i_eig)      = evecre(:,i_eig) 
-    !  eigenvector(n2+1:2*n2,i_eig) = evecim(:,i_eig) 
-    !end do
-    !call check_guess(2*n2,n_max,eigenvector)
-    !do i_eig = 1, n_max
-    !  evecre(:,i_eig) = eigenvector(1:n2,i_eig)
-    !  evecim(:,i_eig) = eigenvector(n2+1:2*n2,i_eig)
-    !end do
-    !deallocate(eigenvector)
-!
 !
 !   move the guess into the expansion space.
 !
@@ -1257,18 +1233,8 @@ module diaglib
 !                      evecre  = (Yr Zr), (-Yi Zi)
 !                      evecim  = (Yi -Zi), (Yr Zr) 
 !
-!old    do i_eig = 1, n_max, 2
-!old!     real 
-!old      vpre(:,i_eig)   = ( evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-!old      vmre(:,i_eig)   = ( evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-!old      vpre(:,i_eig+1) = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-!old      vmre(:,i_eig+1) = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-!old!     imaginary 
-!old      vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-!old      vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-!old      vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-!old      vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-!old    end do
+!   build the expansion vectors for the V(+)' and V(-)' sets
+!
     do i_eig = 1, n_max
 !     real 
       vpre(:,i_eig) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
@@ -1278,68 +1244,8 @@ module diaglib
       vmim(:,i_eig) = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
     end do
 !
-!
-!    i_beg = 1
-!    write(6,'(4a15)') 'b1+re - b2-im', 'b1-re - b2+im', 'b1+im - b2-re', 'b1-im - b2+re'
-!    do i = 1, 10
-!      write(6,'(4f15.8)') vpre(i,i_beg)-vmim(i,i_beg+1), vmre(i,i_beg)-vpim(i,i_beg+1), & 
-!                          vpim(i,i_beg)-vmre(i,i_beg+1), vmim(i,i_beg)-vpre(i,i_beg+1)
-!    end do                   
-!
     call ortho_cd_complex(n,n_max,vpre,vpim,growth,ok)
     call ortho_cd_complex(n,n_max,vmre,vmim,growth,ok)
-    !write(6,*) 'olsen start'
-    !write(6,*) 'vmre old'
-    !do i = 1, n
-    !  write(6,'(10f12.6)') vmre(i,1:10) 
-    !end do
-!    
-!   new strategy
-!
-!    do i_eig = 1, n_max
-!!    real     
-!      vmim(:,i_eig+n_max) = vpre(:,i_eig)
-!      vpim(:,i_eig+n_max) = vmre(:,i_eig)
-!!    imaginary    
-!      vmre(:,i_eig+n_max) = -vpim(:,i_eig)
-!      vpre(:,i_eig+n_max) = -vmim(:,i_eig)
-!    end do
-!    
-!    call ortho_vs_x_complex(n,n_max,n_max,vpre,vpim,vpre(1,n_max+1),vpim(1,n_max+1),xx,xx)
-!    call ortho_vs_x_complex(n,n_max,n_max,vmre,vmim,vmre(1,n_max+1),vmim(1,n_max+1),xx,xx)
-!    write(6,*) 'vpre '
-!    do i = 1, n
-!      write(6,'(8f12.6)') vpre(i,1:8)
-!    end do
-!    write(6,*) 'vpim '
-!    do i = 1, n
-!      write(6,'(8f12.6)') vpim(i,1:8)    
-!    end do
-!    write(6,*) 'vmre '
-!    do i = 1, n
-!      write(6,'(8f12.6)') vmre(i,1:8)
-!    end do
-!    write(6,*) 'vmim '
-!    do i = 1, n
-!      write(6,'(8f12.6)') vmim(i,1:8)
-!    end do
-!    
-!   checking the orthogonality...
-!
-!    vpp            = zero
-!    overlap        = zero
-!    vpp(1:n,:)     = vpre(:,:)
-!    vpp(n+1:n2,:)  = vpim(:,:)
-!    call dgemm('t','n',2*n_max,2*n_max,n2,one,vpp,n2,vpp,n2,zero,overlap,2*n_max)
-!    write(6,*) '<V(+)|V(+)> = '
-!    write(6,'(8f10.5)') transpose(overlap(1:8,1:8))
-!    vmm            = zero
-!    overlap        = zero
-!    vmm(1:n,:)     = vmre(:,:)
-!    vmm(n+1:n2,:)  = vmim(:,:)
-!    call dgemm('t','n',2*n_max,2*n_max,n2,one,vmm,n2,vmm,n2,zero,overlap,2*n_max)
-!    write(6,*) '<V(-)|V(-)> = '
-!    write(6,'(8f10.5)') transpose(overlap(1:8,1:8))
 !
     n_act = n_max
     ind   = 1
@@ -1377,61 +1283,23 @@ module diaglib
 !
 !     compute the matrix-vector products
 !
-!     new strategy
-!
-!      call apbmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg))   !sigma_re+
-!      call apbmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpim(1,i_beg))   !sigma_im+
-!      call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))   !sigma_re-
-!      call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))   !sigma_im-
-!   
-!      do i_eig = 1, ldu 
-!!       real
-!        lvmim(:,i_eig+ldu) =  lvpre(:,i_eig)
-!        lvpim(:,i_eig+ldu) =  lvmre(:,i_eig)
-!!       imaginary
-!        lvmre(:,i_eig+ldu) = -lvpim(:,i_eig)
-!        lvpre(:,i_eig+ldu) = -lvmim(:,i_eig)
-!      end do
-!   
-!okok      call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))   !tau_re-
-!okok      call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmim(1,i_beg))   !tau_im-
-!okok      call smdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))   !tau_re+
-!okok      call smdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpim(1,i_beg))   !tau_im+
-!okok   
-!okok      do i_eig = 1, ldu 
-!okok!       real
-!okok        bvpim(:,i_eig+ldu) =  bvmre(:,i_eig)
-!okok        bvmim(:,i_eig+ldu) =  bvpre(:,i_eig)
-!okok!       imaginary
-!okok        bvpre(:,i_eig+ldu) = -bvmim(:,i_eig)
-!okok        bvmre(:,i_eig+ldu) = -bvpim(:,i_eig)
-!okok      end do
-!      
-!     newest strategy 
-!
-!     build matrices E++ and E--
-!
       call apbmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg))   !sigma_re+
       call apbmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpim(1,i_beg))   !sigma_im+
       call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))   !sigma_re-
       call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))   !sigma_im-
 !      
-!old      do i_eig = 1, ldu 
-!old!       real
-!old        lvmim(:,i_eig+ldu) =  lvpre(:,i_eig)
-!old        lvpim(:,i_eig+ldu) =  lvmre(:,i_eig)
-!old!       imaginary
-!old        lvmre(:,i_eig+ldu) = -lvpim(:,i_eig)
-!old        lvpre(:,i_eig+ldu) = -lvmim(:,i_eig)
-!old      end do
-!
-!    Olsen reduced
-!
-!     E++
-!     E--
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
 !      
-!     block one:   good/good = vpre*lvpre + vpim*lvpim
-!     block four:  bad/bad   = vpim*lvpim + vpre*lvpre
+!     the reduced-problem matrices blocks are computed only using the V(+/-)' and LV/BV(+/-)'
+!
+!     build matrices E++ and E--
+!     we only need to compute the E++ blocks, and then retrieve E--'s from them
+!
+!     block one  E++: <V(+)'|LV(+)'>   = vpre*lvpre + vpim*lvpim
+!     block four E--: <V(-)''|LV(-)''> = vpim*lvpim + vpre*lvpre
+! 
+      call get_time(t1)
 !
       call dgemm('t','n',ldu,ldu,n,one,vpre,n,lvpre,n,zero,epmatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vpim,n,lvpim,n,one,epmatre,lda2) 
@@ -1439,19 +1307,17 @@ module diaglib
       emmat(ldu+1:2*ldu,ldu+1:2*ldu) = epmatre(1:ldu,1:ldu)
       epmatre = zero 
 !
-!     block two:   bad/good  = -vmim*lvpre + vmre*lvpim
-!     block three: good/bad  = -vmre*lvpim + vmim*lvpre
+!     block two   E++: <V(+)''|LV(+)'> = -vmim*lvpre + vmre*lvpim
+!     block three E--: <V(-)'|LV(-)''> = -vmre*lvpim + vmim*lvpre
 !
       call dgemm('t','n',ldu,ldu,n,-one,vmim,n,lvpre,n,zero,epmatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vmre,n,lvpim,n,one,epmatre,lda2) 
       epmat(ldu+1:2*ldu,1:ldu) = epmatre(1:ldu,1:ldu)
       emmat(1:ldu,ldu+1:2*ldu) = -epmatre(1:ldu,1:ldu)
-      !write(6,*) 'E++ bad/good olsen'
-      !write(6,'(10f15.8)') transpose(epmatre(1:10,1:10))
       epmatre = zero
 !
-!     block three: good/bad  = -vpre*lvmim + vpim*lvmre
-!     block two:   bad/good  = -vpim*lvmre + vpre*lvmim
+!     block three E++: <V(+)'|LV(+)''> = -vpre*lvmim + vpim*lvmre
+!     block two   E--: <V(-)''|LV(-)'> = -vpim*lvmre + vpre*lvmim
 !
       call dgemm('t','n',ldu,ldu,n,-one,vpre,n,lvmim,n,zero,epmatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vpim,n,lvmre,n,one,epmatre,lda2) 
@@ -1459,141 +1325,62 @@ module diaglib
       emmat(ldu+1:2*ldu,1:ldu) = -epmatre(1:ldu,1:ldu)
       epmatre = zero
 !
-!     block four:  bad/bad   = vmim*lvmim + vmre*lvmre
-!     block one:   good/good = vmre*lvmre + vmim*lvmim
+!     block four E++: <V(+)''|LV(+)''> = vmim*lvmim + vmre*lvmre
+!     block one  E--: <V(-)'|LV(-)'>   = vmre*lvmre + vmim*lvmim
 !
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,lvmim,n,zero,epmatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vmre,n,lvmre,n,one,epmatre,lda2) 
       epmat(ldu+1:2*ldu,ldu+1:2*ldu) = epmatre(1:ldu,1:ldu)
       emmat(1:ldu,1:ldu) = epmatre(1:ldu,1:ldu)
       epmatre = zero
-      !write(6,*) 'E-- olsen'
-      !write(6,'(20f15.8)') transpose(emmat(1:20,1:20))
-      !write(6,*) 'E-- olsen'
-      !write(6,'(20f15.8)') transpose(emmat(1:20,1:20))
-!
-!     E--
 !      
-!     block one:   good/good = vmre*lvmre + vmim*lvmim
-!
-!      call dgemm('t','n',ldu,ldu,n,one,vmre,n,lvmre,n,zero,emmatre,lda2) 
-!      call dgemm('t','n',ldu,ldu,n,one,vmim,n,lvmim,n,one,emmatre,lda2) 
-!      emmat(1:ldu,1:ldu) = emmatre(1:ldu,1:ldu)
-!      emmatre = zero 
-!!
-!!     block two:   bad/good  = -vpim*lvmre + vpre*lvmim
-!!
-!      !call dgemm('t','n',ldu,ldu,n,-one,vpim,n,lvmre,n,zero,emmatre,lda2) 
-!      !call dgemm('t','n',ldu,ldu,n,one,vpre,n,lvmim,n,one,emmatre,lda2) 
-!      !emmat(ldu+1:2*ldu,1:ldu) = emmatre(1:ldu,1:ldu)
-!      !emmatre = zero
-!!
-!!     !block three: good/bad  = -vmre*lvpim + vmim*lvpre
-!!
-!      !call dgemm('t','n',ldu,ldu,n,-one,vmre,n,lvpim,n,zero,emmatre,lda2) 
-!      !call dgemm('t','n',ldu,ldu,n,one,vmim,n,lvpre,n,one,emmatre,lda2) 
-!      !emmat(1:ldu,ldu+1:2*ldu) = emmatre(1:ldu,1:ldu)
-!      !emmatre = zero
-!!
-!!     block four:  bad/bad   = vpim*lvpim + vpre*lvpre
-!!
-!      call dgemm('t','n',ldu,ldu,n,one,vpim,n,lvpim,n,zero,emmatre,lda2) 
-!      call dgemm('t','n',ldu,ldu,n,one,vpre,n,lvpre,n,one,emmatre,lda2) 
-!      emmat(ldu+1:2*ldu,ldu+1:2*ldu) = emmatre(1:ldu,1:ldu)
-!      emmatre = zero
+      call get_time(t2)
+      t_red = t_red + t2 - t1
 !      
-!     build matrix S-+ = S = (S+-)**T
-!
+      call get_time(t1)
+!      
       call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))   !tau_re-
       call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmim(1,i_beg))   !tau_im-
       call smdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))   !tau_re+
       call smdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpim(1,i_beg))   !tau_im+
-      !write(6,*) 'OLSEN'
-      !write(6,*) 'vpre'
-      !do i = 1, n
-      !  write(6,'(10f20.15)') vpre(i,1:10)
-      !end do
-      !write(6,*) 'bvmre'
-      !do i = 1, n
-      !  write(6,'(10f20.15)') bvmre(i,1:10)
-      !end do
-      !exit
-      !stop
 !
-!old      do i_eig = 1, ldu 
-!old!       real
-!old        bvpim(:,i_eig+ldu) =  bvmre(:,i_eig)
-!old        bvmim(:,i_eig+ldu) =  bvpre(:,i_eig)
-!old!       imaginary
-!old        bvpre(:,i_eig+ldu) = -bvmim(:,i_eig)
-!old        bvmre(:,i_eig+ldu) = -bvpim(:,i_eig)
-!old      end do
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!      
+!     build matrix S-+ = S = (S+-)**T
 !
-!      smatre = zero   !temp    
-!      smatim = zero   !temp
-!      smat   = zero   !temp
+!     block one:   <V(-)'|BV(-)'> = vmre*bvmre + vmim*bvmim
 !
-!     block one:   good/good = vmre*bvmre + vmim*bvmim
+      call get_time(t1)
 !
       call dgemm('t','n',ldu,ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvmim,n,one,smatre,lda2) 
       smat(1:ldu,1:ldu) = smatre(1:ldu,1:ldu)
       smatre = zero 
 !
-!     block two:   bad/good  = -vpim*bvmre + vpre*bvmim
+!     block two:   <V(-)''|BV(-)'>  = -vpim*bvmre + vpre*bvmim
 !
       call dgemm('t','n',ldu,ldu,n,-one,vpim,n,bvmre,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vpre,n,bvmim,n,one,smatre,lda2) 
       smat(ldu+1:2*ldu,1:ldu) = smatre(1:ldu,1:ldu)
       smatre = zero
 !
-!     block three: good/bad  = -vmre*bvpim + vmim*bvpre
+!     block three: <V(-)'|BV(-)''>  = -vmre*bvpim + vmim*bvpre
 !
       call dgemm('t','n',ldu,ldu,n,-one,vmre,n,bvpim,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvpre,n,one,smatre,lda2) 
       smat(1:ldu,ldu+1:2*ldu) = smatre(1:ldu,1:ldu)
       smatre = zero
 !
-!     block four:  bad/bad   = vpim*bvpim + vpre*bvpre
+!     block four:  <V(-)''|BV(-)''>   = vpim*bvpim + vpre*bvpre
 !
       call dgemm('t','n',ldu,ldu,n,one,vpim,n,bvpim,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vpre,n,bvpre,n,one,smatre,lda2) 
       smat(ldu+1:2*ldu,ldu+1:2*ldu) = smatre(1:ldu,1:ldu)
       smatre = zero
-      !write(6,*) 'smat olsen'
-      !write(6,'(20f15.8)') transpose(smat(1:20,1:20))
-      !exit
-      !write(6,*) ldu, 2*ldu
-      !write(6,'(2f20.16)') norm2(smat), sqrt(real(2*ldu))
-      !do i = 1, 2*ldu
-      !  write(6,'(f20.16)') smat(i,i)
-      !end do
-!
+!      
       call get_time(t2)
-      t_mv = t_mv + t2 - t1
-!
-!     update the reduced matrix 
-!
-!old      call dgemm('t','n',2*ldu,2*ldu,n,one,vpre,n,lvpre,n,zero,epmatre,lda2)   !Ere+=(Vre+)^T*sigma_re+
-!old      call dgemm('t','n',2*ldu,2*ldu,n,one,vpim,n,lvpim,n,zero,epmatim,lda2)   !Eim+=(Vim+)^T*sigma_im+
-!old      epmat = epmatre + epmatim
-      !epmat = (epmat + transpose(epmat)) / two
-!      write(6,*) 'E+'
-!      write(6,'(8f10.5)') epmat(1:8,1:8) !- transpose(epmat(1:4,1:4))
-!      
-!old      call dgemm('t','n',2*ldu,2*ldu,n,one,vmre,n,lvmre,n,zero,emmatre,lda2)   !Ere-=(Vre-)^T*sigma_re-
-!old      call dgemm('t','n',2*ldu,2*ldu,n,one,vmim,n,lvmim,n,zero,emmatim,lda2)   !Eim-=(Vim-)^T*sigma_im-
-!old      emmat = emmatre + emmatim
-      !emmat = (emmat + transpose(emmat)) / two
-!      write(6,*) 'E-'
-!      write(6,'(8f10.5)') emmat(1:8,1:8) !- transpose(emmat(1:4,1:4))
-!      
-!old      call dgemm('t','n',2*ldu,2*ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda2)    !Sre=(Vre-)^T*tau_re-
-!old      call dgemm('t','n',2*ldu,2*ldu,n,one,vmim,n,bvmim,n,zero,smatim,lda2)    !Sim=(Vim-)^T*tau_im-
-!old      smat = smatre + smatim
-!      write(6,*) 'S'
-!      write(6,'(8f10.5)') transpose(smat(1:8,1:8)) !- smat(1:4,1:4)
-!      stop
+      t_red = t_red + t2 - t1
 !
       a_red = zero
       s_red = zero
@@ -1601,73 +1388,53 @@ module diaglib
       a_red(2*ldu+1:4*ldu,2*ldu+1:4*ldu) = emmat(1:2*ldu,1:2*ldu)
       s_red(1:2*ldu,2*ldu+1:4*ldu)       = transpose(smat(1:2*ldu,1:2*ldu))
       s_red(2*ldu+1:4*ldu,1:2*ldu)       = smat(1:2*ldu,1:2*ldu)
-      !write(6,'(120f15.8)') s_red(1:120,1:1200)
-!      write(6,'(2f20.16)') norm2(s_red), sqrt(real(4*ldu))
-!      write(6,*) 'lda, ldu', lda, ldu
-!      write(6,*) 'smat, epmat, emmat', shape(smat), shape(epmat), shape(emmat)
-      !write(6,*) s_red
-      !a_red(1:ldu,1:ldu)             = epmat(1:ldu,1:ldu)
-      !a_red(ldu+1:2*ldu,ldu+1:2*ldu) = emmat(1:ldu,1:ldu)
-      !s_red(1:ldu,ldu+1:2*ldu)       = transpose(smat(1:ldu,1:ldu))
-      !s_red(ldu+1:2*ldu,1:ldu)       = smat(1:ldu,1:ldu)
 !
       call get_time(t1)
 !
 !     default algorithm: solve the 2n-dimensional inverse problem.
 !
-      !write(6,*) 'a_red'
-      !write(6,'(40f10.5)') a_red(1:40,1:40)
-      !stop
-!      write(6,*) 's_red'
-!      write(6,'(16f10.5)') s_red(1:16,1:16)
       call dsygv(1,'v','l',4*ldu,s_red,lda4,a_red,lda4,e_red,work,lwork,info)
-      !write(6,*) 'eigenvalues after lapack'
-      !do i_eig = 1, 4*ldu
-      !  write(6,*) e_red(i_eig)
-      !end do
-      !call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
-      !write(6,*) 'info', info, lwork
-      !do i = 1, 4*ldu
-      !  write(6,'(f16.10)') e_red(i)
-      !end do
-      !pause
 !
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
 !
-      !write(6,*) 'ldu, ibeg', ldu, i_beg
       icount = 1
       do i_eig = 1, 2*n_max, 2
         eig(icount)        = one/e_red(4*ldu - i_eig + 1)
-        !print *, '4ldu-i+1:', e_red(4*ldu - i_eig + 1)
         up(1:2*ldu,icount) = s_red(1:2*ldu,4*ldu - i_eig + 1)
         um(1:2*ldu,icount) = s_red(2*ldu+1:4*ldu,4*ldu - i_eig + 1)
         icount = icount + 1
       end do
 !
+!     save in up_, um_ the part of the eigenvectors related to X''
+!
       up_(1:ldu,:) = up(ldu+1:2*ldu,:)
       um_(1:ldu,:) = um(ldu+1:2*ldu,:)
-!      do i_eig = 1, 2*n_max
-!        up(1:2*ldu,i_eig) = s_red(1:2*ldu,4*ldu - i_eig + 1)
-!        um(1:2*ldu,i_eig) = s_red(2*ldu+1:4*ldu,4*ldu - i_eig + 1)
-!      end do
-      !write(6,*) 'eig'
-      !do i_eig = 1, 2*n_max
-      !  write(6,'(f20.15)') one/e_red(4*ldu - i_eig + 1)
-      !end do
 !
       call get_time(t2)
       t_diag = t_diag + t2 - t1
 !
+!     assemble the symmetric and antisymmetric combinations (Y+Z) and (Y-Z)
+!
+!     each combination is divided in a X' and a X'' contribution  
+!
 !     real part 
 !
-      call dgemm('n','n',n,n_max,2*ldu,one,vpre,n,up,lda2,zero,eigpre,n)
-      call dgemm('n','n',n,n_max,2*ldu,one,vmre,n,um,lda2,zero,eigmre,n)
+      call dgemm('n','n',n,n_max,ldu,one,vpre,n,up,lda2,zero,eigpre,n)
+      call dgemm('n','n',n,n_max,ldu,-one,vmim,n,up_,lda,one,eigpre,n)
+!      
+      call dgemm('n','n',n,n_max,ldu,one,vmre,n,um,lda2,zero,eigmre,n)
+      call dgemm('n','n',n,n_max,ldu,-one,vpim,n,um_,lda,one,eigmre,n)
 !
 !     imaginary part
 !
-      call dgemm('n','n',n,n_max,2*ldu,one,vpim,n,up,lda2,zero,eigpim,n)
-      call dgemm('n','n',n,n_max,2*ldu,one,vmim,n,um,lda2,zero,eigmim,n)
+      call dgemm('n','n',n,n_max,ldu,one,vpim,n,up,lda2,zero,eigpim,n)
+      call dgemm('n','n',n,n_max,ldu,one,vmre,n,up_,lda,one,eigpim,n)
+!      
+      call dgemm('n','n',n,n_max,ldu,one,vmim,n,um,lda2,zero,eigmim,n)
+      call dgemm('n','n',n,n_max,ldu,one,vpre,n,um_,lda,one,eigmim,n)
+!
+!     assemble the current approximation to the eigenvectors
 !
       do i_eig = 1, n_max
 !
@@ -1681,6 +1448,8 @@ module diaglib
 !
 !     compute the residuals, and their rms and sup norms:
 !
+!     also the residuals are built considering both the contributions ('/'') separately
+!    
 !     real part 
 !
       call dgemm('n','n',n,n_max,ldu,one,lvpre,n,up,lda2,zero,rpre,n)  
@@ -1694,10 +1463,6 @@ module diaglib
       !
       call dgemm('n','n',n,n_max,ldu,one,bvmre,n,up,lda2,zero,bmre,n)
       call dgemm('n','n',n,n_max,ldu,-one,bvpim,n,up_,lda,one,bmre,n)
-      !write(6,*) 'rpre', rpre
-      !write(6,*) 'rmre', rmre
-      !write(6,*) 'bpre', bpre
-      !write(6,*) 'bmre', bmre
 !
 !     imaginary part 
 !
@@ -1712,18 +1477,7 @@ module diaglib
       !
       call dgemm('n','n',n,n_max,ldu,one,bvmim,n,up,lda2,zero,bmim,n)
       call dgemm('n','n',n,n_max,ldu,one,bvpre,n,up_,lda,one,bmim,n)
-      !write(6,*) 'RESIDUAL OLSEN'
-      !do i_eig = 1, n_max
-      !  write(6,'(4a20)') 'R+re','R+im','R-re','R-im' 
-      !  do i = 1, n
-      !    write(6,'(4f20.10)') rpre(i,i_eig),rmre(i,i_eig), rpim(i,i_eig),rmim(i,i_eig)
-      !  end do
-      !end do
 !
-      !write(6,*) 'rpim', rpim
-      !write(6,*) 'rmim', rmim
-      !write(6,*) 'bpim', bpim
-      !write(6,*) 'bmim', bmim
       do i_eig = 1, n_targ
 !
 !       if the eigenvalue is already converged, skip it.
@@ -1748,33 +1502,6 @@ module diaglib
                                      rpim(:,i_eig) + rmim(:,i_eig)))/sqrt(two)
       end do
 !
-!    the others
-!
-!      do i_eig = i_beg, i_beg + n_act-1
-!        real
-!        rmim(:,i_eig+i_beg+n_act-1) =  rpre(:,i_eig)
-!        rpim(:,i_eig+i_beg+n_act-1) =  rmre(:,i_eig)
-!        imaginary
-!        rmre(:,i_eig+i_beg+n_act-1) = -rpim(:,i_eig)
-!        rpre(:,i_eig+i_beg+n_act-1) = -rmim(:,i_eig)
-!      end do
-!      
-!      write(6,*) 'RESIDUAL OLSEN'
-!      do i_eig = 1, n_max
-!        write(6,'(2a20)') 'R+re'//'R+im', 'R-re'//'R-im' 
-!        do i = 1, n
-!          write(6,'(2f20.10)') rpre(i,i_eig)+rmre(i,i_eig), rpim(i,i_eig)+rmim(i,i_eig)
-!        end do
-!      end do
-!      
-      !tnwrite(6,*) 'RESIDUAL OLSEN'
-      !tndo i_eig = 1, n_max
-      !tn  write(6,'(4a20)') 'R+re','R+im','R-re','R-im' 
-      !tn  do i = 1, n
-      !tn    write(6,'(4f20.10)') rpre(i,i_eig),rmre(i,i_eig), rpim(i,i_eig),rmim(i,i_eig)
-      !tn  end do
-      !tnend do
-!
 !     check convergence. lock the first contiguous converged eigenvalues
 !     by setting the logical array "done" to true.
 !
@@ -1783,17 +1510,6 @@ module diaglib
         done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
                           r_norm(2,i_eig).lt.tol_max .and. &
                           it.gt.1
-!        done(i_eig+1)   = r_norm(1,i_eig+1).lt.tol_rms .and. &
-!                          r_norm(2,i_eig+1).lt.tol_max .and. &
-!                          it.gt.1
-!                  
-!     check coupled-eigenvalues convergece: if one eigval from the same couple
-!     is false, both need to be put false (even if the other was .true.)
-!
-!        if (done(i_eig) .neqv. done(i_eig+1)) then 
-!          done(i_eig)   = .false.
-!          done(i_eig+1) = .false.
-!        end if
         if (.not.done(i_eig)) then
           done(i_eig+1:n_max) = .false.
           exit
@@ -1803,7 +1519,7 @@ module diaglib
 !     print some information:
 !
       if (verbose) then
-        do i_eig = 1, n_targ!, 2
+        do i_eig = 1, n_targ
           write(6,1040) it, i_eig, eig(i_eig), r_norm(:,i_eig), done(i_eig)
         end do
         write(6,*) 
@@ -1813,8 +1529,6 @@ module diaglib
         ok = .true.
         exit
       end if
-      exit
-      !stop
 !
 !     check whether an update is required. 
 !     if not, perform a davidson restart.
@@ -1843,37 +1557,23 @@ module diaglib
 !
 !       real part 
 !
-        !write(6,*) 'vrepre', vpre
-        !write(6,*) 'vmepre', vmre
         call lrprec(n,n_act,eig(ind),rpre(1,ind),rmre(1,ind),vpre(1,i_beg),vmre(1,i_beg))
-        !write(6,*) 'vrepost', vpre
-        !write(6,*) 'vmepost', vmre
 !
 !       imaginary part 
 !
-        !write(6,*) 'vpimpre', vpim
-        !write(6,*) 'vmimpre', vmim
         call lrprec(n,n_act,eig(ind),rpim(1,ind),rmim(1,ind),vpim(1,i_beg),vmim(1,i_beg))
-        !write(6,*) 'vpimpost', vpim
-        !write(6,*) 'vmimpost', vmim
 !
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
         call get_time(t1)
 !        
-        !write(6,*) 'vrepre', vpre
-        !write(6,*) 'vmepre', vmre
         call ortho_vs_x_complex(n,ldu,n_act,vpre,vpim,vpre(1,i_beg),vpim(1,i_beg),xx,xx)
-        !write(6,*) 'vrepost', vpre
-        !write(6,*) 'vmepost', vmre
-        !
-        !write(6,*) 'vpimpre', vpim
-        !write(6,*) 'vmimpre', vmim
         call ortho_vs_x_complex(n,ldu,n_act,vmre,vmim,vmre(1,i_beg),vmim(1,i_beg),xx,xx)
-        !write(6,*) 'vpimpost', vpim
-        !write(6,*) 'vmimpost', vmim
 !    
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+!        
 !       new strategy
 !      
         do i_eig = 1, ldu + n_act
@@ -1884,26 +1584,7 @@ module diaglib
           vmre(:,i_eig+ldu+n_act) = -vpim(:,i_eig)
           vpre(:,i_eig+ldu+n_act) = -vmim(:,i_eig)
         end do
-!    
-!   checking the orthogonality...
 !
-!    vpp            = zero
-!    overlap        = zero
-!    vpp(1:n,:)     = vpre(:,:)
-!    vpp(n+1:n2,:)  = vpim(:,:)
-!    call dgemm('t','n',2*n_act,2*n_act,n2,one,vpp,n2,vpp,n2,zero,overlap,2*n_max)
-!    write(6,*) '<V(+)|V(+)> = '
-!    write(6,'(8f10.5)') transpose(overlap(1:8,1:8))
-!    vmm            = zero
-!    overlap        = zero
-!    vmm(1:n,:)     = vmre(:,:)
-!    vmm(n+1:n2,:)  = vmim(:,:)
-!    call dgemm('t','n',2*n_act,2*n_act,n2,one,vmm,n2,vmm,n2,zero,overlap,2*n_max)
-!    write(6,*) '<V(-)|V(-)> = '
-!    write(6,'(8f10.5)') transpose(overlap(1:8,1:8))
-!
-        call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
       else
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
         restart = .true.
@@ -1924,7 +1605,6 @@ module diaglib
 !       put current eigenvectors into the first position of the 
 !       expansion space
 !
-!
 !       new strategy
 !
         do i_eig = 1, n_max
@@ -1936,31 +1616,9 @@ module diaglib
           vmim(:,i_eig)  = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
         end do
 !
-!old        do i_eig = 1, n_max, 2
-!old!         real 
-!old          vpre(:,i_eig)   = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-!old          vmre(:,i_eig)   = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-!old          vpre(:,i_eig+1) = (evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-!old          vmre(:,i_eig+1) = (evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-!old!         imaginary 
-!old          vpim(:,i_eig)   = ( evecim(1:n,i_eig) - evecim(n+1:n2,i_eig))/2.0_dp
-!old          vmim(:,i_eig)   = ( evecim(1:n,i_eig) + evecim(n+1:n2,i_eig))/2.0_dp
-!old          vpim(:,i_eig+1) = (-evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
-!old          vmim(:,i_eig+1) = (-evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
-!old        end do
-!
         call ortho_cd_complex(n,n_max,vpre,vpim,growth,ok)
         call ortho_cd_complex(n,n_max,vmre,vmim,growth,ok)
 !        
-        do i_eig = 1, n_max
-!        real     
-          vmim(:,i_eig+n_max) =  vpre(:,i_eig)
-          vpim(:,i_eig+n_max) =  vmre(:,i_eig)
-!        imaginary    
-          vmre(:,i_eig+n_max) = -vpim(:,i_eig)
-          vpre(:,i_eig+n_max) = -vmim(:,i_eig)
-        end do
-!
         lvpre   = zero
         lvpim   = zero
         lvmre   = zero
@@ -1975,7 +1633,6 @@ module diaglib
         epmatim = zero
         epmat   = zero
         emmatre = zero
-        emmatim = zero
         emmat   = zero
         smatre  = zero
         smatim  = zero
@@ -1989,14 +1646,15 @@ module diaglib
     t_tot = t1 - t_tot
     1000 format(t3,'timings for caslr (cpu/wall):   ',/, &
                 t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  build reduced matrices:        ',2f12.4,/, &
                 t3,'  diagonalization:               ',2f12.4,/, &
                 t3,'  orthogonalization:             ',2f12.4,/, &
                 t3,'                                 ',24('='),/,  &
                 t3,'  total:                         ',2f12.4)
-    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
-    deallocate(work,tau,vpre,vmre,lvpre,lvmre,bvpre,bvmre,rpre,rmre,rrre, & 
-               vpim,vmim,lvpim,lvmim,bvpim,bvmim,rpim,rmim,rrim,done,r_norm, & 
-               a_red,a_copy,s_red,s_copy,e_red,epmatre,epmatim,emmatre,emmatim, &
+    if (verbose) write(6,1000) t_mv, t_red, t_diag, t_ortho, t_tot
+    deallocate(work,tau,vpre,vmre,lvpre,lvmre,bvpre,bvmre,rpre,rmre, & 
+               vpim,vmim,lvpim,lvmim,bvpim,bvmim,rpim,rmim,done,r_norm, & 
+               a_red,a_copy,s_red,s_copy,e_red,epmatre,epmatim,emmatre, &
                smatre,smatim,epmat,emmat,smat,up,um,eigpre,eigmre,eigpim,eigmim, & 
                bpre,bmre,bpim,bmim,up_,um_)
 !
@@ -2516,10 +2174,10 @@ end subroutine caslr_eff_driver
 !
 !   real
     real(dp), allocatable :: vpre(:,:), vmre(:,:), lvpre(:,:), lvmre(:,:), bvpre(:,:), bvmre(:,:)
-    real(dp), allocatable :: rpre(:,:), rmre(:,:), rrre(:,:), r_norm(:,:)
+    real(dp), allocatable :: rpre(:,:), rmre(:,:), r_norm(:,:)
 !   imaginary
     real(dp), allocatable :: vpim(:,:), vmim(:,:), lvpim(:,:), lvmim(:,:), bvpim(:,:), bvmim(:,:)
-    real(dp), allocatable :: rpim(:,:), rmim(:,:), rrim(:,:)
+    real(dp), allocatable :: rpim(:,:), rmim(:,:)
 !
 !   eigenvectors of the reduced problem and components of the ritz vectors:
 !
@@ -2564,7 +2222,7 @@ end subroutine caslr_eff_driver
     allocate (vpre(n,lda), vpim(n,lda), vmre(n,lda), vmim(n,lda), lvpre(n,lda), & 
               lvpim(n,lda), lvmre(n,lda), lvmim(n,lda), bvpre(n,lda), bvpim(n,lda), & 
               bvmre(n,lda), bvmim(n,lda), rpre(n,n_max), rpim(n,n_max), rmre(n,n_max), & 
-              rmim(n,n_max), rrre(n,n_max), rrim(n,n_max), stat = istat)
+              rmim(n,n_max), stat = istat)
     call check_mem(istat)
 !
 !   allocate memory for convergence check
@@ -3019,7 +2677,7 @@ end subroutine caslr_eff_driver
     if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
     999 continue
     deallocate(work,tau,vpre,vpim,vmre,vmim,lvpre,lvpim,lvmre,lvmim,bvpre,bvpim,bvmre,bvmim, &
-               rpre,rpim,rmre,rmim,rrre,rrim,done,r_norm,s_red,s_copy,e_red,smatre,smatim,smat, &
+               rpre,rpim,rmre,rmim,done,r_norm,s_red,s_copy,e_red,smatre,smatim,smat, &
                up,um,eigpre,eigpim,eigmre,eigmim,bpre,bpim,bmre,bmim)
 !
     1050 format(t5,'----------------------------------------',/,&
@@ -3031,7 +2689,7 @@ end subroutine caslr_eff_driver
   end subroutine smogd_complex_old
 !
   subroutine caslr_complex_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
-                                         apbmul,ambmul,spdmul,smdmul,lrprec,eig,evecre,evecim,ok)
+                                      apbmul,ambmul,spdmul,smdmul,lrprec,eig,evecre,evecim,ok)
 !
 ! The following driver is based on the recent SMO-GD algorithm, 
 ! which efficiently solves the linear response equations, 
@@ -3070,10 +2728,18 @@ end subroutine caslr_eff_driver
 ! This formalism ensures the orthogonality of the expansion vectors.
 !
 ! Solving the augmented form of the LR-eqs leads to degenerate coupled-eigenvalues, 
-! which belong to different eigenvector: 
+! which belong to different eigenvectors: 
 !
-! X1 = ( Yr Zr Yi -Zi), 
-! X2 = (-Yi Zi Yr  Zr).
+! X' = ( Yr Zr Yi -Zi), 
+! X'' = (-Yi Zi Yr  Zr).
+!
+! In order to avoid any numerical issue/instability we managed to use only the expansion
+! vectors related to the first eigenvector (X'), and to retrieve from them the second
+! members of the couples (related to X''). This is possible thanks to some relations which 
+! correlate the (+)' set with the (-)'' set (and viceversa).
+! Using this new strategy not only did allow us to stabilize the algorithm but also to 
+! further reduced the cost; obtaining a reduced problem as expensive as the non-complex
+! counterpart.
 !
 ! As was already done in the "REAL" solver (caslr_driver) we only manage to deal with
 ! a reduced form of the expansion vectors; 
@@ -3191,12 +2857,10 @@ end subroutine caslr_eff_driver
 !
 !   real
     real(dp), allocatable :: vpre(:,:), vmre(:,:), lvpre(:,:), lvmre(:,:), bvpre(:,:), bvmre(:,:)
-    real(dp), allocatable :: vpre_(:,:), vmre_(:,:), lvpre_(:,:)
-    real(dp), allocatable :: rpre(:,:), rmre(:,:), rrre(:,:), r_norm(:,:), vsave(:,:)
+    real(dp), allocatable :: rpre(:,:), rmre(:,:), r_norm(:,:), vsave(:,:)
 !   imaginary
     real(dp), allocatable :: vpim(:,:), vmim(:,:), lvpim(:,:), lvmim(:,:), bvpim(:,:), bvmim(:,:)
-    real(dp), allocatable :: vpim_(:,:), vmim_(:,:), lvpim_(:,:)
-    real(dp), allocatable :: rpim(:,:), rmim(:,:), rrim(:,:)
+    real(dp), allocatable :: rpim(:,:), rmim(:,:)
 !
 !   eigenvectors of the reduced problem and components of the ritz vectors:
 !
@@ -3209,12 +2873,7 @@ end subroutine caslr_eff_driver
 !   subspace matrix and eigenvalues.
 !
     real(dp), allocatable :: s_red(:,:), s_copy(:,:), e_red(:)
-    real(dp), allocatable :: smat(:,:), smatre(:,:), smatim(:,:)
-!
-!   debug
-!
-    integer               :: cdim
-    real(dp), allocatable :: vpp(:,:), vmm(:,:), lvpp(:,:), lvmm(:,:), overlap(:,:)
+    real(dp), allocatable :: smat(:,:), smatre(:,:)
 !
 !   restarting variables
 !
@@ -3245,12 +2904,10 @@ end subroutine caslr_eff_driver
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residual:
 !
-    allocate (vpre(n,lda), vpim(n,lda), vmre(n,lda), vmim(n,lda), lvpre(n,lda), & 
-              vpre_(n,lda), vpim_(n,lda), vmre_(n,lda), vmim_(n,lda), &
-              lvpre_(n,lda), lvpim_(n,lda), vsave(n,lda), &
+    allocate (vpre(n,lda), vpim(n,lda), vmre(n,lda), vmim(n,lda), lvpre(n,lda), vsave(n,lda), &
               lvpim(n,lda), lvmre(n,lda), lvmim(n,lda), bvpre(n,lda), bvpim(n,lda), & 
               bvmre(n,lda), bvmim(n,lda), rpre(n,n_max), rpim(n,n_max), rmre(n,n_max), & 
-              rmim(n,n_max), rrre(n,n_max), rrim(n,n_max), stat = istat)
+              rmim(n,n_max), stat = istat)
     call check_mem(istat)
 !
 !   allocate memory for convergence check
@@ -3261,7 +2918,7 @@ end subroutine caslr_eff_driver
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
     allocate (s_red(lda2,lda2), s_copy(lda2,lda2), e_red(lda2), smat(lda2,lda2), & 
-              smatre(lda2,lda2), smatim(lda2,lda2), stat=istat)
+              smatre(lda2,lda2), stat=istat)
     call check_mem(istat)
 !
 !   allocate memory for the plus and minus eigenvector components:
@@ -3269,12 +2926,6 @@ end subroutine caslr_eff_driver
     allocate (up(lda2,n_max), um(lda2,n_max), eigpre(n,n_max), eigpim(n,n_max), &
               eigmre(n,n_max), eigmim(n,n_max), bpre(n,n_max), bpim(n,n_max), &
               up_(lda,n_max), um_(lda,n_max), bmre(n,n_max), bmim(n,n_max), stat=istat) 
-    call check_mem(istat)
-!
-!   debug
-!
-    allocate (vpp(n2,lda), vmm(n2,lda), lvpp(n2,lda), lvmm(n2,lda), &
-              overlap(lda2,lda2), stat=istat)
     call check_mem(istat)
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
@@ -3289,18 +2940,13 @@ end subroutine caslr_eff_driver
     t_diag  = zero
     t_ortho = zero
     t_mv    = zero
+    t_red   = zero
     t_tot   = zero
     vsave   = zero
     vpre    = zero
     vpim    = zero
     vmre    = zero
     vmim    = zero
-    vpre_   = zero
-    vpim_   = zero
-    vmre_   = zero
-    vmim_   = zero
-    lvpre_  = zero
-    lvpim_  = zero
     bvpre   = zero
     bvpim   = zero
     bvmre   = zero
@@ -3317,22 +2963,14 @@ end subroutine caslr_eff_driver
 !
 !   move the guess into the expansion space.
 !
-!
 !   keep in mind that: X_eig   = (Yr  Zr  Yi -Zi)
 !                      X_eig+1 = (-Yi Zi Yr Zr)
 !                      evecre  = (Yr Zr), (-Yi Zi)
 !                      evecim  = (Yi -Zi), (Yr Zr) 
-!    
-!   I want the right sign on Zi, otherwise killing people will be an appealing option
 !
-!    evecim(n+1:n2,:) = -evecim(n+1:n2,:)
+!   build the expansion vectors for the V(+)' and V(-)' sets
 !
-    !write(6,*) 'evecre', shape(evecre), size(evecre)
-    !do i = 1, n2
-    !  write(6,'(4f15.10)') evecre(i,1:4)
-    !end do
-!
-    do i_eig = 1, n_max!, 2
+    do i_eig = 1, n_max
 !     real 
       vpre(:,i_eig) = (evecre(1:n,i_eig) + evecre(n+1:n2,i_eig))/2.0_dp
       vmre(:,i_eig) = (evecre(1:n,i_eig) - evecre(n+1:n2,i_eig))/2.0_dp
@@ -3343,184 +2981,47 @@ end subroutine caslr_eff_driver
 !
 !   orthogonalize the expansion space to the metric.
 !    
-!   new strategy
-!
-!    call ortho_cd_complex(n,n_max,vpre,vpim,growth,ok)
-!    call ortho_cd_complex(n,n_max,vmre,vmim,growth,ok)
-!
     call apbmul(0,n,n_max,vpre,vpim,lvpre)
     call apbmul(1,n,n_max,vpre,vpim,lvpim)
-!    
-    !call b_ortho_complex(n,2*n_max,vpre,vpim,vmre,vmim,lvpre,lvpim,lvmre,lvmim)
 !    
     call ambmul(0,n,n_max,vmre,vmim,lvmre)
     call ambmul(1,n,n_max,vmre,vmim,lvmim)
 !    
-!    vpre_ = vpre
-!    vpim_ = vpim
-!    lvpre_ = lvpre
-!    lvpim_ = lvpim
     call b_ortho_complex(n,2*n_max,vpre,vpim,vmre,vmim,lvpre,lvpim,lvmre,lvmim)
-    !call b_ortho_complex(n,2*n_max,vmre,vmim,vpre_,vpim_,lvmre,lvmim,lvpre_,lvpim_)
 !    
-!  We retrieve the orthogonalized V(-) set from the V(+)  
-!
-   do i_eig = 1, n_max
-     vmre(:,i_eig)  =  vpim(:,i_eig+n_max)
-     vmim(:,i_eig)  = -vpre(:,i_eig+n_max)
-     lvmre(:,i_eig) =  lvpim(:,i_eig+n_max)
-     lvmim(:,i_eig) = -lvpre(:,i_eig+n_max)
-     !vmim(:,i_eig+n_max)  = vpre(:,i_eig)
-     !lvmim(:,i_eig+n_max) = lvpre(:,i_eig)
-     !vmre(:,i_eig+n_max)  = -vpim(:,i_eig)
-     !lvmre(:,i_eig+n_max) = -lvpim(:,i_eig)
-     !vpre(:,i_eig)  =  vmim(:,i_eig+n_max)
-     !vpim(:,i_eig)  = -vmre(:,i_eig+n_max)
-     !lvpre(:,i_eig) =  lvmim(:,i_eig+n_max)
-     !lvpim(:,i_eig) = -lvmre(:,i_eig+n_max)
-   end do
-!    do i_eig = 1, n_max
-!!     real     
-!      vmim(:,i_eig+n_max)  = vpre(:,i_eig)
-!      vpim(:,i_eig+n_max)  = vmre(:,i_eig)
-!      lvmim(:,i_eig+n_max) = lvpre(:,i_eig)
-!      lvpim(:,i_eig+n_max) = lvmre(:,i_eig)
-!!     imaginary    
-!      vmre(:,i_eig+n_max)  = -vpim(:,i_eig)
-!      vpre(:,i_eig+n_max)  = -vmim(:,i_eig)
-!      lvmre(:,i_eig+n_max) = -lvpim(:,i_eig)
-!      lvpre(:,i_eig+n_max) = -lvmim(:,i_eig)
-!    end do
-    !vmim_ = -vmim
-    !vpre_ = -vpre
-    !vpim_ = -vpim
-    !vmre_ = -vmre
-!   ++    
-    !call b_ortho_complex(n,n_max,vmim_,vmre,lvpre,lvpim)
-    !vmim  = vmim + vmim_
-    !vmre  = vmre + vmre_
-    !call b_ortho_complex(n,n_max,vpre_,vpim,lvmim,lvmre)
-    !vpre  = vpre - vpre_
-    !vpim  = vpim - vpim_
-!   -- 
-    !call b_ortho_complex(n,n_max,vpim_,vpre,lvmre,lvmim)
-    !vpim  = vpim + vpim_
-    !vpre  = vpre + vpre_
-    !call b_ortho_complex(n,n_max,vmre_,vmim,lvpim,lvpre)
-    !vmre  = vmre - vmre_
-    !vmim  = vmim - vmim_
-!    
-!    vmim = vmim_ 
-!    vpre = vpre_
-!    vpim = vpim_
-!    vmre = vmre_
-!    
-    !write(6,*) 'smogd start'
-    !write(6,*) 'vmre '
-    !do i = 1, n
-    !  write(6,'(10f12.6)') vmre(i,1:10) 
-    !end do
-    !return
-!    
-!old    do i_eig = 1, n_max
-!!     real     
-!      vmim(:,i_eig+n_max)  = vpre(:,i_eig)
-!      vpim(:,i_eig+n_max)  = vmre(:,i_eig)
-!      lvmim(:,i_eig+n_max) = lvpre(:,i_eig)
-!      lvpim(:,i_eig+n_max) = lvmre(:,i_eig)
-!!     imaginary    
-!      vmre(:,i_eig+n_max)  = -vpim(:,i_eig)
-!      vpre(:,i_eig+n_max)  = -vmim(:,i_eig)
-!      lvmre(:,i_eig+n_max) = -lvpim(:,i_eig)
-!      lvpre(:,i_eig+n_max) = -lvmim(:,i_eig)
-!    end do
-!
-!    call b_ortho_complex(n,2*n_max,vpre,vpim,lvpre,lvpim)
-!    call b_ortho_complex(n,2*n_max,vmre,vmim,lvmre,lvmim)
-!    
-    !write(6,*) 'vmim old', shape(vmim)
-    !do i = 1, n
-    !  write(6,'(20f12.6)') vmim(i,1:20) 
-    !end do
-    !write(6,*) 'vpim old', shape(vpim)
-    !do i = 1, n
-    !  write(6,'(20f12.6)') vpim(i,1:20) 
-    !end do
-    !write(6,*) 'vmre old', shape(vmre)
-    !do i = 1, n
-    !  write(6,'(20f12.6)') vmre(i,1:20) 
-    !end do
-    !write(6,*) 'vpre old', shape(vpre)
-    !do i = 1, n
-    !  write(6,'(20f12.6)') vpre(i,1:20) 
-    !end do
+!   we retrieve the orthogonalized V(-)' set from the V(+)''  
+! 
+    do i_eig = 1, n_max
+      vmre(:,i_eig)  =  vpim(:,i_eig+n_max)
+      vmim(:,i_eig)  = -vpre(:,i_eig+n_max)
+      lvmre(:,i_eig) =  lvpim(:,i_eig+n_max)
+      lvmim(:,i_eig) = -lvpre(:,i_eig+n_max)
+    end do
 !
 !   checking the orthogonality...
 !
-    vpp            = zero
-    lvpp           = zero
-    overlap        = zero
-    vpp(1:n,:)     = vpre(:,:)
-    vpp(n+1:n2,:)  = vpim(:,:)
-    lvpp(1:n,:)    = lvpre(:,:)
-    lvpp(n+1:n2,:) = lvpim(:,:)
-    call dgemm('t','n',2*n_max,2*n_max,n2,one,vpp,n2,lvpp,n2,zero,overlap,lda2)
-    write(6,*) 'Overlap for guess vectors:'
-    write(6,*) '<V(+)|LV(+)> = '
-    write(6,'(4f10.5)') transpose(overlap(1:4,1:4))
-    !
-    !vmm            = zero
-    !lvmm           = zero
-    !overlap        = zero
-    !vmm(1:n,:)     = vmre(:,:)
-    !vmm(n+1:n2,:)  = vmim(:,:)
-    !lvmm(1:n,:)    = lvmre(:,:)
-    !lvmm(n+1:n2,:) = lvmim(:,:)
-    !call dgemm('t','n',2*n_max,2*n_max,n2,one,vmm,n2,lvmm,n2,zero,overlap,lda2)
-    !write(6,*) '<V(-)|LV(-)> = '
-    !write(6,'(8f10.5)') transpose(overlap(1:8,1:8))
-    !stop
-!
-!   retrieving the second members of the pair from the first ones 
-!
-!    do i_eig = 1, n_max
-!!     real     
-!      vmim(:,i_eig+n_max)  = vpre(:,i_eig)
-!      vpim(:,i_eig+n_max)  = vmre(:,i_eig)
-!      lvmim(:,i_eig+n_max) = lvpre(:,i_eig)
-!      lvpim(:,i_eig+n_max) = lvmre(:,i_eig)
-!!     imaginary    
-!      vmre(:,i_eig+n_max)  = -vpim(:,i_eig)
-!      vpre(:,i_eig+n_max)  = -vmim(:,i_eig)
-!      lvmre(:,i_eig+n_max) = -lvpim(:,i_eig)
-!      lvpre(:,i_eig+n_max) = -lvmim(:,i_eig)
-!    end do
-!
-!    write(6,*) 'new VPRE bad =', n_max, n_targ 
-!    do i = 1, n
-!      write(6,'(8f15.10)') vpre(i,1:8)
-!    end do
-!    !stop
-!    write(6,*) 'new VPIM bad =' 
-!    do i = 1, n
-!      write(6,'(4f15.10)') vpim(i,5:8)
-!    end do
-!    write(6,*) 'new LVPRE bad =' 
-!    do i = 1, n
-!      write(6,'(4f15.10)') lvpre(i,5:8)
-!    end do
-!    write(6,*) 'new LVPIM bad =' 
-!    do i = 1, n
-!      write(6,'(4f15.10)') lvpim(i,5:8)
-!    end do
-!    stop
+!    vpp            = zero
+!    lvpp           = zero
+!    overlap        = zero
+!    vpp(1:n,:)     = vpre(:,:)
+!    vpp(n+1:n2,:)  = vpim(:,:)
+!    lvpp(1:n,:)    = lvpre(:,:)
+!    lvpp(n+1:n2,:) = lvpim(:,:)
+!    call dgemm('t','n',2*n_max,2*n_max,n2,one,vpp,n2,lvpp,n2,zero,overlap,lda2)
+!    write(6,*) 'Overlap for guess vectors:'
+!    write(6,*) '<V(+)|LV(+)> = '
+!    write(6,'(4f10.5)') transpose(overlap(1:4,1:4))
 !    
-    !call dgemm('t','n',2*n_max,2*n_max,n,one,vpp,n2,lvpp,n2,zero,overlap,2*n_max)
-    !write(6,*) '<V(+)|LV(+)> after = '
-    !write(6,'(4f10.5)') transpose(overlap(1:4,1:4))
-    !call dgemm('t','n',2*n_max,2*n_max,n,one,vmm,n2,lvmm,n2,zero,overlap,2*n_max)
-    !write(6,*) '<V(-)|LV(-)> after = '
-    !write(6,'(4f10.5)') transpose(overlap(1:4,1:4))
+!    vmm            = zero
+!    lvmm           = zero
+!    overlap        = zero
+!    vmm(1:n,:)     = vmre(:,:)
+!    vmm(n+1:n2,:)  = vmim(:,:)
+!    lvmm(1:n,:)    = lvmre(:,:)
+!    lvmm(n+1:n2,:) = lvmim(:,:)
+!    call dgemm('t','n',2*n_max,2*n_max,n2,one,vmm,n2,lvmm,n2,zero,overlap,lda2)
+!    write(6,*) '<V(-)|LV(-)> = '
+!    write(6,'(8f10.5)') transpose(overlap(1:8,1:8))
 !    stop
 !
     n_act = n_max
@@ -3561,167 +3062,58 @@ end subroutine caslr_eff_driver
       call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmim(1,i_beg))   !tau_im-
       call smdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))   !tau_re+
       call smdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpim(1,i_beg))   !tau_im+
-      !write(6,*) 'smogd'
-      !write(6,*) 'vpre'
-      !do i = 1, n
-      !  write(6,'(10f20.15)') vpre(i,1:10)
-      !end do
-      !write(6,*) 'bvmre'
-      !do i = 1, n
-      !  write(6,'(10f20.15)') bvmre(i,1:10)
-      !end do
-      !exit
-!old      write(6,*) 'bvmim old', shape(bvmim)
-!old      do i = 1, n
-!old        write(6,'(20f12.6)') bvmim(i,1:20) 
-!old      end do
-!old      write(6,*) 'bvpim old', shape(bvpim)
-!old      do i = 1, n
-!old        write(6,'(20f12.6)') bvpim(i,1:20) 
-!old      end do
-!old      write(6,*) 'bvmre old', shape(bvmre)
-!old      do i = 1, n
-!old        write(6,'(20f12.6)') bvmre(i,1:20) 
-!old      end do
-!old      write(6,*) 'bvpre old', shape(bvpre)
-!old      do i = 1, n
-!old        write(6,'(20f12.6)') bvpre(i,1:20) 
-!old      end do
-      !stop
-!ok!
-!ok!   !!!!!!  THE FUCKING PROBLEM IS HERE !!!!!!
-!ok!   prova a girare buoni e cattivi, invece di bvmre(cattivi) = -bvpim(buoni) fai il contrario
-!ok!
-!
-!      do i_eig = 1, ldu 
-!!       real
-!        bvpim(:,i_eig+ldu) = bvmre(:,i_eig)
-!        bvmim(:,i_eig+ldu) = bvpre(:,i_eig)
-!!       imaginary
-!        bvpre(:,i_eig+ldu) = -bvmim(:,i_eig)
-!        bvmre(:,i_eig+ldu) = -bvpim(:,i_eig)
-!      end do
-!ok      !
-!ok      write(6,*) 'bvmre cattivi', shape(bvmre)
-!ok      do i = 1, n
-!ok        write(6,'(10f20.10)') bvmre(i,11:20) 
-!ok      end do
-      !write(6,*) 'bvmim new', shape(bvmim)
-      !do i = 1, n
-      !  write(6,'(4f20.10)') bvmim(i,5:8) 
-      !end do
-      !write(6,*) 'bvpre new', shape(bvpre)
-      !do i = 1, n
-      !  write(6,'(4f20.10)') bvpre(i,5:8) 
-      !end do
-      !write(6,*) 'bvpim new', shape(bvpim)
-      !do i = 1, n
-      !  write(6,'(4f20.10)') bvpim(i,5:8) 
-      !end do
-      !stop
 !
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
-!     update the reduced matrix 
+!     update the reduced matrix S(-+)
 !
-!      call dgemm('t','n',2*ldu,2*ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda2)    !Sre=(Vre-)^T*tau_re-
-!      call dgemm('t','n',2*ldu,2*ldu,n,one,vmim,n,bvmim,n,zero,smatim,lda2)    !Sim=(Vim-)^T*tau_im-
-!      smat = smatre + smatim
-      !debugwrite(6,*) 'good/good ref'
-      !debugwrite(6,'(10f20.10)') transpose(smat(1:10,1:10))
-      !debug!
-      !debugwrite(6,*) 'bad/good ref'
-      !debugwrite(6,'(10f20.10)') transpose(smat(11:20,1:10))
-      !debug!
-      !debugwrite(6,*) 'good/bad ref'
-      !debugwrite(6,'(10f20.10)') transpose(smat(1:10,11:20))
-      !debug!
-      !debugwrite(6,*) 'bad/bad ref'
-      !debugwrite(6,'(10f20.10)') transpose(smat(11:20,11:20))
-      !
-!old      write(6,*) 'S MAT old'
-!old      write(6,'(20f20.10)') transpose(smat(1:20,1:20))
-      !write(6,*) 'S MAT'
-      !write(6,'(10f15.5)') transpose(smat(1:10,1:10)) - smat(1:10,1:10)
-      !stop
+!     the reduced matrix blocks are computed only using the V(+/-)' and BV(+/-)'
 !
-!     new strategy: compute the four blocks of the S matrix
+!     block one:   <V(-)'|BV(-)'> = vmre*bvmre + vmim*bvmim
 !
-!last      bvmre = zero
-!last      bvmim = zero
-!last      bvpre = zero
-!last      bvpim = zero
-!last      call spdmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmre(1,i_beg))   !tau_re-
-!last      call spdmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),bvmim(1,i_beg))   !tau_im-
-!last      call smdmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpre(1,i_beg))   !tau_re+
-!last      call smdmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),bvpim(1,i_beg))   !tau_im+
-!last      !
-!last      smatre = zero   !temp    
-!last      smatim = zero   !temp
-!last      smat   = zero   !temp
-!
-!     block one:   good/good = vmre*bvmre + vmim*bvmim
-!
+      call get_time(t1)
+! 
       call dgemm('t','n',ldu,ldu,n,one,vmre,n,bvmre,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvmim,n,one,smatre,lda2) 
       smat(1:ldu,1:ldu) = smatre(1:ldu,1:ldu)
       smatre = zero 
-      !debugwrite(6,*) 'good/good'
-      !debugwrite(6,'(10f20.10)') transpose(smat(1:10,1:10))
 !
-!     block two:   bad/good  = -vpim*bvmre + vpre*bvmim
+!     block two:   <V(-)''|BV(-)'>  = -vpim*bvmre + vpre*bvmim
 !
       call dgemm('t','n',ldu,ldu,n,-one,vpim,n,bvmre,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vpre,n,bvmim,n,one,smatre,lda2) 
       smat(ldu+1:2*ldu,1:ldu) = smatre(1:ldu,1:ldu)
       smatre = zero
-      !debugwrite(6,*) 'bad/good'
-      !debugwrite(6,'(10f20.10)') transpose(smat(11:20,1:10))
 !
-!     block three: good/bad  = -vmre*bvpim + vmim*bvpre
+!     block three: <V(-)'|BV(-)''>  = -vmre*bvpim + vmim*bvpre
 !
       call dgemm('t','n',ldu,ldu,n,-one,vmre,n,bvpim,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vmim,n,bvpre,n,one,smatre,lda2) 
       smat(1:ldu,ldu+1:2*ldu) = smatre(1:ldu,1:ldu)
       smatre = zero
-      !debugwrite(6,*) 'good/bad'
-      !debugwrite(6,'(10f20.10)') transpose(smat(1:10,11:20))
 !
-!     block four:  bad/bad   = vpim*bvpim + vpre*bvpre
-!!
+!     block four:  <V(-)''|BV(-)''>   = vpim*bvpim + vpre*bvpre
+!
       call dgemm('t','n',ldu,ldu,n,one,vpim,n,bvpim,n,zero,smatre,lda2) 
       call dgemm('t','n',ldu,ldu,n,one,vpre,n,bvpre,n,one,smatre,lda2) 
       smat(ldu+1:2*ldu,ldu+1:2*ldu) = smatre(1:ldu,1:ldu)
       smatre = zero
-      !write(6,*) 'smat smogd'
-      !write(6,'(20f15.8)') transpose(smat(1:20,1:20))
-      !exit
-      !debugwrite(6,*) 'bad/bad'
-      !debugwrite(6,'(10f20.10)') transpose(smat(11:20,11:20))
-      !stop
-      !write(6,*) 'S MAT new - S MAT old'
-      !write(6,'(20f20.10)') transpose(smat(1:20,1:20))
-!      stop
 !
 !     save s, and assemble s^t s:
 !
       s_red  = smat
       s_copy = zero
       call dgemm('t','n',2*ldu,2*ldu,2*ldu,one,s_red,lda2,s_red,lda2,zero,s_copy,lda2)
-      !write(6,*) 's_copy=StS MAT --> SYM'
-      !write(6,'(1f20.15)') norm2(s_copy-transpose(s_copy))
-      !stop
+!      
+      call get_time(t2)
+      t_red = t_red + t2 - t1
 !
 !     diagonalize s^t s
 !
       call get_time(t1)
+!
       call dsyev('v','u',2*ldu,s_copy,lda2,e_red,work,lwork,info)
-      write(6,*) 'eigenvalues after lapack', ldu, 2*ldu
-      do i_eig = 1, 2*n_act
-        write(6,'(f20.16)') one/sqrt(e_red(2*ldu-i_eig+1))
-      end do
-      write(6,*) 'info', info
 !
 !     extract the eigenvalues and compute the ritz approximation to the
 !     eigenvectors 
@@ -3741,6 +3133,8 @@ end subroutine caslr_eff_driver
         um(1:2*ldu,i_eig) = um(1:2*ldu,i_eig)/eig(i_eig)
       end do
 !
+!     save in up_, um_ the part of the eigenvectors related to X''
+!
       up_(1:ldu,:) = up(ldu+1:2*ldu,:)
       um_(1:ldu,:) = um(ldu+1:2*ldu,:)
 !      
@@ -3749,21 +3143,23 @@ end subroutine caslr_eff_driver
 !
 !     assemble the symmetric and antisymmetric combinations (Y+Z) and (Y-Z)
 !
+!     each combination is divided in a X' and a X'' contribution  
+!
 !     real part 
 !
       call dgemm('n','n',n,n_max,ldu,one,vpre,n,up,lda2,zero,eigpre,n)
-      call dgemm('n','n',n,n_max,ldu,-one,vmim,n,up_,lda2,one,eigpre,n)
-      !
+      call dgemm('n','n',n,n_max,ldu,-one,vmim,n,up_,lda,one,eigpre,n)
+!      
       call dgemm('n','n',n,n_max,ldu,one,vmre,n,um,lda2,zero,eigmre,n)
-      call dgemm('n','n',n,n_max,ldu,-one,vpim,n,um_,lda2,one,eigmre,n)
+      call dgemm('n','n',n,n_max,ldu,-one,vpim,n,um_,lda,one,eigmre,n)
 !
 !     imaginary part
 !
       call dgemm('n','n',n,n_max,ldu,one,vpim,n,up,lda2,zero,eigpim,n)
-      call dgemm('n','n',n,n_max,ldu,one,vmre,n,up_,lda2,one,eigpim,n)
-      !
+      call dgemm('n','n',n,n_max,ldu,one,vmre,n,up_,lda,one,eigpim,n)
+!      
       call dgemm('n','n',n,n_max,ldu,one,vmim,n,um,lda2,zero,eigmim,n)
-      call dgemm('n','n',n,n_max,ldu,one,vpre,n,um_,lda2,one,eigmim,n)
+      call dgemm('n','n',n,n_max,ldu,one,vpre,n,um_,lda,one,eigmim,n)
 !
 !     assemble the current approximation to the eigenvectors
 !
@@ -3778,18 +3174,20 @@ end subroutine caslr_eff_driver
       end do
 !
 !     compute the residuals, and their rms and sup norms:
+!
+!     also the residuals are built considering both the contributions ('/'') separately
 !    
 !     real part
 !
       call dgemm('n','n',n,n_max,ldu,one,bvpre,n,um,lda2,zero,rpre,n)
       call dgemm('n','n',n,n_max,ldu,-one,bvmim,n,um_,lda,one,rpre,n)
-      !
+!      
       call dgemm('n','n',n,n_max,ldu,one,bvmre,n,up,lda2,zero,rmre,n)
       call dgemm('n','n',n,n_max,ldu,-one,bvpim,n,up_,lda,one,rmre,n)
-      !
+!     
       call dgemm('n','n',n,n_max,ldu,one,lvpre,n,up,lda2,zero,bpre,n)
       call dgemm('n','n',n,n_max,ldu,-one,lvmim,n,up_,lda,one,bpre,n)
-      !
+!      
       call dgemm('n','n',n,n_max,ldu,one,lvmre,n,um,lda2,zero,bmre,n)
       call dgemm('n','n',n,n_max,ldu,-one,lvpim,n,um_,lda,one,bmre,n)
 !    
@@ -3797,13 +3195,13 @@ end subroutine caslr_eff_driver
 !
       call dgemm('n','n',n,n_max,ldu,one,bvpim,n,um,lda2,zero,rpim,n)
       call dgemm('n','n',n,n_max,ldu,one,bvmre,n,um_,lda,one,rpim,n)
-      !
+!      
       call dgemm('n','n',n,n_max,ldu,one,bvmim,n,up,lda2,zero,rmim,n)
       call dgemm('n','n',n,n_max,ldu,one,bvpre,n,up_,lda,one,rmim,n)
-      !
+!     
       call dgemm('n','n',n,n_max,ldu,one,lvpim,n,up,lda2,zero,bpim,n)
       call dgemm('n','n',n,n_max,ldu,one,lvmre,n,up_,lda,one,bpim,n)
-      !
+!    
       call dgemm('n','n',n,n_max,ldu,one,lvmim,n,um,lda2,zero,bmim,n)
       call dgemm('n','n',n,n_max,ldu,one,lvpre,n,um_,lda,one,bmim,n)
 !      
@@ -3839,17 +3237,6 @@ end subroutine caslr_eff_driver
         done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
                           r_norm(2,i_eig).lt.tol_max .and. &
                           it.gt.1
-!        done(i_eig+1)   = r_norm(1,i_eig+1).lt.tol_rms .and. &
-!                          r_norm(2,i_eig+1).lt.tol_max .and. &
-!                          it.gt.1
-!                  
-!       check coupled-eigenvalues convergece: if one eigval from the same couple
-!       is false, both need to be put false (even if the other was .true.)
-!
-!        if (done(i_eig) .neqv. done(i_eig+1)) then 
-!          done(i_eig)   = .false.
-!          done(i_eig+1) = .false.
-!        end if
         if (.not.done(i_eig)) then
           done(i_eig+1:n_max) = .false.
           exit
@@ -3909,44 +3296,15 @@ end subroutine caslr_eff_driver
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
-        call get_time(t1)
-!       
-!        do i_eig = 1, ldu + n_act
-!!        real     
-!          vmim(:,i_eig+ldu+n_act) = vpre(:,i_eig)
-!          vpim(:,i_eig+ldu+n_act) = vmre(:,i_eig)
-!!        imaginary    
-!          vmre(:,i_eig+ldu+n_act) = -vpim(:,i_eig)
-!          vpre(:,i_eig+ldu+n_act) = -vmim(:,i_eig)
-!        end do
+!       save the new V(+) in vsave 
 !
-!        call b_ortho_vs_x_complex(n,ldu,n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg),vpim(1,i_beg))
-!        
-!        do i_eig = 1, ldu + n_act
-!          vmim(:,i_eig+ldu+n_act)  =  vpre(:,i_eig)
-!          vmre(:,i_eig+ldu+n_act)  = -vpim(:,i_eig)
-!        end do
-!        
-        call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
-!
-        call get_time(t1)
-!        
-        !write(6,*) 'vpre after apbmul:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (vmre(i,j), j=1,8)
-        !end do
-!        
-!       save the new V(+) and LV(+) in vsave 
-!
+        vsave = zero
         do i = 1, n_act 
           vsave(:,i)         = vpre(:,i_beg+i-1)
           vsave(:,n_act+i)   = vpim(:,i_beg+i-1)
-          !vsave(:,2*n_act+i) = lvpre(:,i_beg+i-1)
-          !vsave(:,3*n_act+i) = lvpim(:,i_beg+i-1)
         end do
 !        
-!       build the old V(+)/LV(+) bad from the old V(-)/LV(-) good
+!       build the old V(+)''/LV(+)'' from the old V(-)'/LV(-)'
 !
         do i_eig = 1, ldu  
 !         real     
@@ -3956,200 +3314,70 @@ end subroutine caslr_eff_driver
           vpre(:,i_eig+i_beg-1)  = -vmim(:,i_eig)
           lvpre(:,i_eig+i_beg-1) = -lvmim(:,i_eig)
         end do
-        !write(6,*) 'vpre with bad also:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (vmre(i,j), j=1,8)
-        !end do
 !
-!       attach the new V(+)/LV(+) good previously saved in vsave,  
-!       attach also the new V(+)/LV(+) bad from the (-) good
+!       attach the new V(+)' previously saved in vsave,  
+!       retrieve and attach also the new V(+)'' from the new V(-)'
 !
         do i_eig = 1, n_act
-          !real good
+!         real V+'
           vpre(:,i_eig+i_beg+ldu-1)        = vsave(:,i_eig)
-          !lvpre(:,i_eig+i_beg+ldu-1)       = vsave(:,2*n_act+i_eig)
-          !real bad
+!         real V+''
           vpre(:,i_eig+i_beg+ldu+n_act-1)  = -vmim(:,i_eig+i_beg-1)
-          !lvpre(:,i_eig+i_beg+ldu+n_act-1) = -lvmim(:,i_eig+i_beg-1)
-          !imaginary good 
+!         imaginary V+' 
           vpim(:,i_eig+i_beg+ldu-1)        = vsave(:,n_act+i_eig)
-          !lvpim(:,i_eig+i_beg+ldu-1)       = vsave(:,3*n_act+i_eig)
-          !imaginary bad
+!         imaginary V+''
           vpim(:,i_eig+i_beg+ldu+n_act-1)  = vmre(:,i_eig+i_beg-1)
-          !lvpim(:,i_eig+i_beg+ldu+n_act-1) = lvmre(:,i_eig+i_beg-1)
         end do
-        !write(6,*) 'vpre with bad and new:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (vmre(i,j), j=1,8)
-        !end do
 !        
-        call b_ortho_vs_x_complex(n,2*ldu,2*n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg+ldu),vpim(1,i_beg+ldu))
-        !write(6,*) 'lvpim after orthovsx:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (lvpim(i,j), j=1,8)
-        !end do
-        !write(6,*) 'vpre before bortho before shifting:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (vpre(i,j), j=1,8)
-        !end do
-!        call b_ortho_vs_x_complex(n,ldu,n_act,vmre,vmim,lvmre,lvmim,vmre(1,i_beg),vmim(1,i_beg))
+        call get_time(t1)
 !       
-!       shift the new V(+)/LV(+) good after the old ones,
-!       build the (-) good from the (+) bad
+        call b_ortho_vs_x_complex(n,2*ldu,2*n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg+ldu),vpim(1,i_beg+ldu))
+!       
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+!
+!       shift the new orthogonalized V(+)' after the old ones,
+!       build the new orthogonalized V(-)' from the new orthogonalized V(+)''
 !
         do i_eig = 1, n_act
 !         real: shift     
           vpre(:,i_eig+ldu)  = vpre(:,i_eig+ldu+i_beg-1)
-          !lvpre(:,i_eig+ldu) = lvpre(:,i_eig+ldu+i_beg-1)
 !         imaginary: shift    
-          vpim(:,i_eig+ldu)  =  vpim(:,i_eig+ldu+i_beg-1)
-          !lvpim(:,i_eig+ldu) =  lvpim(:,i_eig+ldu+i_beg-1)
+          vpim(:,i_eig+ldu)  = vpim(:,i_eig+ldu+i_beg-1)
 !         real: build           
           vmre(:,i_eig+ldu)  = vpim(:,i_eig+ldu+i_beg+n_act-1)
-          !lvmre(:,i_eig+ldu) = lvpim(:,i_eig+ldu+i_beg+n_act-1)
 !         imaginary: build          
           vmim(:,i_eig+ldu)  = -vpre(:,i_eig+ldu+i_beg+n_act-1)
-          !lvmim(:,i_eig+ldu) = -lvpre(:,i_eig+ldu+i_beg+n_act-1)
         end do
-        !write(6,*) 'vpre before bortho:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (vpre(i,j), j=1,8)
-        !end do
 !        
-        call get_time(t2)
-        t_mv = t_mv + t2 - t1
+        call get_time(t1)
 !        
-        call get_time(t1) 
-!        
-        call get_time(t2)
-        t_diag = t_diag + t2 - t1
-!
-        call get_time(t1) 
-!
         call apbmul(0,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpre(1,i_beg))
         call apbmul(1,n,n_act,vpre(1,i_beg),vpim(1,i_beg),lvpim(1,i_beg))
 !
         call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))
         call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))
+!
+        call get_time(t2)
+        t_mv = t_mv + t2 - t1
 !       
+        call get_time(t1)
+!
         call b_ortho_complex(n,2*n_act,vpre(1,i_beg),vpim(1,i_beg),vmre(1,i_beg),vmim(1,i_beg), &
                              lvpre(1,i_beg),lvpim(1,i_beg),lvmre(1,i_beg),lvmim(1,i_beg))
 !        
-!       retrieve the orthogonalized (-) good from the orthogonalized (+) bad 
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+!        
+!       retrieve the orthogonalized V(-)'/LV(-)' from the orthogonalized V(+)''/LV(+)'' 
 !
-        !write(6,*) 'vpre before bortho:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (vpre(i,j), j=1,8)
-        !end do
         do i_eig = 1, n_act
           vmre(:,i_eig+ldu)  =  vpim(:,i_eig+i_beg+n_act-1)
           vmim(:,i_eig+ldu)  = -vpre(:,i_eig+i_beg+n_act-1)
           lvmre(:,i_eig+ldu) =  lvpim(:,i_eig+i_beg+n_act-1)
           lvmim(:,i_eig+ldu) = -lvpre(:,i_eig+i_beg+n_act-1)
         end do
-        !write(6,*) 'vmim before bortho:'
-        !do i = 1, 5
-        !  write(6,'(8f20.10)') (-vmim(i,j), j=1,8)
-        !end do
 !
-!       !debugchecking the orthogonality of the new stuff
-!
-        !debugvpp = zero
-        !debuglvpp = zero
-        !debug! new good 
-        !debugvpp(1:n,1:n_act)     = vpre(1:n,i_beg:i_beg+n_act-1) 
-        !debugvpp(n+1:n2,1:n_act)  = vpim(1:n,i_beg:i_beg+n_act-1) 
-        !debuglvpp(1:n,1:n_act)    = lvpre(1:n,i_beg:i_beg+n_act-1) 
-        !debuglvpp(n+1:n2,1:n_act) = lvpim(1:n,i_beg:i_beg+n_act-1) 
-        !debug! new bad
-        !debugvpp(1:n,n_act+1:2*n_act)     = -vmim(1:n,i_beg:i_beg+n_act-1) 
-        !debugvpp(n+1:n2,n_act+1:2*n_act)  = vmre(1:n,i_beg:i_beg+n_act-1) 
-        !debuglvpp(1:n,n_act+1:2*n_act)    = -lvmim(1:n,i_beg:i_beg+n_act-1) 
-        !debuglvpp(n+1:n2,n_act+1:2*n_act) = lvmre(1:n,i_beg:i_beg+n_act-1) 
-!       !debug 
-        !debugcdim = 2*n_act
-        !debugcall dgemm('t','n',cdim,cdim,n2,one,vpp,n2,lvpp,n2,zero,overlap,lda2)
-        !debugwrite(6,*) 'Overlap for new vectors:'
-        !debugwrite(6,*) '<V(+)|LV(+)> = '
-        !debugwrite(6,'(4f10.5)') transpose(overlap(1:4,1:4))
-!    
-        call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
-!        
-        call get_time(t1) 
-!        
-        !oldposition call ambmul(0,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg))
-        !oldposition call ambmul(1,n,n_act,vmre(1,i_beg),vmim(1,i_beg),lvmim(1,i_beg))
-!        
-        call get_time(t2)
-        t_mv = t_mv + t2 - t1
-!        
-        call get_time(t1) 
-        call get_time(t2)
-          
-!
-        !actcall b_ortho_complex(n,2*n_act,vmre(1,i_beg),vmim(1,i_beg),lvmre(1,i_beg),lvmim(1,i_beg))
-!        
-!        do i_eig = 1, ldu + n_act
-!!         real     
-!          vmim(:,i_eig+ldu+n_act)  = vpre(:,i_eig)
-!          vpim(:,i_eig+ldu+n_act)  = vmre(:,i_eig)
-!          lvmim(:,i_eig+ldu+n_act) = lvpre(:,i_eig)
-!          lvpim(:,i_eig+ldu+n_act) = lvmre(:,i_eig)
-!!         imaginary    
-!          vmre(:,i_eig+ldu+n_act)  = -vpim(:,i_eig)
-!          vpre(:,i_eig+ldu+n_act)  = -vmim(:,i_eig)
-!          lvmre(:,i_eig+ldu+n_act) = -lvpim(:,i_eig)
-!          lvpre(:,i_eig+ldu+n_act) = -lvmim(:,i_eig)
-!        end do
-!
-!
-!       !debugchecking the orthogonality...
-!
-        !debugvpp                = zero
-        !debuglvpp               = zero
-        !debugoverlap            = zero
-        !debug! old good ldu
-        !debugvpp(1:n,1:ldu)                           = vpre(:,1:ldu)
-        !debugvpp(n+1:n2,1:ldu)                        = vpim(:,1:ldu)
-        !debuglvpp(1:n,1:ldu)                          = lvpre(:,1:ldu)
-        !debuglvpp(n+1:n2,1:ldu)                       = lvpim(:,1:ldu)
-        !debug! new good +n_act                              
-        !debugvpp(1:n,i_beg:ldu+n_act)                 = vpre(:,ldu+i_beg:ldu+i_beg+n_act-1)
-        !debugvpp(n+1:n2,i_beg:ldu+n_act)              = vpim(:,ldu+i_beg:ldu+i_beg+n_act-1)
-        !debuglvpp(1:n,i_beg:ldu+n_act)                = lvpre(:,ldu+i_beg:ldu+i_beg+n_act-1)
-        !debuglvpp(n+1:n2,i_beg:ldu+n_act)             = lvpim(:,ldu+i_beg:ldu+i_beg+n_act-1)
-        !debug! old bad +ldu                               
-        !debugvpp(1:n,i_beg+n_act:2*ldu+n_act)         = -vmim(:,1:ldu)
-        !debugvpp(n+1:n2,i_beg+n_act:2*ldu+n_act)      = vmre(:,1:ldu)
-        !debuglvpp(1:n,i_beg+n_act:2*ldu+n_act)        = -lvmim(:,1:ldu)
-        !debuglvpp(n+1:n2,i_beg+n_act:2*ldu+n_act)     = lvmre(:,1:ldu)
-        !debug! new bad +n_act
-        !debugvpp(1:n,i_beg+n_act+ldu:2*ldu+2*n_act)     = -vmim(:,i_beg:i_beg+n_act-1)
-        !debugvpp(n+1:n2,i_beg+n_act+ldu:2*ldu+2*n_act)  = vmre(:,i_beg:i_beg+n_act-1)
-        !debuglvpp(1:n,i_beg+n_act+ldu:2*ldu+2*n_act)    = -lvmim(:,i_beg:i_beg+n_act-1)
-        !debuglvpp(n+1:n2,i_beg+n_act+ldu:2*ldu+2*n_act) = lvmre(:,i_beg:i_beg+n_act-1)
-!
-        !debugcdim = 2*ldu + 2*n_act
-        !debugcall dgemm('t','n',cdim,cdim,n2,one,vpp,n2,lvpp,n2,zero,overlap,lda2)
-        !debugwrite(6,*) 'Overlap for first iteration:'
-        !debugwrite(6,*) '<V(+)|LV(+)> = '
-        !debugwrite(6,'(8f10.5)') transpose(overlap(1:8,1:8))
-        !
-!        vmm            = zero
-!        lvmm           = zero
-!        overlap        = zero
-!        vmm(1:n,:)     = vmre(:,:)
-!        vmm(n+1:n2,:)  = vmim(:,:)
-!        lvmm(1:n,:)    = lvmre(:,:)
-!        lvmm(n+1:n2,:) = lvmim(:,:)
-!        call dgemm('t','n',cdim,cdim,n2,one,vmm,n2,lvmm,n2,zero,overlap,lda2)
-!        write(6,*) '<V(-)|LV(-)> = '
-!        write(6,'(16f10.5)') transpose(overlap(1:16,1:16))
-        !stop
-        call get_time(t2)
-        t_diag = t_diag + t2 - t1
-!        
       else
 !
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
@@ -4174,8 +3402,6 @@ end subroutine caslr_eff_driver
 !
 !       put current eigenvectors into the first position of the 
 !       expansion space
-!
-!       new strategy
 !
         do i_eig = 1, n_max
 !         real 
@@ -4220,13 +3446,14 @@ end subroutine caslr_eff_driver
     t_tot = t1 - t_tot
     1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
             t3,'  matrix-vector multiplications: ',2f12.4,/, &
+            t3,'  build reduced matrices:        ',2f12.4,/, &
             t3,'  diagonalization:               ',2f12.4,/, &
             t3,'  orthogonalization:             ',2f12.4,/, &
             t3,'                                 ',24('='),/,  &
             t3,'  total:                         ',2f12.4)
-    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+    if (verbose) write(6,1000) t_mv, t_red, t_diag, t_ortho, t_tot
     deallocate(work,tau,vpre,vpim,vmre,vmim,lvpre,lvpim,lvmre,lvmim,bvpre,bvpim,bvmre,bvmim, &
-               rpre,rpim,rmre,rmim,rrre,rrim,done,r_norm,s_red,s_copy,e_red,smatre,smatim,smat, &
+               rpre,rpim,rmre,rmim,done,r_norm,s_red,s_copy,e_red,smatre,smat, &
                up,um,up_,um_,eigpre,eigpim,eigmre,eigmim,bpre,bpim,bmre,bmim)
 !
     1050 format(t5,'----------------------------------------',/,&
@@ -5949,7 +5176,7 @@ end subroutine caslr_eff_driver
 !
     integer               :: info, i, j, m2, k
     real(dp), allocatable :: metric(:,:), sigma(:), u_svd(:,:), vt_svd(:,:), &
-                             temp(:,:), buildmetric(:,:), vp(:,:), lvp(:,:)
+                             temp(:,:), buildmetric(:,:)
     real(dp), parameter   :: tol_svd = 1.0e-5_dp
     logical,  parameter   :: use_svd = .false.
 !
@@ -5959,9 +5186,9 @@ end subroutine caslr_eff_driver
     external dpotrf, dtrsm, dgemm
 !
     k = m/2
-    allocate (metric(m,m),buildmetric(k,k), vp(2*n,m), lvp(2*n,m))
+    allocate (metric(m,m),buildmetric(k,k))
 !
-!   block one: good/good
+!   block one  metric: <u'|bu'>   = ur*bur + ui*bui
 !
     buildmetric = zero
     call dgemm('t','n',k,k,n,one,ur,n,bur,n,zero,buildmetric,k)
@@ -5969,29 +5196,26 @@ end subroutine caslr_eff_driver
     metric(1:k,1:k) = buildmetric(1:k,1:k)
     buildmetric = zero
 !
-!   block two: bad/good
+!   block two   metric: <u''|bu'> = -ui_*bur + ur_*bui
 !
     call dgemm('t','n',k,k,n,-one,ui_,n,bur,n,zero,buildmetric,k)
     call dgemm('t','n',k,k,n,one,ur_,n,bui,n,one,buildmetric,k)
     metric(k+1:m,1:k) = buildmetric(1:k,1:k)
     buildmetric = zero
 !
-!   block three: good/bad
+!   block three metric: <u'|bu''> = -ur*bui_ + ui*bur_
 !
     call dgemm('t','n',k,k,n,-one,ur,n,bui_,n,zero,buildmetric,k)
     call dgemm('t','n',k,k,n,one,ui,n,bur_,n,one,buildmetric,k)
     metric(1:k,k+1:m) = buildmetric(1:k,1:k)
     buildmetric = zero
 !
-!   block four: bad/bad
+!   block four metric: <u''|bu''> = ui_*bui_ + ur_*bur_
 !
     call dgemm('t','n',k,k,n,one,ui_,n,bui_,n,zero,buildmetric,k)
     call dgemm('t','n',k,k,n,one,ur_,n,bur_,n,one,buildmetric,k)
     metric(k+1:m,k+1:m) = buildmetric(1:k,1:k)
     buildmetric = zero
-!
-!    write(6,*) 'metric smogd'
-!    write(6,'(20f15.8)') transpose(metric(1:20,1:20))
 !
     if (use_svd) then
 !
@@ -6045,9 +5269,8 @@ end subroutine caslr_eff_driver
 !     compute the cholesky factorization of the metric.
 !
       call dpotrf('l',m,metric,m,info)
-      print *, info
 !     
-!     retrieve the (+)/(-) bad from the (-)/(+) good
+!     retrieve the (+)''/(-)''  from the (-)'/(+)'
 !
       ur(:,k+1:m)  = -ui_(:,1:k)
       ui(:,k+1:m)  = ur_(:,1:k)
@@ -6061,31 +5284,9 @@ end subroutine caslr_eff_driver
       call dtrsm('r','l','t','n',n,m,one,metric,m,ui,n)
       call dtrsm('r','l','t','n',n,m,one,metric,m,bui,n)
 !
-!      vp(1:n,:)      = ur(:,:)
-!      vp(n+1:n*2,:)  = ui(:,:)
-!      lvp(1:n,:)     = -bui(:,:)
-!      lvp(n+1:n*2,:) = bur(:,:)
-!      call dgemm('t','n',m,m,n*2,one,vp,2*n,lvp,2*n,zero,metric,m)
-!      write(6,'(20f10.5)') metric
-      !call dtrsm('r','l','t','n',n,m2,one,metric,m2,ur_,n)
-      !call dtrsm('r','l','t','n',n,m2,one,metric,m2,bur_,n)
-      !call dtrsm('r','l','t','n',n,m2,one,metric,m2,ui_,n)
-      !call dtrsm('r','l','t','n',n,m2,one,metric,m2,bui_,n)
-      !ur(1:n,1:m) = ur(1:n,m+1:m2)
-      !ui(1:n,1:m) = ui(1:n,m+1:m2)
-      !bur(1:n,1:m) = bur(1:n,m+1:m2)
-      !bui(1:n,1:m) = bui(1:n,m+1:m2)
-      !ur(1:n,1:m) = ur_(1:n,m+1:m2)
-      !ui(1:n,1:m) = ui_(1:n,m+1:m2)
-      !bur(1:n,1:m) = bur_(1:n,m+1:m2)
-      !bui(1:n,1:m) = bui_(1:n,m+1:m2)
-      !ur_(1:n,1:m) = ui(1:n,m+1:m2)
-      !ui_(1:n,1:m) = -ur(1:n,m+1:m2)
-      !bur_(1:n,1:m) = bui(1:n,m+1:m2)
-      !bui_(1:n,1:m) = -bur(1:n,m+1:m2)
     end if
 !
-    deallocate (metric, buildmetric, vp, lvp)
+    deallocate (metric, buildmetric)
     return
   end subroutine b_ortho_complex
 !

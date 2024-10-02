@@ -11,11 +11,11 @@ program main
 !
 ! initialize:
 !
-  n      = 100 
-  n_want = 10
-  tol    = 1.0e-8_dp
+  n      = 800 
+  n_want = 30
+  tol    = 1.0e-6_dp
   itmax  = 1000
-  m_max  = 5
+  m_max  = 20
   nmult  = 0
   tdscf  = .false.
   i_alg  = 0
@@ -52,7 +52,7 @@ program main
   else if (iwhat.eq.4) then 
     call test_caslr(.true.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.5) then 
-    call test_caslr_complex(.true.,n,n_want,tol,itmax,m_max)
+    call test_caslr_complex(.false.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.6) then 
     call test_symm_complex(.true.,n,n_want,tol,itmax,m_max)
   else 
@@ -1152,7 +1152,7 @@ end program main
 !
 !   debug
 !
-    real(dp), allocatable :: prod(:), prod2(:)
+!    real(dp), allocatable :: prod(:), prod2(:)
 !
     external apbvec_complex, ambvec_complex, spdvec_complex, smdvec_complex, &
              lrprec_1_complex, lrprec_2_complex, lambdavec, omegavec, lrprec_2f
@@ -1228,7 +1228,7 @@ end program main
       end do 
     end do
     do i = 1, n
-      sigmare(i,i) = sigmare(i,i) + 50.0_dp
+      sigmare(i,i) = sigmare(i,i) + 100.0_dp
     end do
 !  
 !   build antisymmetric delta:
@@ -1249,11 +1249,7 @@ end program main
       end do 
     end do
 !  
-!   build a and b:
-!   A is hermitian, B is symmetric
-!  
-!
-!   to extremely simplify the problem with a unitary-Lambda matrix
+!   to extremely simplify the problem with a unitary-Lambda matrix:
 !
 !    apbre = 0.0_dp
 !    ambre = 0.0_dp
@@ -1264,6 +1260,9 @@ end program main
 !      ambre(i,i) = 1.0_dp
 !    end do
 !    
+!   build a and b:
+!   A is hermitian, B is symmetric
+!  
     aare = 0.0_dp
     aaim = 0.0_dp
     bbre = 0.0_dp
@@ -1281,7 +1280,7 @@ end program main
     apbim = aaim + bbim
     ambim = aaim - bbim
 !
-!   to simplify the problem with an SCF-like metric
+!   to simplify the problem with an SCF-like metric:
 !
 !    sigmare = 0.0_dp
 !    sigmaim = 0.0_dp
@@ -1393,13 +1392,11 @@ end program main
 !   allocate memory for the eigenvectors and eigenvalues:
 !
     allocate (evecre(n2,n_eig), evecim(n2,n_eig), eig(n_eig), evec(n4,n_eig))
-    allocate (evecre_(n2,2*n_eig), evecim_(n2,2*n_eig), eig_(2*n_eig), evec_(n4,2*n_eig))
-!    pwhat = 5
-!    if (pwhat .eq. 5) goto 999 
+!    allocate (evecre_(n2,2*n_eig), evecim_(n2,2*n_eig), eig_(2*n_eig), evec_(n4,2*n_eig))
 !
 !   make a guess for the eigenvector 
 !
-    call guess_evec(3,n4,n_eig,diagonal,evec)
+    call guess_evec(1,n4,n_eig,diagonal,evec)
 !
 !   evec structure: X = (Yr Zr Yi -Zi) 
 !
@@ -1407,7 +1404,6 @@ end program main
     evecim = evec(n2+1:n4,:)
 !    
 !   1: minloc for both evecre and evecim     
-!
 !
 !   call the traditional solver:
 !
@@ -1436,19 +1432,6 @@ end program main
       write(10,*)
     end do
     close (10)
-!    stop
-!    999 continue
-!
-!   make a guess for the eigenvector
-!
-!    call guess_evec(2,n4,2*n_eig,diagonal,evec_)
-!
-!   evec structure: X = (Yr Zr Yi -Zi) 
-!
-!    evecre_ = evec_(1:n2,:)
-!    evecim_ = evec_(n2+1:n4,:)
-!
-!   call the modified solver:
 !
     write(6,*) 
     write(6,*) '   ------------------------------------------------------------------' 
@@ -1457,29 +1440,6 @@ end program main
     write(6,*) '   ------------------------------------------------------------------' 
     write(6,*) '   ------------------------------------------------------------------' 
     write(6,*) 
-!
-!    if (pwhat .eq. 5) goto 998 
-!
-!   make a guess for the eigenvector
-!
-!    call guess_evec(2,n4,2*n_eig,diagonal,evec_)
-!!
-!!   evec structure: X = (Yr Zr Yi -Zi) 
-!!
-!    evecre_ = evec_(1:n2,:)
-!    evecim_ = evec_(n2+1:n4,:)
-!!
-!    call smogd_complex_old(.true.,n,n2,2*n_want,2*n_eig,itmax,tol,m_max,apbvec_complex,ambvec_complex, &
-!                           spdvec_complex,smdvec_complex, & 
-!                           lrprec_2_complex,eig_,evecre_,evecim_,ok)
-!
-!    998 continue 
-!
-!   make a guess for the eigenvector
-!
-!    call guess_evec(3,n4,n_eig,diagonal,evec)
-!
-!   evec structure: X = (Yr Zr Yi -Zi) 
 !
     evecre = evec(1:n2,:)
     evecim = evec(n2+1:n4,:)
