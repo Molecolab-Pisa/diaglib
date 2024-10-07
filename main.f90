@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 800 
-  n_want = 30
+  n      = 3000
+  n_want = 50
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 20
@@ -1386,7 +1386,7 @@ end program main
 !   required ones are converged.
 !
     n_eig = min(2*n_want, n_want + 5)
-    n_eig = n_want !+ 2 
+    n_eig = n_want + 5
     !n_eig = n
 !
 !   allocate memory for the eigenvectors and eigenvalues:

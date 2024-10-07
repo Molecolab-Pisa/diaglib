@@ -1024,7 +1024,7 @@ module diaglib
                                   apbmul,ambmul,spdmul,smdmul,lrprec,eig,evecre,evecim,ok)
 !
 ! The following driver is based on the traditional algorithm (Olsen's), 
-! which solves the linear response equations defined as:
+! which solves the complex linear response equations defined as:
 !
 !   / A   B \ / Y \     /  S   D \ / Y \ 
 !   |       | |   | = w |        | |   |
@@ -1121,10 +1121,6 @@ module diaglib
     real(dp), allocatable :: vpim(:,:), vmim(:,:), lvpim(:,:), lvmim(:,:), bvpim(:,:), bvmim(:,:)
     real(dp), allocatable :: rpim(:,:), rmim(:,:) 
 !
-!   new strategy
-! 
-    real(dp), allocatable :: vpre2(:,:), vmre2(:,:), vpim2(:,:), vmim2(:,:)
-!
 !   eigenvectors of the reduced problem and components of the ritz vectors:
 !
 !   real
@@ -1197,7 +1193,8 @@ module diaglib
     sqrtn    = sqrt(real(n,dp))
     sqrt2n   = sqrt(real(n2,dp))
     tol_rms  = tol
-    tol_max  = 10.0_dp * tol
+    !tol_max  = 10.0_dp * tol
+    tol_max  = sqrtn * tol
 !
 !   clean out various quantities
 !
@@ -1478,7 +1475,7 @@ module diaglib
       call dgemm('n','n',n,n_max,ldu,one,bvmim,n,up,lda2,zero,bmim,n)
       call dgemm('n','n',n,n_max,ldu,one,bvpre,n,up_,lda,one,bmim,n)
 !
-      do i_eig = 1, n_targ
+      do i_eig = 1, n_max
 !
 !       if the eigenvalue is already converged, skip it.
 !
@@ -1574,17 +1571,6 @@ module diaglib
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
 !        
-!       new strategy
-!      
-        do i_eig = 1, ldu + n_act
-!        real     
-          vmim(:,i_eig+ldu+n_act) = vpre(:,i_eig)
-          vpim(:,i_eig+ldu+n_act) = vmre(:,i_eig)
-!        imaginary    
-          vmre(:,i_eig+ldu+n_act) = -vpim(:,i_eig)
-          vpre(:,i_eig+ldu+n_act) = -vmim(:,i_eig)
-        end do
-!
       else
         if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
         restart = .true.
@@ -2933,7 +2919,8 @@ end subroutine caslr_eff_driver
     sqrtn   = sqrt(real(n,dp))
     sqrt2n  = sqrt(real(n2,dp))
     tol_rms = tol
-    tol_max = 10.0_dp * tol
+    !tol_max = 10.0_dp * tol
+    tol_max  = sqrtn * tol
 !
 !   clean out various quantities
 !
@@ -3205,7 +3192,7 @@ end subroutine caslr_eff_driver
       call dgemm('n','n',n,n_max,ldu,one,lvmim,n,um,lda2,zero,bmim,n)
       call dgemm('n','n',n,n_max,ldu,one,lvpre,n,um_,lda,one,bmim,n)
 !      
-      do i_eig = 1, n_targ
+      do i_eig = 1, n_max
 !
 !       if the eigenvalue is already converged, skip it.
 !
@@ -4651,7 +4638,7 @@ end subroutine caslr_eff_driver
       call dgemm('t','n',m,m,n,one,ui,n,ui,n,one,metric,m)
       msave = metric
 !
-!   compute the cholesky factorization of the metric.
+!     compute the cholesky factorization of the metric.
 !
       call dpotrf('l',m,metric,m,info)
 !
