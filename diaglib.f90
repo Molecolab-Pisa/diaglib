@@ -2546,7 +2546,7 @@ end subroutine caslr_eff_driver
 !
         call get_time(t1)
 !       
-        call b_ortho_vs_x_complex(n,ldu,n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg),vpim(1,i_beg))
+        !actcall b_ortho_vs_x_complex(n,ldu,n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg),vpim(1,i_beg))
 !        
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
@@ -2568,7 +2568,7 @@ end subroutine caslr_eff_driver
 !        
         call get_time(t1) 
 !       
-        call b_ortho_vs_x_complex(n,ldu,n_act,vmre,vmim,lvmre,lvmim,vmre(1,i_beg),vmim(1,i_beg))
+        !actcall b_ortho_vs_x_complex(n,ldu,n_act,vmre,vmim,lvmre,lvmim,vmre(1,i_beg),vmim(1,i_beg))
 !        
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
@@ -2877,7 +2877,7 @@ end subroutine caslr_eff_driver
 !   no expansion space smaller than max_dav = 10 is deemed acceptable.
 !
     dim_dav = max(min_dav,max_dav)
-    lda     = dim_dav*n_max*2
+    lda     = dim_dav*n_max
     lda2    = 2 * lda
     lda4    = 4 * lda
 !
@@ -2985,7 +2985,7 @@ end subroutine caslr_eff_driver
       lvmim(:,i_eig) = -lvpre(:,i_eig+n_max)
     end do
 !
-!   checking the orthogonality...
+!    checking the orthogonality...
 !
 !    vpp            = zero
 !    lvpp           = zero
@@ -3283,58 +3283,19 @@ end subroutine caslr_eff_driver
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
-!       save the new V(+) in vsave 
-!
-        vsave = zero
-        do i = 1, n_act 
-          vsave(:,i)         = vpre(:,i_beg+i-1)
-          vsave(:,n_act+i)   = vpim(:,i_beg+i-1)
-        end do
-!        
-!       build the old V(+)''/LV(+)'' from the old V(-)'/LV(-)'
-!
-        do i_eig = 1, ldu  
-!         real     
-          vpim(:,i_eig+i_beg-1)  = vmre(:,i_eig)
-          lvpim(:,i_eig+i_beg-1) = lvmre(:,i_eig)
-!         imaginary    
-          vpre(:,i_eig+i_beg-1)  = -vmim(:,i_eig)
-          lvpre(:,i_eig+i_beg-1) = -lvmim(:,i_eig)
-        end do
-!
-!       attach the new V(+)' previously saved in vsave,  
-!       retrieve and attach also the new V(+)'' from the new V(-)'
-!
-        do i_eig = 1, n_act
-!         real V+'
-          vpre(:,i_eig+i_beg+ldu-1)        = vsave(:,i_eig)
-!         real V+''
-          vpre(:,i_eig+i_beg+ldu+n_act-1)  = -vmim(:,i_eig+i_beg-1)
-!         imaginary V+' 
-          vpim(:,i_eig+i_beg+ldu-1)        = vsave(:,n_act+i_eig)
-!         imaginary V+''
-          vpim(:,i_eig+i_beg+ldu+n_act-1)  = vmre(:,i_eig+i_beg-1)
-        end do
-!        
-        call get_time(t1)
-!       
-        call b_ortho_vs_x_complex(n,2*ldu,2*n_act,vpre,vpim,lvpre,lvpim,vpre(1,i_beg+ldu),vpim(1,i_beg+ldu))
+        call b_ortho_vs_x_complex(n,2*ldu,2*n_act,vpre,vpim,vmre,vmim,lvpre,lvpim,lvmre,lvmim, & 
+                                      vpre(1,i_beg),vpim(1,i_beg),vmre(1,i_beg),vmim(1,i_beg))
 !       
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
 !
-!       shift the new orthogonalized V(+)' after the old ones,
 !       build the new orthogonalized V(-)' from the new orthogonalized V(+)''
 !
         do i_eig = 1, n_act
-!         real: shift     
-          vpre(:,i_eig+ldu)  = vpre(:,i_eig+ldu+i_beg-1)
-!         imaginary: shift    
-          vpim(:,i_eig+ldu)  = vpim(:,i_eig+ldu+i_beg-1)
 !         real: build           
-          vmre(:,i_eig+ldu)  = vpim(:,i_eig+ldu+i_beg+n_act-1)
+          vmre(:,i_eig+ldu)  = vpim(:,i_eig+i_beg+n_act-1)
 !         imaginary: build          
-          vmim(:,i_eig+ldu)  = -vpre(:,i_eig+ldu+i_beg+n_act-1)
+          vmim(:,i_eig+ldu)  = -vpre(:,i_eig+i_beg+n_act-1)
         end do
 !        
         call get_time(t1)
@@ -5045,7 +5006,7 @@ end subroutine caslr_eff_driver
     return
   end subroutine b_ortho_vs_x
 !
-  subroutine b_ortho_vs_x_complex(n,m,k,xr,xi,bxr,bxi,ur,ui)
+  subroutine b_ortho_vs_x_complex(n,m,k,xr,xi,xr_,xi_,bxr,bxi,bxr_,bxi_,ur,ui,ur_,ui_)
     implicit none
 !
 !   given two sets x(n,m) and u(n,k) of vectors, where x 
@@ -5060,17 +5021,18 @@ end subroutine caslr_eff_driver
 !   arguments:
 !   ==========
 !
-    integer,                   intent(in)    :: n, m, k
-    real(dp),  dimension(n,m), intent(in)    :: xr, xi, bxr, bxi
-    real(dp),  dimension(n,k), intent(inout) :: ur, ui
+    integer,                     intent(in)    :: n, m, k
+    real(dp),  dimension(n,m/2), intent(in)    :: xr, xi, bxr, bxi
+    real(dp),  dimension(n,m/2), intent(in)    :: xr_, xi_, bxr_, bxi_
+    real(dp),  dimension(n,k),   intent(inout) :: ur, ui, ur_, ui_
 !
 !   local variables:
 !   ================
 !
     logical                :: done, ok
-    integer                :: it
+    integer                :: it, w, z
     real(dp)               :: xu_norm, growth, xx(1)
-    real(dp),  allocatable :: xu(:,:)
+    real(dp),  allocatable :: xu(:,:), blk11(:,:), blk12(:,:), blk21(:,:), blk22(:,:), buildu(:,:)
 !
 !   external functions:
 !   ===================
@@ -5085,9 +5047,23 @@ end subroutine caslr_eff_driver
 !   allocate space for the overlap between x and u.
 !
     ok = .false.
-    allocate (xu(m,k))
+    w  = m/2
+    z  = k/2
+!    
+    allocate (xu(m,k), blk11(w,z), blk12(w,z), blk21(w,z), blk22(w,z), buildu(n,z))
+    blk11  = zero
+    blk12  = zero
+    blk21  = zero
+    blk22  = zero
+    buildu = zero 
+! 
     done = .false.
     it   = 0
+!
+!   attach the (omega'') contribution of ur/ui, using the (omega') of ur_/ui_
+!
+    ur(:,z+1:k) = -ui_(:,1:z)
+    ui(:,z+1:k) = ur_(:,1:z)
 !
 !   start with an initial orthogonalization to improve conditioning.
 !
@@ -5097,6 +5073,11 @@ end subroutine caslr_eff_driver
       !call ortho(n,k,u,xx)
     end if
 !
+!   retrieve the new orthogonalized ur_/ui_ (omega') from the ur/ui (omega'')
+!
+    ur_(:,1:z) = ui(:,z+1:k) 
+    ui_(:,1:z) = -ur(:,z+1:k)
+!
 !   iteratively orthogonalize u against x, and then orthonormalize u.
 !
     do while (.not. done)
@@ -5104,10 +5085,51 @@ end subroutine caslr_eff_driver
 !
 !     u = u - x (bx^t u)
 !
-      call dgemm('t','n',m,k,n,one,bxr,n,ur,n,zero,xu,m)
-      call dgemm('t','n',m,k,n,one,bxi,n,ui,n,one,xu,m)
-      call dgemm('n','n',n,k,m,-one,xr,n,xu,m,one,ur,n)
-      call dgemm('n','n',n,k,m,-one,xi,n,xu,m,one,ui,n)
+!     build the matrix xu = bx^t*u by computing each of the four blocks,
+!     following the strategy already performed in b_ortho_complex
+!
+!     block one xu: <bx'|u'> = bxr*ur + bxi*ui
+!
+      call dgemm('t','n',w,z,n,one,bxr,n,ur,n,zero,blk11,w)
+      call dgemm('t','n',w,z,n,one,bxi,n,ui,n,one,blk11,w)
+!
+!     block two xu: <bx'|u''> = -bxr*ui_ + bxi*ur_
+!
+      call dgemm('t','n',w,z,n,-one,bxr,n,ui_,n,zero,blk12,w)
+      call dgemm('t','n',w,z,n,one,bxi,n,ur_,n,one,blk12,w)
+!
+!     block three xu: <bx''|u'> = -bxi_*ur + bxr_*ui
+!
+      call dgemm('t','n',w,z,n,-one,bxi_,n,ur,n,zero,blk21,w)
+      call dgemm('t','n',w,z,n,one,bxr_,n,ui,n,one,blk21,w)
+!
+!     block three xu: <bx''|u''> = bxr_*ur_ + bxi_*ui_
+!
+      call dgemm('t','n',w,z,n,one,bxr_,n,ur_,n,zero,blk22,w)
+      call dgemm('t','n',w,z,n,one,bxi_,n,ui_,n,one,blk22,w)
+!
+!     perform the remaining part of the Gram-Schmidt procedure,
+!     namely --> x(bx^T u), and so build u
+!
+      call dgemm('n','n',n,z,w,one,xr,n,blk11,w,zero,buildu,n)
+      call dgemm('n','n',n,z,w,-one,xi_,n,blk21,w,one,buildu,n)
+      ur(:,1:z) = ur(:,1:z) - buildu(:,1:z) 
+      buildu    = zero
+!      
+      call dgemm('n','n',n,z,w,one,xi,n,blk11,w,zero,buildu,n)
+      call dgemm('n','n',n,z,w,one,xr_,n,blk21,w,one,buildu,n)
+      ui(:,1:z) = ui(:,1:z) - buildu(:,1:z)
+      buildu    = zero
+!      
+      call dgemm('n','n',n,z,w,one,xr,n,blk12,w,zero,buildu,n)
+      call dgemm('n','n',n,z,w,-one,xi_,n,blk22,w,one,buildu,n)
+      ur(:,z+1:k) = ur(:,z+1:k) - buildu(:,1:z)
+      buildu      = zero
+!      
+      call dgemm('n','n',n,z,w,one,xi,n,blk12,w,zero,buildu,n)
+      call dgemm('n','n',n,z,w,one,xr_,n,blk22,w,one,buildu,n)
+      ui(:,z+1:k) = ui(:,z+1:k) - buildu(:,1:z)
+      buildu      = zero
 !
 !     now, orthonormalize u.
 !
@@ -5117,16 +5139,47 @@ end subroutine caslr_eff_driver
         !call ortho(n,k,u,xx)
       end if
 !
+!     retrieve the new orthogonalized ur_/ui_ (omega') from the ur/ui (omega'')
+!
+      ur_(:,1:z) = ui(:,z+1:k) 
+      ui_(:,1:z) = -ur(:,z+1:k)
+!
 !     compute the overlap between the orthonormalized u and x and decide
 !     whether the orthogonalization procedure converged.
 !
-!     note that, if we use ortho_cd, we estimate the norm of the overlap
+!     note that, if we use ortho_cd_complex, we estimate the norm of the overlap
 !     using the growth factor returned in growth. 
-!     see ortho_vs_x for more information.
+!     see ortho_vs_x_complex for more information.
 !
       if (.not. ok .or. useqr) then
-        call dgemm('t','n',m,k,n,one,bxr,n,ur,n,zero,xu,m)
-        call dgemm('t','n',m,k,n,one,bxi,n,ui,n,one,xu,m)
+!
+!       block one xu: <bx'|u'> = bxr*ur + bxi*ui
+!  
+        call dgemm('t','n',w,z,n,one,bxr,n,ur,n,zero,blk11,w)
+        call dgemm('t','n',w,z,n,one,bxi,n,ui,n,one,blk11,w)
+!  
+!       block two xu: <bx'|u''> = -bxr*ui_ + bxi*ur_
+!  
+        call dgemm('t','n',w,z,n,-one,bxr,n,ui_,n,zero,blk12,w)
+        call dgemm('t','n',w,z,n,one,bxi,n,ur_,n,one,blk12,w)
+!  
+!       block three xu: <bx''|u'> = -bxi_*ur + bxr_*ui
+!  
+        call dgemm('t','n',w,z,n,-one,bxi_,n,ur,n,zero,blk21,w)
+        call dgemm('t','n',w,z,n,one,bxr_,n,ui,n,one,blk21,w)
+!  
+!       block three xu: <bx''|u''> = bxr_*ur_ + bxi_*ui_
+!  
+        call dgemm('t','n',w,z,n,one,bxr_,n,ur_,n,zero,blk22,w)
+        call dgemm('t','n',w,z,n,one,bxi_,n,ui_,n,one,blk22,w)
+!  
+!       assemble the matrix xu 
+!  
+        xu(1:w,1:z)     = blk11(1:w,1:z) 
+        xu(1:w,z+1:k)   = blk12(1:w,1:z)
+        xu(w+1:m,1:z)   = blk21(1:w,1:z)
+        xu(w+1:m,z+1:k) = blk22(1:w,1:z)
+!        
         xu_norm = dnrm2(m*k,xu,1)
       else
         xu_norm = growth * epsilon(one)
@@ -5135,10 +5188,10 @@ end subroutine caslr_eff_driver
 !
 !     if things went really wrong, abort.
 !
-      if (it.gt.maxit) stop ' catastrophic failure of b_ortho_vs_x'
+      if (it.gt.maxit) stop ' catastrophic failure of b_ortho_vs_x_complex'
     end do
 !
-    deallocate(xu)
+    deallocate(xu,blk11,blk12,blk21,blk22,buildu)
 !
     return
   end subroutine b_ortho_vs_x_complex
@@ -5173,7 +5226,7 @@ end subroutine caslr_eff_driver
     external dpotrf, dtrsm, dgemm
 !
     k = m/2
-    allocate (metric(m,m),buildmetric(k,k))
+    allocate (metric(m,m), buildmetric(k,k))
 !
 !   block one  metric: <u'|bu'>   = ur*bur + ui*bui
 !

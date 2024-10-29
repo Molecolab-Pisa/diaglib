@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 3000
-  n_want = 50
+  n      = 300
+  n_want = 10
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 20
