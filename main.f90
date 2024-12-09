@@ -11,8 +11,8 @@ program main
 !
 ! initialize:
 !
-  n      = 300
-  n_want = 10
+  n      = 3000
+  n_want = 60
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 20
@@ -37,7 +37,8 @@ program main
               t3,'   3 for linear-response equations (SCF-like)',/, &
               t3,'   4 for linear-response equations (CASSCF-like)',/, &
               t3,'   5 for linear-response equations (complex-CASSCF-like)',/, &
-              t3,'   6 for symmetric eigenvalue problems (complex-Davidson).')
+              t3,'   6 for symmetric eigenvalue problems (real-algebra-complex-Davidson).',/, &
+              t3,'   7 for symmetric eigenvalue problems (complex-Davidson).')
   write(6,1000)
   read(5,*) iwhat
   !iwhat = 5
@@ -55,6 +56,8 @@ program main
     call test_caslr_complex(.false.,n,n_want,tol,itmax,m_max)
   else if (iwhat.eq.6) then 
     call test_symm_complex(.true.,n,n_want,tol,itmax,m_max)
+  else if (iwhat.eq.7) then 
+    call test_symm_fcomplex(.true.,n,n_want,tol,itmax,m_max)
   else 
     write(6,*) ' invalid selection. aborting ...'
   end if
@@ -100,6 +103,26 @@ end program main
     end do
     return
   end subroutine mmult
+!
+  subroutine mmult_fcomplex(n,m,x,ax)
+    use utils
+    implicit none
+!
+!   simple-minded matrix-vector multiplication routine, that needs to be passed as 
+!   an argument to lobpcg
+!
+    integer,                      intent(in)    :: n, m
+    complex(dp),  dimension(n,m), intent(in)    :: x
+    complex(dp),  dimension(n,m), intent(inout) :: ax
+!
+    integer :: icol
+!
+    nmult = nmult + m
+    do icol = 1, m
+      ax(:,icol) = matmul(ca,x(:,icol))
+    end do
+    return
+  end subroutine mmult_fcomplex
 !
   subroutine mmult_complex(n,m,x,ax)
     use utils
@@ -174,6 +197,29 @@ end program main
     end do
     return
   end subroutine mprec
+!
+  subroutine mprec_fcomplex(n,m,fac,x,px)
+    use utils
+    implicit none
+!
+!   simple-minded shift-and-invert preconditioner routine, that needs to be passed as 
+!   an argument to lobpcg
+!
+    integer,                      intent(in)    :: n, m
+    complex(dp),                  intent(in)    :: fac
+    complex(dp),  dimension(n,m), intent(in)    :: x
+    complex(dp),  dimension(n,m), intent(inout) :: px
+!
+    integer             :: i, icol
+    real(dp), parameter :: tol = 1.0d-5
+!
+    do icol = 1, m
+      do i = 1, n
+        if (abs(ca(i,i)+fac).gt.tol) px(i,icol) = x(i,icol)/(ca(i,i) + fac)
+      end do
+    end do
+    return
+  end subroutine mprec_fcomplex
 !
   subroutine mprec_complex(n,m,fac,x,px)
     use utils
@@ -746,12 +792,12 @@ end program main
 !
     allocate (nceig(n2), ncevec(n2,n_eig), evecre(n,n_eig), evecim(n,n_eig))
 !
-!   complex davidson
+!   real-algebra-complex davidson
 !
     write(6,*) 
     write(6,*) '   -------------------------------------------------------------------' 
     write(6,*) '   -------------------------------------------------------------------' 
-    write(6,*) '                    COMPLEX DAVIDSON IMPLEMENTATION                   '
+    write(6,*) '             REAL-ALGEBRA-COMPLEX DAVIDSON IMPLEMENTATION             '
     write(6,*) '   -------------------------------------------------------------------' 
     write(6,*) '   -------------------------------------------------------------------' 
     write(6,*) 
@@ -786,6 +832,137 @@ end program main
 !
     return
   end subroutine test_symm_complex
+!
+  subroutine test_symm_fcomplex(check_lapack,n,n_want,tol,itmax,m_max)
+!          
+!   complex davidson and new-complex davidson 
+!
+    use real_precision
+    use utils
+    use diaglib!, only : lobpcg_driver, davidson_driver
+    implicit none
+    logical,  intent(in) :: check_lapack
+    integer,  intent(in) :: n, n_want, itmax, m_max
+    real(dp), intent(in) :: tol
+!
+!   test iterative solvers for a standard symmetric eigenvalue problem.
+!
+    logical                   :: ok
+    integer                   :: i, j, n_eig, info, lwork, lrwork, liwork
+    integer,     allocatable  :: iwork(:)
+    real(dp)                  :: lw(1)
+    real(dp),    allocatable  :: diagonal(:), eig(:), w(:), rwork(:) 
+    complex(dp), allocatable  :: cwork(:), a_copy(:,:), ceig(:)
+    complex(dp), allocatable  :: evec(:,:), cprod(:,:)
+!
+!   new complex scheme
+!
+    integer                   :: n2
+    real(dp),    allocatable  :: nc_copy(:,:)
+    real(dp),    allocatable  :: work(:), ncw(:)
+    real(dp),    allocatable  :: ncdiag(:), nceig(:), ncevec(:,:)
+!
+    external :: mmult_fcomplex, mprec_fcomplex, smult
+!
+    1000 format(t3,' eigenvalue # ',i6,': ',f12.6,/,t3,' eigenvector: ')
+!
+    n2 = 2*n
+!
+!   allocate memory for the a matrix (ca is complex, are/im are for new-complex
+!
+    allocate (a(n,n), ca(n,n), fourmat(n2,n2))
+!
+!   build a hermitian matrix:
+!
+    do i = 1, n
+      ca(i,i)  = dcmplx(i+1.0_dp,0.0_dp) 
+      do j = 1, i - 1
+        ca(j,i)  = dcmplx(1.0_dp/(i+j),1.0_dp/(i+j))
+        ca(i,j)  = conjg(ca(j,i))
+      end do
+    end do
+!
+!   if required, solve the problem with a dense lapack routine:
+!
+    if (check_lapack) then
+      allocate (a_copy(n,n), w(n), cwork(1), rwork(1), iwork(1))
+      a_copy = ca
+      call zheevd('v','l',n,a_copy,n,w,cwork,-1,rwork,-1,iwork,-1,info)
+      lwork = int(cwork(1))
+      lrwork = int(rwork(1))
+      liwork = int(iwork(1))
+      deallocate(cwork, rwork, iwork)
+      allocate (cwork(lwork), rwork(lrwork), iwork(liwork))
+      call zheevd('v','l',n,a_copy,n,w,cwork,lwork,rwork,lrwork,iwork,liwork,info)
+!
+!     write the results on file for comparison:
+!
+      open (unit = 10, file = 'lapack_dav_fcomplex.txt', form = 'formatted', access = 'sequential')
+      do i = 1, n_want
+        write(10,1000) i, w(i)
+!
+!       fix the phase so that the first element of the eigenvector is positive.
+!
+        if (abs(a_copy(1,i)) .lt. 0.0_dp) a_copy(:,i) = - a_copy(:,i)
+        write(10,*) a_copy(:,i)
+        write(10,*)
+      end do
+      close (10)
+!
+    end if
+!
+!   allocate and gather the diagonal:
+!
+    allocate (diagonal(n), ncdiag(n2))
+    do i = 1, n
+      diagonal(i) = real(ca(i,i))
+      ncdiag(i)   = fourmat(i,i)
+      ncdiag(i+n) = fourmat(i+n,i+n)
+    end do
+!
+!   for better convergence, we seek more eigenpairs and stop the iterations when the
+!   required ones are converged.
+!
+    n_eig = min(2*n_want, n_want + 5)
+    n_eig = n_want
+!
+!   allocate memory for the eigenvalues and eigenvectors:
+!
+    allocate (eig(n), ceig(n), evec(n,n_eig), cprod(n,n_eig))
+    allocate (nceig(n2), ncevec(n2,n_eig))
+!
+!   full-complex davidson
+!
+    write(6,*) 
+    write(6,*) '   -------------------------------------------------------------------' 
+    write(6,*) '   -------------------------------------------------------------------' 
+    write(6,*) '                     FULL-COMPLEX DAVIDSON IMPLEMENTATION             '
+    write(6,*) '   -------------------------------------------------------------------' 
+    write(6,*) '   -------------------------------------------------------------------' 
+    write(6,*) 
+!
+!   make a guess for the eigenvector
+!
+    call guess_evec_fcomplex(5,n,n_eig,diagonal,evec)
+!
+!   call the davidson driver:
+!
+    call davidson_fcomplex_driver(.true.,n,n_want,n_eig,itmax,tol,m_max,0.0_dp,mmult_fcomplex, &
+                                 mprec_fcomplex,eig,ceig,evec,ok)
+!
+!   write the converged results on file for comparison:
+!
+    open (unit = 10, file = 'davidson_fcomplex.txt', form = 'formatted', access = 'sequential')
+    do i = 1, n_want
+      write(10,1000) i, eig(i)
+      if (abs(evec(1,i)) .lt. 0.0_dp) evec(:,i) = - evec(:,i)
+      write(10,*) evec(:,i)
+      write(10,*)
+    end do
+    close (10)
+!
+    return
+  end subroutine test_symm_fcomplex
 !
   subroutine test_geneig(check_lapack,n,n_want,tol,itmax,m_max)
     use real_precision
@@ -1770,13 +1947,42 @@ end program main
     end if
     return
   end subroutine guess_evec
-
-
-
-
-
-
-
-
-
-
+!
+  subroutine guess_evec_fcomplex(iwhat,n,m,diagonal,evec)
+    use real_precision
+    implicit none
+    integer,                       intent(in)    :: iwhat, n, m
+    real(dp),    dimension(n/2),   intent(in)    :: diagonal
+    complex(dp), dimension(n,m),   intent(inout) :: evec
+!
+!   guess the eigenvector.
+!
+    integer                 :: i, ipos, n_seed
+    integer,  allocatable   :: iseed(:)
+    logical,  allocatable   :: mask(:)
+    integer,  dimension(4)  :: vec
+    real(dp), dimension(4)  :: vecr
+!
+!   initialize a random number generator in a predictible way.
+!
+    evec = (0.0_dp,0.0_dp)
+    vecr = 0.0_dp
+!
+    allocate (mask(n/2))
+!
+    if (iwhat.eq.5) then
+!
+      mask = .true.
+      do i = 1, m
+        ipos = minloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.
+        evec(ipos,i) = evec(ipos,i) + (1.0_dp,0.0_dp)
+      end do
+    else if (iwhat.eq.6) then
+      call random_number(vecr)
+      vec = floor(101*vecr,dp) 
+      if (mod(vec(4),2) .ne. 1) vec(4)=vec(4)+1
+      call zlarnv(4,vec,n*m,evec)  
+    end if
+    return
+  end subroutine guess_evec_fcomplex

@@ -147,7 +147,8 @@ module diaglib
 !
 ! useful constants
 !
-  real(dp),    parameter    :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
+  real(dp),    parameter  :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
+  complex(dp), parameter  :: czero = (0.0_dp,0.0_dp), cone = (1.0_dp,0.0_dp), ctwo = (2.0_dp,0.0_dp) 
 !
 ! convergence thresholds for orthogonalization
 !
@@ -158,6 +159,7 @@ module diaglib
 !
   integer                   :: lwork, info
   real(dp),    allocatable  :: work(:), tau(:), rwork(:)
+  complex(dp), allocatable  :: cwork(:), ctau(:)
 !
 ! timings:
 !
@@ -167,9 +169,14 @@ module diaglib
 ! subroutines:
 ! ============
 !
-  public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, caslr_eff_driver, caslr_complex_driver, & 
-            caslr_complex_eff_driver, smogd_complex_old, ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x, prtmat, check_sym_4n, & 
-            ortho_complex, ortho_cd_complex, b_ortho_vs_x_complex, b_ortho_complex
+  public :: lobpcg_driver, davidson_driver, gen_david_driver, davidson_fcomplex_driver, &
+            caslr_driver, caslr_eff_driver, caslr_complex_driver, caslr_complex_eff_driver, smogd_complex_old, &
+            ortho, ortho_fcomplex, ortho_complex,  &
+            b_ortho, b_ortho_complex, &
+            ortho_cd, ortho_cd_fcomplex, ortho_cd_complex, &
+            ortho_vs_x, ortho_vs_x_fcomplex, ortho_vs_x_complex, &
+            b_ortho_vs_x, b_ortho_vs_x_complex, &
+            prtmat, check_sym_4n
   contains
 !
   subroutine lobpcg_driver(verbose,gen_eig,n,n_targ,n_max,max_iter,tol, &
@@ -3415,7 +3422,9 @@ end subroutine caslr_eff_driver
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
                              shift,matvec,precnd,eig,evec,ok)
 !
-!   main driver for davidson-liu.
+!   THIS DRIVER SOLVES A SYMMETRIC EIGENVALUE PROBLEM USING THE 
+!   DAVIDSON-ALGORITHM SCHEME. 
+!   IT CAN BE USED FOR BOTH REAL-PROBLEMS AND COMPLEX-REAL-ALGEBRA PROBLEMS
 !
 !   input variables:
 !   ================
@@ -3783,6 +3792,397 @@ end subroutine caslr_eff_driver
             t5,'----------------------------------------')
     return
   end subroutine davidson_driver
+!
+  subroutine davidson_fcomplex_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
+                                     shift,matvec_complex,precnd_fcomplex,eig,ceig,evec,ok)
+!
+!   THIS DRIVER SOLVES A SYMMETRIC EIGENVALUE PROBLEM USING THE 
+!   DAVIDSON-ALGORITHM SCHEME. 
+!   THIS IMPLEMENTATION WORKS FOR COMPLEX MATRICES USING
+!   COMPLEX ALGEBRA (FULL-COMPLEX DAVIDSON).
+!
+!   input variables:
+!   ================
+!
+!   verbose:  logical, whether to print various information at each 
+!             iteration (eigenvalues, residuals...).
+!
+!   n:        integer, size of the matrix to be diagonalized.
+!
+!   n_targ:   integer, number of required eigenpairs.
+!
+!   n_max:    integer, maximum size of the search space. should be 
+!             >= n_targ. note that eig and evec should be allocated 
+!             n_max and (n,n_max) rather than n_targ and (n,n_targ). 
+!             for better convergence, a value larger than n_targ (eg.,
+!             n_targ + 10) is recommended.
+!   
+!   max_iter: integer, maximum allowed number of iterations.
+!
+!   tol:      double precision real, the convergence threshold.
+!
+!   max_dav:  integer. maximum allowed number of iterations before a 
+!             restart is forced. 
+!             when n_max eigenvalues are searched, this implies a maximum
+!             dimension of the expansion subspace of n_max * max_dav.
+!
+!   shift:    double precision real, a diagonal level shifting parameter
+!
+!   matvec:   external subroutine that performs the matrix-vector
+!             multiplication
+!
+!   precnd:   external subroutine that applied a preconditioner.
+!
+!   output variables:
+!   =================
+!
+!   eig:      double precision array of size n_max. if ok is true, 
+!             the computed eigenvalues in asceding order.
+!
+!   evec:     double precision array of size (n,n_max). 
+!             in input, a guess for the eigenvectors.
+!             if ok is true, in output the computed eigenvectors.
+!
+!   ok:       logical, true if davidson converged.
+!
+    logical,                         intent(in)    :: verbose
+    integer,                         intent(in)    :: n, n_targ, n_max
+    integer,                         intent(in)    :: max_iter, max_dav
+    real(dp),                        intent(in)    :: tol, shift
+    real(dp),    dimension(n_max),   intent(inout) :: eig
+    complex(dp), dimension(n_max),   intent(inout) :: ceig
+    complex(dp), dimension(n,n_max), intent(inout) :: evec
+    logical,                         intent(inout) :: ok
+    external                                       :: matvec_complex, precnd_fcomplex
+!
+!   lapack: zheevd 
+!
+    integer                  :: lrwork, liwork
+    integer,     allocatable :: iwork(:) 
+    real(dp),    allocatable :: w(:), rwork(:)
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10 
+    integer               :: istat
+!
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: it, i_eig
+!
+    real(dp)              :: sqrtn, tol_rms, tol_max
+    complex(dp)           :: xx(1)
+!
+!   arrays to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!
+    complex(dp), allocatable :: space(:,:), aspace(:,:), r(:,:)
+    real(dp),    allocatable :: r_norm(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    complex(dp), allocatable :: a_red(:,:), a_copy(:,:)
+    real(dp),    allocatable :: e_red(:)
+!
+!   restarting variables
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2, dznrm2
+    external              :: dcopy, dznrm2, dnrm2, dgemm, dsyev, zgemm, zheevd, zcopy 
+!
+!   compute the actual size of the expansion space, checking that
+!   the input makes sense.
+!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork = get_mem_lapack(n,n_max)
+    allocate (cwork(lwork), rwork(1), iwork(1), tau(n_max), ctau(n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the expansion space, the corresponding 
+!   matrix-multiplied vectors and the residual:
+!
+    allocate (space(n,lda), aspace(n,lda), r(n,n_max), stat = istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergence check
+!
+    allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for the reduced matrix and its eigenvalues:
+!
+    allocate (a_red(lda,lda), a_copy(lda,lda), e_red(lda), stat=istat)
+    call check_mem(istat)
+!
+!   set the tolerances and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+!
+!   clean out various quantities
+!
+    t_diag   = zero
+    t_ortho  = zero
+    t_mv     = zero
+    t_tot    = zero
+    space    = (0.0_dp,0.0_dp)
+    aspace   = (0.0_dp,0.0_dp)
+    a_red    = (0.0_dp,0.0_dp)
+    ok       = .false.
+    done     = .false.
+!
+    call get_time(t_tot)
+!
+!   check whether we have a guess for the eigenvectors in evec, and
+!   whether it is orthonormal.
+!   if evec is zero, create a random guess.
+!
+    call check_guess_complex(n,n_max,evec)
+!
+!   move the guess into the expansion space.
+!
+    call zcopy(n*n_max,evec,1,space,1)
+!
+!   initialize the number of active vectors and the associated indices.
+!
+    n_act = n_max
+    ind   = 1
+    i_beg = 1
+!
+!   initialize the counter for the expansion of the subspace
+!
+    m_dim = 1
+    ldu   = 0
+!
+!   initialize to false the restart
+!
+    restart = .false.
+!
+!   main loop:
+!
+    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+                t5,'------------------------------------------------------------------',/, &
+                t7,'  iter  root              eigenvalue','         rms         max ok',/, &
+                t5,'------------------------------------------------------------------')
+    1040 format(t9,i4,2x,i4,f24.12,2d12.4,l3)
+!
+    if (verbose) write(6,1030) tol
+!
+    n_rst   = 0
+    do it = 1, max_iter
+!
+!     update the size of the expansion space.
+!
+      ldu = ldu + n_act
+!
+!     perform this iteration's matrix-vector multiplication:
+!
+      call get_time(t1)
+      call matvec_complex(n,n_act,space(1,i_beg+n_rst),aspace(1,i_beg+n_rst))
+      call get_time(t2)
+      t_mv = t_mv + t2 - t1
+!
+!     update the reduced matrix 
+!
+      call zgemm('c','n',ldu,n_act,n,cone,space,n,aspace(1,i_beg+n_rst),n,czero,a_red(1,i_beg+n_rst),lda)
+!
+!     explicitly putting the first block of 
+!     converged eigenvalues in the reduced matrix
+!
+      if (restart) then
+        do i_eig = 1, n_rst
+          a_red(i_eig,i_eig) = e_red(i_eig)
+        end do
+        restart = .false.
+        n_rst   = 0
+      end if
+      a_copy = a_red
+!
+!     diagonalize the reduced matrix
+!
+      call zheevd('v','u',ldu,a_copy,lda,e_red,cwork,-1,rwork,-1,iwork,-1,info)
+      lwork = int(cwork(1))
+      lrwork = int(rwork(1))
+      liwork = int(iwork(1))
+      deallocate(cwork, rwork, iwork)
+      allocate (cwork(lwork), rwork(lrwork), iwork(liwork))
+      call get_time(t1)
+      call zheevd('v','u',ldu,a_copy,lda,e_red,cwork,lwork,rwork,lrwork,iwork,liwork,info)
+      call get_time(t2)
+      t_diag = t_diag + t2 - t1
+!
+!     extract the eigenvalues and compute the ritz approximation to the
+!     eigenvectors 
+!
+      eig = e_red(1:n_max)
+!
+      call zgemm('n','n',n,n_max,ldu,cone,space,n,a_copy,lda,czero,evec,n)
+!
+!     compute the residuals, and their rms and sup norms:
+!
+      call zgemm('n','n',n,n_max,ldu,cone,aspace,n,a_copy,lda,czero,r,n)
+!
+      do i_eig = 1, n_targ
+!
+!       if the eigenvalue is already converged, skip it.
+!
+        if (done(i_eig)) cycle
+!
+        ceig(i_eig) = eig(i_eig)
+        call zaxpy(n,-ceig(i_eig),evec(:,i_eig),1,r(:,i_eig),1)
+        r_norm(1,i_eig) = dznrm2(n,r(:,i_eig),1)/sqrtn
+        r_norm(2,i_eig) = maxval(abs(r(:,i_eig)))
+      end do
+!
+!     check convergence. lock the first contiguous converged eigenvalues
+!     by setting the logical array "done" to true.
+!
+      do i_eig = 1, n_targ
+        if (done(i_eig)) cycle
+        done(i_eig)     = r_norm(1,i_eig).lt.tol_rms .and. &
+                          r_norm(2,i_eig).lt.tol_max .and. &
+                          it.gt.1
+        if (.not.done(i_eig)) then
+          done(i_eig+1:n_max) = .false.
+          exit
+        end if
+      end do
+!
+!     print some information:
+!
+      if (verbose) then
+        do i_eig = 1, n_targ
+          write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm(:,i_eig), done(i_eig)
+        end do
+        write(6,*) 
+      end if
+!
+      if (all(done(1:n_targ))) then
+        ok = .true.
+        exit
+      end if
+!
+!     check whether an update is required. 
+!     if not, perform a davidson restart.
+!
+      if (m_dim .lt. dim_dav) then
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        m_dim = m_dim + 1
+        i_beg = i_beg + n_act
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        call precnd_fcomplex(n,n_act,-ceig(ind),r(1,ind),space(1,i_beg))
+!
+!       orthogonalize the new vectors to the existing ones and then
+!       orthonormalize them.
+!
+        call get_time(t1)
+        call ortho_vs_x_fcomplex(n,ldu,n_act,space,space(1,i_beg))
+        call get_time(t2)
+        t_ortho = t_ortho + t2 - t1
+      else
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        n_act = n_max
+        space = (0.0_dp,0.0_dp)
+!
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        call zcopy(n_max*n,evec,1,space,1)
+        aspace = (0.0_dp,0.0_dp)
+        a_red  = (0.0_dp,0.0_dp)
+!
+!       initialize indexes back to their starting values 
+!
+        ldu   = 0
+        i_beg = 1 
+        m_dim = 1
+        n_rst = 0
+!
+!       counting how many matvec we can skip at the next
+!       iteration
+!
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_rst = n_rst + 1
+          else
+            exit
+          end if
+        end do
+        restart = .true.
+      end if
+      if (verbose) write(6,1050) n_targ, n_act, n_frozen
+!
+    end do
+!
+    call get_time(t2)
+    t_tot = t2 - t_tot
+!
+!   if required, print timings
+!
+    1000 format(t3,'timings for davidson (cpu/wall): ',/, &
+                t3,'  matrix-vector multiplications: ',2f12.4,/, &
+                t3,'  diagonalization:               ',2f12.4,/, &
+                t3,'  orthogonalization:             ',2f12.4,/, &
+                t3,'                                 ',24('='),/,  &
+                t3,'  total:                         ',2f12.4)
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
+!      
+!   deallocate memory
+!
+    deallocate (cwork, rwork, iwork, ctau, tau, space, aspace, r, done, r_norm, a_red, a_copy, e_red)
+!
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
+    return
+  end subroutine davidson_fcomplex_driver
 !
   subroutine gen_david_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
                               shift,matvec,precnd,bvec,eig,evec,ok)
@@ -4226,6 +4626,48 @@ end subroutine caslr_eff_driver
     return
   end subroutine ortho
 !
+  subroutine ortho_fcomplex(n,m,u)
+    implicit none
+!
+!   orthogonalize m vectors of lenght n using the QR decomposition.
+!   this is done by computing U = QR and then by solving the upper 
+!   triangular system U(ortho)R = U.
+!
+!   using this strategy allows to apply the same linear transformation
+!   that orthogonalizes U to a second set of vectors that usually contain
+!   the product AU, where A is some matrix that has already been applied
+!   to U. 
+!   this is useful when U and AU are built together without explicitly 
+!   performing the matrix vector multiplication.
+!
+!   arguments:
+!   ==========
+!
+    integer,                      intent(in)    :: n, m
+    complex(dp),  dimension(n,m), intent(inout) :: u
+!
+!   local scratch
+!   =============
+!
+    complex(dp), allocatable :: v(:,:)
+!
+!   external functions:
+!   ===================
+!
+    external zgeqrf, ztrsm
+!
+    allocate (v(n,m))
+    v = u
+    call zgeqrf(n,m,u,n,ctau,cwork,lwork,info)
+!
+    call ztrsm('r','u','n','n',n,m,cone,u,n,v,n)
+!
+    u = v
+!
+    deallocate (v)
+    return
+  end subroutine ortho_fcomplex
+!
   subroutine ortho_complex(do_other,n,m,ur,ui,w)
     implicit none
 !
@@ -4524,6 +4966,167 @@ end subroutine caslr_eff_driver
     return
   end subroutine ortho_cd
 !
+  subroutine ortho_cd_fcomplex(n,m,u,growth,ok)
+    implicit none
+!
+!   orthogonalize m vectors of lenght n using the Cholesky factorization
+!   of their overlap. 
+!   this is done by metric = U^t U and then by computing its cholesky 
+!   decompositoin metric = L L^t. The orthogonal vectors are obtained then
+!   by solving the triangular linear system
+!
+!     U(ortho)L^T = U
+!
+!   using this strategy allows to apply the same linear transformation
+!   that orthogonalizes U to a second set of vectors that usually contain
+!   the product AU, where A is some matrix that has already been applied
+!   to U.  this is useful when U and AU are built together without explicitly 
+!   performing the matrix vector multiplication.
+!
+!   as cholesky decomposition is not the most stable way of orthogonalizing
+!   a set of vectors, the orthogonalization is refined iteratively. 
+!   still, this routine can fail. 
+!   a logical flag is then set to false, so that the calling program can 
+!   call a more robust orthogonalization routine without aborting.
+!
+!   arguments:
+!   ==========
+!
+    integer,                      intent(in)    :: n, m
+    complex(dp),  dimension(n,m), intent(inout) :: u
+    real(dp),                     intent(inout) :: growth
+    logical,                      intent(inout) :: ok
+!
+!   local variables
+!   ===============
+!
+    integer                  :: it, it_micro, i
+    complex(dp)              :: calpha
+    real(dp)                 :: metric_norm, dnrm2, dznrm2, alpha, unorm 
+    real(dp)                 :: shift, error, rcond, l_norm, linv_norm 
+    real(dp), parameter      :: tol_ortho_cd = two * epsilon(one)
+    logical                  :: macro_done, micro_done
+    integer, parameter       :: maxit = 10
+
+!   local scratch
+!   =============
+!
+    complex(dp), allocatable :: metric(:,:), msave(:,:)
+!
+!   external functions:
+!   ===================
+!
+    external                 :: zgemm, zgeqrf, ztrsm, dnrm2, dznrm2, zpotrf
+!
+!   get memory for the metric.
+!
+    allocate (metric(m,m), msave(m,m))
+    metric     = czero
+    macro_done = .false.
+!
+!   assemble the metric
+!
+    it = 0
+    growth = one
+    do while(.not. macro_done)
+      it = it + 1
+      if (it .gt. maxit) then
+!
+!       ortho_cd failed. return with an error message
+!
+        ok = .false.
+        write(6,100) ' maximum number of iterations reached.'
+        return
+      end if
+      call zgemm('c','n',m,m,n,cone,u,n,u,n,czero,metric,m)
+      msave = metric
+!
+!   compute the cholesky factorization of the metric.
+!
+      call zpotrf('l',m,metric,m,info)
+!
+!     if zpotrf failed, try a second time, after level-shifting the diagonal of the metric.
+!
+      if (info.ne.0) then
+!
+        calpha     = (100.0_dp,0.0_dp)
+        alpha      = 100.0_dp
+        unorm      = dznrm2(n*m,u,1)
+        it_micro   = 0
+        micro_done = .false.
+!
+!       add larger and larger shifts to the diagonal until zpotrf manages to factorize it.
+!
+        do while (.not. micro_done)
+          it_micro = it_micro + 1
+          if (it_micro.gt.maxit) then
+!
+!           something went very wrong. return with an error status, the orthogonalization
+!           will be carried out using a different algorithm.
+!
+            ok = .false.
+            write(6,100) ' maximum number of iterations for factorization reached.'
+            stop
+            return
+          end if
+!
+          shift = max(abs(epsilon(one)*alpha*unorm),tol_ortho)
+          metric = msave
+          call diag_shift_complex(m,shift,metric)
+          call zpotrf('l',m,metric,m,info)
+          calpha = calpha * (10.0_dp,0.0_dp)
+          alpha  = alpha * 10.0_dp
+          micro_done = info.eq.0
+        end do
+!
+      end if
+!
+!     we assume that the error on the orthogonality is of order k(l)^2 * eps,
+!     where eps is the machine precision. 
+!     the condition number k(l) is estimated by computing 
+!
+!     k(l) ||l|| ||l^-1||,
+!
+!     where the norm used is the following (see norm_estimate):
+!
+!     || A || = || D + O || <= || D ||_inf + || O ||_2
+!
+!     compute l^-1, using msave to store the inverse cholesky factor
+!
+      msave = metric
+      call ztrtri('l','n',m,msave,m,info)
+!
+!     compute the norm of l, l^-1 and the condition number:
+!
+      l_norm    = norm_est_fcomplex(m,metric)
+      linv_norm = norm_est_fcomplex(m,msave)
+      rcond     = l_norm * linv_norm
+!
+!     in each iteration of ortho_cd, we apply l^-t to u, which introduces
+!     a numerical error of order ||l^-1||. 
+!     this error is saved in growth and used in ortho_vs_x to check how much
+!     ortho_cd spoiled the previously computed orthogonality to x. 
+!
+      growth    = growth * linv_norm
+!
+!     orthogonalize u by applying l^(-t)
+!    
+      call ztrmm('r','l','c','n',n,m,cone,msave,m,u,n)
+!
+!     check the error:
+!
+      error      = epsilon(one) * rcond*rcond
+      macro_done = error .lt. tol_ortho_cd
+    end do
+!
+    100 format(t3,'ortho_cd_fcomplex failed with the following error:',a)
+!
+    ok = .true.
+!
+    deallocate (metric)
+    return
+  end subroutine ortho_cd_fcomplex
+!
   subroutine ortho_cd_complex(n,m,ur,ui,growth,ok)
     implicit none
 !
@@ -4718,6 +5321,40 @@ end subroutine caslr_eff_driver
     return
   end function norm_est
 !
+  real(dp) function norm_est_fcomplex(m,a)
+!
+!   compute a cheap estimate of the norm of a lower triangular matrix.
+!   let a = d + o, where d = diag(a). as
+!   
+!   || a || <= || d || + || o ||
+!
+!   we compute || d || as max_i |d(i)| and || o || as its frobenius norm.
+!   this is tight enough, and goes to 1 when a approaches the identity.
+!
+    implicit none
+    integer,                     intent(in) :: m
+    complex(dp), dimension(m,m), intent(in) :: a
+!
+    integer  :: i, j
+    real(dp) :: diag_norm, od_norm
+!
+    diag_norm = zero
+    do i = 1, m
+      diag_norm = max(diag_norm,abs(a(i,i)))
+    end do
+!
+    od_norm = zero
+    do i = 1, m
+      do j = 1, i - 1
+        od_norm = od_norm + a(i,j)**2
+      end do
+    end do
+    od_norm = sqrt(od_norm)
+!
+    norm_est_fcomplex = diag_norm + od_norm
+    return
+  end function norm_est_fcomplex
+!
   subroutine ortho_vs_x(n,m,k,x,u,ax,au)
     implicit none
 !
@@ -4812,6 +5449,101 @@ end subroutine caslr_eff_driver
 !
     return
   end subroutine ortho_vs_x
+!
+  subroutine ortho_vs_x_fcomplex(n,m,k,x,u)
+    implicit none
+!
+!   given two sets x(n,m) and u(n,k) of vectors, where x 
+!   is assumed to be orthogonal, orthogonalize u against x.
+!
+!   if required, orthogonalize au to ax using the same linear
+!   transformation, where ax and au are the results of the 
+!   application of a matrix a to both x and u.
+!
+!   furthermore, orthonormalize u and, if required, apply the
+!   same transformation to au.
+!
+!   this routine performs the u vs x orthogonalization and the
+!   subsequent orthonormalization of u iteratively, until the
+!   overlap between x and the orthogonalized u is smaller than
+!   a (tight) threshold. 
+!
+!   arguments:
+!   ==========
+!
+    integer,                      intent(in)    :: n, m, k
+    complex(dp),  dimension(n,m), intent(in)    :: x
+    complex(dp),  dimension(n,k), intent(inout) :: u
+!
+!   local variables:
+!   ================
+!
+    logical                   :: done, ok
+    integer                   :: it, i, j
+    real(dp)                  :: xu_norm, growth
+    complex(dp), allocatable  :: xu(:,:)
+!
+!   external functions:
+!   ===================
+!
+    intrinsic              :: random_number
+    real(dp)               :: dnrm2, dznrm2
+    external               :: dnrm2, dgemm, dznrm2, zgemm
+!   
+    integer, parameter     :: maxit = 10
+    logical, parameter     :: useqr = .false.
+!
+!   allocate space for the overlap between x and u.
+!
+    ok = .false.
+    allocate (xu(m,k))
+    done = .false.
+    it   = 0
+!
+!   start with an initial orthogonalization to improve conditioning.
+!
+    if (.not. useqr) call ortho_cd_fcomplex(n,k,u,growth,ok)
+    if (.not. ok .and. useqr) call ortho_fcomplex(n,k,u)
+!
+!   iteratively orthogonalize u against x, and then orthonormalize u.
+!
+    do while (.not. done)
+      it = it + 1
+!
+!     u = u - x (x^H u)
+!
+      call zgemm('c','n',m,k,n,cone,x,n,u,n,czero,xu,m)
+      call zgemm('n','n',n,k,m,-cone,x,n,xu,m,cone,u,n)
+!
+!     now, orthonormalize u.
+!
+      if (.not. useqr) call ortho_cd_fcomplex(n,k,u,growth,ok)
+      if (.not. ok .and. useqr) call ortho_fcomplex(n,k,u)
+!
+!     the orthogonalization has introduced an error that makes the new
+!     vector no longer fully orthogonal to x. assuming that u was 
+!     orthogonal to x to machine precision before, we estimate the 
+!     error with growth * eps, where growth is the product of the norms
+!     of all the linear transformations applied to u.
+!     if ortho_cd has failed, we just compute the overlap and its norm.
+!
+      if (.not. ok .or. useqr) then
+        call zgemm('c','n',m,k,n,cone,x,n,u,n,czero,xu,m)
+        xu_norm = dznrm2(m*k,xu,1)
+      else
+        xu_norm = growth * epsilon(one)
+      end if
+      done    = xu_norm.lt.tol_ortho
+!
+!     if things went really wrong, abort.
+!
+      if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x_fcomplex'
+    end do
+!
+    deallocate(xu)
+!
+    return
+  end subroutine ortho_vs_x_fcomplex
 !
   subroutine ortho_vs_x_complex(n,m,k,xr,xi,ur,ui,ax,au)
     implicit none
@@ -4909,7 +5641,7 @@ end subroutine caslr_eff_driver
 !
 !     if things went really wrong, abort.
 !
-      if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x'
+      if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x_complex'
     end do
 !
     deallocate(xu)
@@ -5351,6 +6083,25 @@ end subroutine caslr_eff_driver
     return
   end subroutine diag_shift
 !
+  subroutine diag_shift_complex(n,shift,a)
+    implicit none
+!  
+!   add shift to the diagonal elements of the metric a
+!  
+    integer,                     intent(in)    :: n
+    real(dp),                    intent(in)    :: shift
+!    complex(dp),                 intent(in)    :: shift
+    complex(dp), dimension(n,n), intent(inout) :: a
+!  
+    integer :: i
+!  
+    do i = 1, n
+      a(i,i) = a(i,i) + shift
+    end do
+!  
+    return
+  end subroutine diag_shift_complex
+!
   subroutine get_coeffs(len_a,len_u,n_max,n_act,a_red,u_x,u_p)
     implicit none
 !
@@ -5451,6 +6202,70 @@ end subroutine caslr_eff_driver
 !
     return
   end subroutine check_guess
+!
+  subroutine check_guess_complex(n,m,evec)
+    implicit none
+    integer,                     intent(in)    :: n, m
+    complex(dp), dimension(n,m), intent(inout) :: evec
+!
+    integer                   :: i, j, istat
+    real(dp)                  :: fac, diag_norm, out_norm
+    complex(dp)               :: xx(1)
+!
+    complex(dp), allocatable  :: coverlap(:,:)
+    real(dp),    allocatable  :: overlap(:,:)
+    real(dp)                  :: dnrm2, dznrm2
+    external                  :: dnrm2, dznrm2
+!    
+    integer,     dimension(4) :: vec
+    real(dp),    dimension(4) :: vecr
+!
+!   check whether evec is zero.
+!
+    fac = dznrm2(n*m,evec,1)
+    if (fac.eq.zero) then
+!
+!     no luck. make a random guess, then orthonormalize it.
+!
+      vecr = 0.0_dp
+      call random_number(vecr)
+      vec = floor(101*vecr,dp) 
+      if (mod(vec(4),2) .ne. 1) vec(4)=vec(4)+1
+      call zlarnv(4,vec,n*m,evec)  
+      call ortho_fcomplex(n,m,evec)
+    else
+!
+!     compute the overlap and check that the vectors are orthonormal.
+!
+      allocate (overlap(m,m), coverlap(m,m), stat=istat)
+      call check_mem(istat)
+      call zgemm('c','n',m,m,n,cone,evec,n,evec,n,czero,coverlap,m)
+!      overlap = real(coverlap)
+      diag_norm = zero
+      out_norm  = zero
+      do i = 1, m
+!        diag_norm = diag_norm + dznrm2(1,coverlap(i,i),1)**2
+        diag_norm = diag_norm + conjg(coverlap(i,i))*coverlap(i,i)
+        do j = 1, i-1
+          out_norm = out_norm + conjg(coverlap(i,j))*coverlap(i,j)
+        end do
+      end do
+!
+      diag_norm = diag_norm/real(m,dp)
+!
+      if (diag_norm .ne. one .or. out_norm.ne.zero) then
+!
+!       orthogonalize the guess:
+!
+        call ortho_fcomplex(n,m,evec)
+      end if
+!
+      deallocate (overlap, coverlap, stat = istat)
+      call check_mem(istat)
+    end if
+!
+    return
+  end subroutine check_guess_complex
 !
   subroutine check_mem(istat)
     implicit none
