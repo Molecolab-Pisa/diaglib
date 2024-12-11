@@ -11,13 +11,13 @@ program main
 !
 ! initialize:
 !
-  n      = 3000
-  n_want = 60
+  n      = 400
+  n_want = 10
   tol    = 1.0e-6_dp
   itmax  = 1000
   m_max  = 20
   nmult  = 0
-  tdscf  = .false.
+  tdscf  = .true.
   i_alg  = 0
 !
   if ((m_max*n_want) .gt. n) then 
@@ -1321,7 +1321,7 @@ end program main
     real(dp)              :: sqrttwo, lw(1)
     real(dp), allocatable :: evecre(:,:), evecim(:,:), eig(:), diagonal(:), evec(:,:)
     real(dp), allocatable :: evecre_(:,:), evecim_(:,:), eig_(:), evec_(:,:)
-    real(dp), allocatable :: work(:), w(:)
+    real(dp), allocatable :: work(:), w(:), tmp1(:,:), tmp2(:,:)
 !
 !   lapack matrices 
 !
@@ -1387,6 +1387,31 @@ end program main
         ambim(i,j) = -ambim(j,i)
       end do 
     end do
+!
+!   to create random A+B/A-B matrices
+!
+!    allocate(tmp1(n,n), tmp2(n,n))
+!    call random_number(tmp1)
+!    tmp1 = tmp1 - 0.5d0
+!    tmp2 = matmul(tmp1, transpose(tmp1))
+!    apbre = (tmp2 + transpose(tmp2)) / 2.0d0
+!    call random_number(tmp1)
+!    tmp1 = tmp1 - 0.5d0
+!    tmp2 = matmul(tmp1, transpose(tmp1))
+!    ambre = (tmp2 + transpose(tmp2)) / 2.0d0
+!    call random_number(tmp1)
+!    tmp1 = tmp1 - 0.5d0
+!    tmp2 = matmul(tmp1, transpose(tmp1))
+!    apbim = (tmp2 - transpose(tmp2)) / 2.0d0
+!    call random_number(tmp1)
+!    tmp1 = tmp1 - 0.5d0
+!    tmp2 = matmul(tmp1, transpose(tmp1))
+!    ambim = (tmp2 - transpose(tmp2)) / 2.0d0
+!    do i = 1, n
+!      apbre(i,i) = apbre(i,i) + dble(i) * 2.0d0
+!      ambre(i,i) = ambre(i,i) + dble(i) 
+!    end do
+!    deallocate(tmp1, tmp2)
 !
 !   build sigma: hermitian Re(sym), Im(antisym)  
 !
@@ -1457,15 +1482,34 @@ end program main
     apbim = aaim + bbim
     ambim = aaim - bbim
 !
-!   to simplify the problem with an SCF-like metric:
+    if (tdscf) then
+!            
+      write(6,*) 
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) '                  TIME-DEPENDENT SELF-CONSISTENT FIELD               '
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) 
 !
-!    sigmare = 0.0_dp
-!    sigmaim = 0.0_dp
-!    do i = 1, n
-!      sigmare(i,i) = 1.0_dp
-!    end do
-!    deltare = 0.0_dp 
-!    deltaim = 0.0_dp 
+!     to simplify the problem with an SCF-like metric:
+!
+      sigmare = 0.0_dp
+      sigmaim = 0.0_dp
+      do i = 1, n
+        sigmare(i,i) = 1.0_dp
+      end do
+      deltare = 0.0_dp 
+      deltaim = 0.0_dp 
+    else 
+      write(6,*) 
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) '                           CAS-SCF LINEAR RESPONSE                   '
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) '   ------------------------------------------------------------------' 
+      write(6,*) 
+    end if
 !  
 !   build sigma + delta and sigma - delta
 !  
@@ -1533,7 +1577,8 @@ end program main
 !     write the results on a file for comparison.
 !
       open (unit = 10, file = 'lapack_complex.txt', form = 'formatted', access = 'sequential')
-      do i = 1, 2*n_want, 2
+      !do i = 1, 2*n_want, 2
+      do i = 1, 2*n, 2
         write(10,1000) i, 1.0_dp/w(n4-i+1)
 !
 !       fix the phase so that the first element of the eigenvector is positive.
@@ -1564,7 +1609,7 @@ end program main
 !
     n_eig = min(2*n_want, n_want + 5)
     n_eig = n_want + 5
-    !n_eig = n
+!    n_eig = n
 !
 !   allocate memory for the eigenvectors and eigenvalues:
 !
@@ -1573,7 +1618,11 @@ end program main
 !
 !   make a guess for the eigenvector 
 !
-    call guess_evec(1,n4,n_eig,diagonal,evec)
+    if (tdscf) then 
+      call guess_evec_2(1,n4,n_eig,diagonal,evec)
+    else
+      call guess_evec(1,n4,n_eig,diagonal,evec)
+    end if
 !
 !   evec structure: X = (Yr Zr Yi -Zi) 
 !
@@ -1593,8 +1642,8 @@ end program main
     write(6,*) 
 !
     call caslr_complex_driver(.true.,n,n2,n_want,n_eig,itmax,tol,m_max,apbvec_complex, &
-                                 ambvec_complex,spdvec_complex,smdvec_complex, &
-                                 lrprec_1_complex,eig,evecre,evecim,ok)
+                              ambvec_complex,spdvec_complex,smdvec_complex, &
+                              lrprec_1_complex,eig,evecre,evecim,ok)
 !
 !   write the converged results on file for comparison:
 !
@@ -1947,6 +1996,117 @@ end program main
     end if
     return
   end subroutine guess_evec
+!
+  subroutine guess_evec_2(iwhat,n,m,diagonal,evec)
+    use real_precision
+    implicit none
+    integer,                   intent(in)    :: iwhat, n, m
+    real(dp), dimension(n/4),  intent(in)    :: diagonal
+    real(dp), dimension(n,m),  intent(inout) :: evec
+!
+!   guess the eigenvector.
+!
+    integer               :: i, ipos, n_seed
+    integer,  allocatable :: iseed(:)
+    real(dp), allocatable :: temp_r(:), temp_i(:)
+    logical,  allocatable :: mask(:)
+!
+!   initialize a random number generator in a predictible way.
+!
+    call random_seed(size=n_seed)
+    allocate (iseed(n_seed))
+    iseed = 1
+    call random_seed(put=iseed)
+    deallocate (iseed)
+!
+    evec   = 0.0_dp
+!
+    allocate (mask(n/4))
+!
+    if (iwhat.eq.1) then
+!
+!     get the minimum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = minloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = 1.0_dp
+      end do
+    else if (iwhat.eq.2) then
+!
+!     get the maximum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = maxloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = 1.0_dp
+      enddo
+    else if (iwhat.eq.3) then
+!
+!     random vector between 0 and 1
+!
+      call random_number(evec)
+    else if (iwhat.eq.4) then
+!
+!     random vector between -0.5 and 0.5
+!
+      call random_number(evec)
+      evec = evec - 0.50_dp
+    else if (iwhat.eq.5) then
+!
+      call random_number(evec)
+      evec = evec * 0.01_dp
+!
+!     get the maximum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = maxloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = evec(ipos,i) + 1.0_dp
+      enddo
+!
+    else if (iwhat.eq.6) then
+!
+      call random_number(evec)
+      evec = evec * 0.01_dp
+!
+!     get the minimum element of the diagonal
+!
+      mask = .true.
+      do i = 1, m
+        ipos = minloc(diagonal,dim=1,mask=mask)
+        mask(ipos) = .false.   
+        evec(ipos,i) = evec(ipos,i) + 1.0_dp
+      enddo
+!
+    else if (iwhat.eq.7) then
+!
+!     get the minimum element of the diagonal
+!
+      mask = .true.
+      allocate(temp_r(n/2), temp_i(n/2))
+      do i = 1, m, 2
+        !ipos = minloc(diagonal,dim=1,mask=mask)
+        !mask(ipos) = .false.   
+        !evec(ipos,i)       = 1.0_dp
+        !!evec(ipos+n/2,i)   = 1.0_dp
+        !!evec(ipos,i+1)     = 1.0_dp
+        !evec(ipos+n/2,i+1) = -1.0_dp
+        call random_number(temp_r)
+        call random_number(temp_i)
+        evec(1:n/2,i)     = temp_r
+        evec(n/2+1:n,i)   = temp_i
+        evec(1:n/2,i+1)   = temp_i
+        evec(n/2+1:n,i+1) = -temp_r
+      enddo
+      deallocate(temp_r, temp_i)
+ 
+    end if
+    return
+  end subroutine guess_evec_2
 !
   subroutine guess_evec_fcomplex(iwhat,n,m,diagonal,evec)
     use real_precision

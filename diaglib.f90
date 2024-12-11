@@ -773,6 +773,12 @@ module diaglib
       call dgemm('t','n',ldu,ldu,n,one,vm,n,lvm,n,zero,emmat,lda)
       call dgemm('t','n',ldu,ldu,n,one,vm,n,bvm,n,zero,smat,lda)
 !
+      !write(6,*) 'smat'!, smat(1:2*ldu,1:2*ldu)
+      !do i = 1, 2*ldu 
+      !  write(6,'(8f15.8)') smat(1:8,1:8)
+      !end do
+      !pause
+!
       a_red = zero
       s_red = zero
       a_red(1:ldu,1:ldu)             = epmat(1:ldu,1:ldu)
@@ -1165,7 +1171,7 @@ module diaglib
 !
 !   start by allocating memory for the various lapack routines
 !
-    lwork = get_mem_lapack(n,n_max) 
+    lwork = get_mem_lapack(n,n_max*2) 
     allocate (work(lwork), tau(n_max), stat=istat)
     call check_mem(istat)
 !
@@ -5279,7 +5285,7 @@ end subroutine caslr_eff_driver
       macro_done = error .lt. tol_ortho_cd
     end do
 !
-    100 format(t3,'ortho_cd failed with the following error:',a)
+    100 format(t3,'ortho_cd_complex failed with the following error:',a)
 !
     ok = .true.
 !
