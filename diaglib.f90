@@ -1159,13 +1159,13 @@ module diaglib
 !   no expansion space smaller than max_dav = 10 is deemed acceptable.
 !
     dim_dav = max(min_dav,max_dav)
-    lda     = dim_dav*n_max*2
+    lda     = dim_dav*n_max
     lda2    = 2 * lda
     lda4    = 4 * lda
 !
 !   start by allocating memory for the various lapack routines
 !
-    lwork = get_mem_lapack(n,n_max) 
+    lwork = get_mem_lapack(n,n_max*2) 
     allocate (work(lwork), tau(n_max), stat=istat)
     call check_mem(istat)
 !
