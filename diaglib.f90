@@ -592,7 +592,7 @@ module diaglib
 !
     integer               :: i, j, k, it, i_eig
 !
-    integer               :: lwork_svd
+    integer               :: lwork_svd, lwork_dsygv
 !
     real(dp)              :: sqrtn, tol_rms, tol_max, growth
     real(dp)              :: xx(1), lw_svd(1)
@@ -773,7 +773,24 @@ module diaglib
 !
 !       default algorithm: solve the 2n-dimensional inverse problem.
 !
+
+        ! Check if work is large enough
+        lwork_dsygv=-1
+        call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork_dsygv,info)
+        lwork_dsygv = max(int(work(1)), lwork)
+
+        ! If not, reallocate with the required space
+        if (lwork_dsygv /= lwork) then
+          deallocate(work)
+          allocate(work(lwork_dsygv))
+          lwork = lwork_dsygv
+        endif
+
         call dsygv(1,'v','l',2*ldu,s_red,2*lda,a_red,2*lda,e_red,work,lwork,info)
+
+        if (info /= 0) then
+          print *, 'DSYGV failed in caslr_driver'
+        end if
 !
 !       extract the eigenvalues and compute the ritz approximation to the
 !       eigenvectors 
