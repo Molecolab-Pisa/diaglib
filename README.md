@@ -27,7 +27,7 @@ the available algorithms are
 
 2) davidson-liu
 
-both algorithms require two user-provided routines to apply the matrx
+both algorithms require two user-provided routines to apply the matrix
 and a suitable preconditioner to a set of vectors.
 such routines have the following interface:
 

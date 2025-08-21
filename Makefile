@@ -2,9 +2,10 @@
 #   Makefile
 #
 FC = gfortran
-FFLAGS = -Og -g -fbacktrace  -std=legacy --pedantic -ftrapv -Wuninitialized -fopenmp#-fsanitize=address
-#LIBS = -lblas -llapack 
-LIBS = -L/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/lib -lblas -llapack 
+
+FFLAGS = -O2 -fopenmp -std=f95 --pedantic -ftrapv
+#FFLAGS= -g -msse4.2  -fcheck=all -Waliasing -Wampersand -Wconversion -Wsurprising -Wintrinsics-std -Wno-tabs -Wintrinsic-shadow -Wline-truncation -Wreal-q-constant -Wuninitialized  -fbacktrace -ffpe-trap=zero,overflow -finit-real=nan
+LIBS = -lblas -llapack 
 #LIBS = -L/opt/OpenBLAS/lib -lopenblas
 
 MODS   = real_precision.o utils.o diaglib.o
