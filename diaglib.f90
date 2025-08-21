@@ -147,7 +147,7 @@ module diaglib
 !
 ! convergence thresholds for orthogonalization
 !
-  real(dp), parameter    :: tol_ortho = two * epsilon(one)
+  real(dp), parameter    :: tol_ortho = 1.0d-12 ! two * epsilon(one)
 ! 
 ! memory and info for lapack routines
 !
@@ -157,13 +157,13 @@ module diaglib
 ! timings:
 !
   real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &
-                            t_mv(2), t_tot(2)
+                            t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
 !
 ! subroutines:
 ! ============
 !
   public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, caslr_eff_driver, &
-            ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
+            nonsym_driver, ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
 !
   contains
 !
@@ -1479,7 +1479,7 @@ module diaglib
     return
   end subroutine caslr_eff_driver
 !
-  subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
+  subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
                              shift,matvec,precnd,eig,evec,ok)
 !
 !   main driver for davidson-liu.
@@ -2248,6 +2248,796 @@ module diaglib
     return
   end subroutine gen_david_driver
 !
+  subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
+                            matvec,matvec_l,precnd,eig,evec_r,evec_l,side,ok)
+    logical,                        intent(in)    :: verbose
+    integer,                        intent(in)    :: n, n_targ, n_max
+    integer,                        intent(in)    :: max_iter, max_dav
+    real(dp),                       intent(in)    :: tol, shift
+    character(len=1),               intent(in)    :: side
+    real(dp), dimension(n_max),     intent(inout) :: eig
+    real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
+    logical,                        intent(inout) :: ok
+    external                                      :: matvec, matvec_l, precnd
+!
+!   local variables:
+!   ================
+!
+    integer, parameter    :: min_dav = 10
+    integer               :: istat
+!   
+!   actual expansion space size and total dimension
+!
+    integer               :: dim_dav, lda
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act, ind, i_beg
+!
+!   current size and total dimension of the expansion space
+!
+    integer               :: m_dim, ldu
+!
+!   number of frozen (i.e. converged) vectors
+!
+    integer               :: n_frozen
+!
+    integer               :: it, i_eig
+!   
+    real(dp)              :: sqrtn, tol_rms, tol_max, tol_im
+    real(dp)              :: xx(1), yy
+!
+!   arrays to control convergence and orthoginalization
+!
+    logical, allocatable  :: done(:)
+!
+!   expansion spaces, residuals and their norms
+!
+    real(dp), allocatable :: space_r(:,:), space_l(:,:), aspace_r(:,:), aspace_l(:,:), &
+                              r_r(:,:), r_l(:,:), r_norm_r(:,:), r_norm_l(:,:)
+!
+!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
+!
+    real(dp), allocatable :: a_red(:,:), e_red_re(:), e_red_im(:), &
+                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), copy_eig(:)
+!
+!   restarting variables
+!
+    logical               :: restart
+!
+!   variables for left, right, or both eigenvectors
+!
+    logical               :: left, right, consecutive, do_davidson
+    real(dp)              :: eig_r(n_targ)
+!
+    integer               :: verbosity, k, i, j
+! 
+!   variables for the sort
+!
+    integer               :: max_idx(1)
+    logical               :: found_im, found_er, double_r, double_l, ortho_ok
+    logical, allocatable  :: mask_overlap(:)
+!
+    real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), overlap_diff(:)
+    real(dp)              :: overlap_idx_r(2,n_max), overlap_val_r(2,n_max), overlap_self_l(n_max), &
+                              overlap_idx_l(2,n_max), overlap_val_l(2,n_max), overlap_self_r(n_max)
+    real(dp),allocatable  :: perm_temp(:,:)
+!
+!   external functions:
+!   ===================
+!
+    real(dp)              :: dnrm2
+    external              :: dnrm2, dgemm, dcopy, dgeev
+!
+!   computing actual size of the expansion space, checking that
+!   the input makes sense.
+!
+    dim_dav = max(min_dav,max_dav)
+    lda     = dim_dav*n_max  
+!
+!   start by allocating memory for the various lapack routines
+!
+    lwork   = get_mem_lapack(n,n_max) 
+    allocate (work(lwork), tau(lda), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for for expansion space, the corresponding
+!   matrix-multiplied vectors and the residuals
+!
+    allocate (space_r(n,lda), space_l(n,lda), aspace_r(n,lda), aspace_l(n,lda), r_r(n,n_max), &
+      r_l(n,n_max), stat=istat)
+    call check_mem(istat)
+!
+!   allocate memory for convergency check
+!
+    allocate (done(n_max), r_norm_r(2,n_max), r_norm_l(2,n_max), stat=istat)
+!
+!   allocate memory for the reduced matrix, its eigenvalues with real &
+!   imaginary parts, and its left & right eigenvectors 
+!
+    allocate (a_red(lda,lda), e_red_re(2*lda), e_red_im(2*lda), evec_red_r(lda,lda), &
+              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), copy_eig(2*lda), stat =istat)
+    call check_mem(istat)
+!
+!   allocate space for orthogonalization routines
+!
+!   allocate mask array for sorting routine
+
+    allocate (overlap_diff(n_max), overlap(2*n_max,2*n_max), &
+      perm_mat(2*n_max,2*n_max), evec_temp(lda,n_max), eig_temp(lda), mask_overlap(2*n_max), stat = istat)
+    allocate(perm_temp(2*n_max,2*n_max))
+    call check_mem(istat)
+!
+!   set the tolerance and compute a useful constant to compute rms norms:
+!
+    sqrtn   = sqrt(real(n,dp))
+    tol_rms = tol
+    tol_max = 10.0_dp * tol
+    tol_im  = 1.d-12
+!
+!   set some quantities
+!
+    ok          = .false.
+    right       = .false.
+    left        = .false.
+    consecutive = .false.
+    do_davidson = .true.
+!
+!   extract from the input which eigenvectors shall be computed in which way
+!     r = only right eigenpairs
+!     l = only left eigenpairs
+!     s = both eigenpairs in simultaneous manner
+!     c = both eigenpairs in consecutive manner, start with right
+!
+      if (side == "r") then 
+        right = .true.
+      else if (side == "l") then 
+        left  = .true.
+      else if (side == "s") then
+        right = .true.
+        left  = .true. 
+      else if (side == "c") then 
+        consecutive = .true.
+        right = .true.
+      else
+        print *, "choice for side is not correct. can be r,l,s,c."
+        stop
+      end if
+!
+!   check weather we have a guess for the eigenvectors in evec, and
+!   weather it is orthonormal.
+!   if evec is zero, create a random guess
+!
+    if (right) call check_guess(n,n_max,evec_r)
+    if (left)  call check_guess(n,n_max,evec_l)
+!
+    do while (do_davidson)
+! 
+!     clean out various quantities
+!
+      t_tot       = zero
+      t_diag      = zero
+      t_ortho     = zero
+      t_mv        = zero
+      space_r     = zero
+      space_l     = zero
+      aspace_r    = zero
+      aspace_l    = zero
+      a_red       = zero
+      e_red_re    = zero
+      e_red_im    = zero
+      copy_r      = zero
+      copy_l      = zero
+      r_norm_r    = zero
+      r_norm_l    = zero
+      r_r         = zero
+      r_l         = zero
+      done        = .false.
+!
+      call get_time(t_tot1)
+!
+!     move guess into the expansion spaces
+!
+      if (right) call dcopy(n*n_max,evec_r,1,space_r,1)
+      if (left)  call dcopy(n*n_max,evec_l,1,space_l,1)
+!
+      n_act = n_max
+      i_beg = 1
+      ind   = 1
+!
+!     initialize the counter for the expansion of the subspace
+!
+      m_dim = 1
+      ldu   = 0
+!
+!     initialize to false the restart
+!
+      restart = .false.
+!
+!     print header
+!
+      if (verbose) write(6,1030) tol, right, left
+! 
+!     main loop
+!     
+      do it = 1, max_iter
+!
+!       update the size of the expansion space.
+!
+        ldu   = ldu + n_act
+!
+!       perform this iteration's matrix-vector multiplications for both 
+!       right and left expansion spaces
+!
+        call get_time(t1)
+        if (right) call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
+        if (left)  call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
+        call get_time(t2)
+        t_mv = t_mv + t2 -t1
+!
+!       get the reduced matrix
+!
+        if (left .and. right) then 
+          call dgemm('t','n',ldu,ldu,n,one,space_l,n,aspace_r,n,zero,a_red,lda)
+        else if (right) then
+          call dgemm('t','n',ldu,ldu,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
+        else if (left) then
+          call dgemm('t','n',ldu,ldu,n,one,aspace_l,n,space_l,n,zero,a_red,lda)
+        end if
+!
+!       diagonalize the reduced matrix
+!
+        call get_time(t1)
+        call dgeev('v','v',ldu,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+        call get_time(t2)
+!
+        t_diag = t_diag + t2 - t1
+! 
+!       check if diagonalization terminated with info = 0
+!
+        if (info.ne.0) then
+          print *, "diagonalization of reduced space failed."
+          stop
+        end if
+!
+!       sort lowest eigenpairs in increasing order in range 2*n_max to ensure that all n_max 
+!       sought eigenpairs are in the range 2*n_max
+!
+        if (it.gt.1 .and. .not. restart) then
+          call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max+n_act,lda,.true.,tol_im)
+!
+        else if (it.eq.1 .or. restart) then
+          call sort_eigenpairs(ldu,ldu,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
+!
+        end if
+!       double check for complex contributions in the n_max sought eigenvalues
+!
+        found_im = .false.
+        do j = 1, n_max
+          if (e_red_im(j).gt.tol_im) found_im = .true.
+        end do
+!
+        if (found_im.and.verbose) then
+          print *
+          print *, "complex contribution in sought eigenvalues"
+          print *
+        end if
+!
+!       compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
+!       to ensure correct sorting by checking if largest absolute value of column is on the
+!       diagonal. if not, use the indices of the largest elements to construct a permutation
+!       matrix to resort the eigenpairs according to the overlap.
+!  
+        if (it.ne.1 .and. .not. restart) then  
+!
+!         compute overlap for the right eigenvectors and extract the indice and value of the largest
+!         and second largest overlap
+!
+          call dgemm('t','n',2*n_max,2*n_max,ldu,one,copy_r,lda,evec_red_r,lda,zero,overlap,2*n_max)
+!
+          found_er = .false.
+          do j = 1, n_max
+            mask_overlap = .true.
+            max_idx = maxloc(abs(overlap(:,j)))
+            overlap_idx_r(j,1)  = real(max_idx(1), kind=dp)
+            overlap_self_r(j) = overlap(j,j)
+            overlap_val_r(j,1) = overlap(max_idx(1),j)
+            mask_overlap(max_idx) = .false.
+!           
+!           identify if a swapping is necessary
+!
+            if (max_idx(1).ne.j) then
+                found_er = .true.
+            end if
+!
+!           extract index and value of second larges overlap
+!
+            max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
+            overlap_idx_r(j,2)  = real(max_idx(1), kind=dp)
+            overlap_val_r(j,2) = overlap(max_idx(1),j)
+          end do
+!
+!         compute overlap for the left eigenvectors
+!
+          call dgemm('t','n',2*n_max,2*n_max,ldu,one,copy_l,lda,evec_red_l,lda,zero,overlap,2*n_max)
+!
+          do j = 1, n_max
+            mask_overlap = .true.
+            max_idx = maxloc(abs(overlap(:,j)))
+            overlap_idx_l(j,1)  = real(max_idx(1), kind=dp)
+            overlap_self_l(j) = overlap(j,j)
+            overlap_val_l(j,1) = overlap(max_idx(1),j)
+            mask_overlap(max_idx) = .false.
+!           
+!           identify if a swapping is necessary
+!
+            if (max_idx(1).ne.j) then
+              found_er = .true.
+            end if
+!
+!           extract index and value of second largest overlap
+!
+            max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
+            overlap_idx_l(j,2)  = real(max_idx(1), kind=dp)
+            overlap_val_l(j,2) = overlap(max_idx(1),j)
+          end do
+!
+!         check if no indices were assigned twice as maximum overlap
+!
+          double_r = .false.
+          double_l = .false.
+          do j=1, n_max
+            do k=1, n_max
+              if (k .ne. j .and. overlap_idx_r(j,1) .eq. overlap_idx_r(k,1)) then 
+                double_r = .true.
+              end if
+            end do
+          end do
+          do j=1, n_max
+            do k=1, n_max
+              if (k .ne. j .and. overlap_idx_l(j,1) .eq. overlap_idx_l(k,6)) then 
+                double_l = .true.
+              end if
+            end do
+          end do
+!
+!         try easy fix, by just taking the permutation idices of the other eigenvector side
+!
+          if (double_r .and. .not. double_l) then
+            overlap_idx_r(:,1) = overlap_idx_l(:,1)
+          else if (double_l .and. .not. double_r) then
+            overlap_idx_l(:,1) = overlap_idx_r(:,1)
+          else if (double_r .and. double_l) then
+!
+!           check which second largest overlap is larger and take this indice as max_overlap.
+!           try for right side only, if no result, dont swap anything and try to continue 
+!           without swapping any eigenvectors
+!
+            do j=1, n_max
+              do k=1, n_max
+                if (k .ne. j .and. overlap_idx_r(j,1) .eq. overlap_idx_r(k,1)) then 
+                  if (overlap_val_r(j,2) .gt. overlap_val_r(k,2)) then
+                    overlap_idx_r(j,1) = overlap_idx_r(j,2)
+                  else
+                    overlap_idx_r(k,1) = overlap_idx_r(k,2)
+                  end if
+                end if
+              end do
+            end do
+!
+!           check again if they are the same indices in the max_overlap for the right side.
+!           if no, then take these indices for the right and left side. if yes, try without 
+!           swapping
+!
+            double_r = .false.
+            do j=1, n_max
+              do k=1, n_max
+                if (k .ne. j .and. overlap_idx_r(j,1) .eq. overlap_idx_r(k,1)) then 
+                  double_r = .true.
+                end if
+              end do
+            end do
+            if (double_r) then
+              do j=1, n_max
+                overlap_idx_r(j,1) = real(j, kind=dp)
+                overlap_idx_l(j,1) = real(j, kind=dp)
+              end do
+            else
+              overlap_idx_l(:,1) = overlap_idx_r(:,1)
+            end if  
+          end if
+!
+!         check if maximum indices from right and left eigenvectors are the same
+!
+          overlap_diff = overlap_idx_r(:,1) - overlap_idx_l(:,1)
+          if (dnrm2(n_max,overlap_diff,1 ) .ne. 0) then
+            if (sum(overlap_val_r(:,1)) .gt. sum(overlap_val_l(:,1))) then
+              overlap_idx_l(:,1) = overlap_idx_r(:,1)
+            else
+              overlap_idx_r(:,1) = overlap_idx_l(:,1)
+            end if
+          end if
+!
+          if (found_er) then
+!
+!             now permute eigenvectors according to the maxiumum overlap.
+!             get permutation matrix first
+!
+              perm_mat = zero 
+              do j=1, n_max
+                perm_mat(int(overlap_idx_r(j,1)),j) = one
+              end do
+              perm_temp = transpose(perm_mat)
+!
+!             now permute left & right eigenvectors and imaginary & real eigenvalues 
+!             note: the use of 't' instead of computing the transpose explicitly obtained in
+!                   a different result
+!
+              call dgemm('n','n',ldu,n_max,2*n_max,one,evec_red_r,lda,perm_mat,2*n_max,zero,evec_temp,lda)
+              call dcopy(ldu*n_max,evec_temp,1,evec_red_r,1)
+!
+              call dgemm('n','n',ldu,n_max,2*n_max,one,evec_red_l,lda,perm_mat,2*n_max,zero,evec_temp,lda)
+              call dcopy(ldu*n_max,evec_temp,1,evec_red_l,1)
+!
+              call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_re,1,zero,eig_temp,1)
+              call dcopy(n_max,eig_temp,1,e_red_re,1)
+!
+              call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_im,1,zero,eig_temp,1)
+              call dcopy(n_max,eig_temp,1,e_red_im,1)
+!
+          end if
+        end if
+!
+!       copy and save the new eigenvectors for the next iteration
+!
+        restart = .false.
+        copy_r   = evec_red_r
+        copy_l   = evec_red_l
+        copy_eig = e_red_re
+!
+!       extract the eigenvalues and compute the ritz approximation to the 
+!       eigenvectors
+!
+        eig = e_red_re(1:n_max)
+!
+        if (right) call dgemm('n','n',n,n_max,ldu,one,space_r,n,evec_red_r,lda,zero,evec_r,n)
+        if (left)  call dgemm('n','n',n,n_max,ldu,one,space_l,n,evec_red_l,lda,zero,evec_l,n)
+!
+!       compute the residuals, and their rms and sup norms
+!
+        if (right) call dgemm('n','n',n,n_max,ldu,one,aspace_r,n,evec_red_r,lda,zero,r_r,n) 
+        if (left)  call dgemm('n','n',n,n_max,ldu,one,aspace_l,n,evec_red_l,lda,zero,r_l,n) 
+!
+        do i_eig = 1, n_targ
+!
+!         if the eigenvalue is already converged, skip it.
+!
+          if (done(i_eig)) cycle
+!
+          if (right) then
+            call daxpy(n,-eig(i_eig),evec_r(:,i_eig),1,r_r(:,i_eig),1)
+            r_norm_r(1,i_eig) = dnrm2(n,r_r(:,i_eig),1)/sqrtn
+            r_norm_r(2,i_eig) = maxval(abs(r_r(:,i_eig)))
+          end if
+          if (left) then
+            call daxpy(n,-eig(i_eig),evec_l(:,i_eig),1,r_l(:,i_eig),1)
+            r_norm_l(1,i_eig) = dnrm2(n,r_l(:,i_eig),1)/sqrtn
+            r_norm_l(2,i_eig) = maxval(abs(r_l(:,i_eig)))
+          end if 
+!
+        end do
+!
+!       check convergence. lock the first contiguous converged eigenvalues
+!       by setting the logical array "done" to true
+!
+        do i_eig = 1, n_targ
+          if (done(i_eig)) cycle
+          done(i_eig)     = r_norm_r(1,i_eig).lt.tol_rms .and.&
+                            r_norm_r(2,i_eig).lt.tol_max .and.&
+                            r_norm_l(1,i_eig).lt.tol_rms .and.& 
+                            r_norm_l(2,i_eig).lt.tol_max .and.&    
+                            it.gt.1                               
+          if (.not.done(i_eig)) then
+            done(i_eig+1:n_max) = .false.
+            exit
+          end if
+        end do
+!
+!       print some information
+!
+        if (verbose) then
+          do i_eig = 1, n_targ
+            write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_l(:,i_eig), r_norm_r(:,i_eig), done(i_eig)
+          end do
+          write(6,*)
+        end if 
+!
+        if (all(done(1:n_targ))) then
+          ok = .true.
+          exit
+        end if
+!       
+!       check weather an update is required.
+!       if not, perform a davidson restart
+!
+        if (m_dim .lt. dim_dav) then 
+!
+!         compute the preconditioned residuals using davidson's procedure
+!         note that this is done with a user-supplied subroutine, that can
+!         be generalized to experiment with fancy preconditioners that may
+!         be more effective than the diagonal one, as in the original 
+!         algorithm.
+!
+          m_dim = m_dim + 1
+          i_beg = i_beg + n_act
+          n_act = n_max
+          n_frozen = 0
+          do i_eig = 1, n_targ
+            if (done(i_eig)) then
+              n_act = n_act - 1
+              n_frozen = n_frozen + 1
+            else
+              exit
+            end if
+          end do
+          ind   = n_max - n_act + 1
+          if (right) call precnd(n,n_act,-eig(ind),r_r(1,ind),space_r(1,i_beg))
+          if (left)  call precnd(n,n_act,-eig(ind),r_l(1,ind),space_l(1,i_beg))
+!
+!         orthogonalize the new vectors to the existing ones of the respective other
+!         space and orthogonalize set of new vectors among each other
+!
+!         Gram-Schmit orthogonalization of residual to the respective subspace 
+!
+          call get_time(t1)
+          if (right .and. left) then
+            call biortho_vs_x(n,ldu,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+          else if (right) then
+            call ortho_vs_x(n,ldu,n_act,space_r,space_r(1,i_beg),xx,xx)
+          else if (left) then
+            call ortho_vs_x(n,ldu,n_act,space_l,space_l(1,i_beg),xx,xx)
+          end if
+          call get_time(t2)
+!
+          t_ortho = t_ortho + t2 - t1
+!
+!         normalize columns 
+!
+        else 
+          if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+          n_act   = n_max
+          space_r = zero
+          space_l = zero
+!
+!         put current eigenvectors into the first position of tne
+!         expansion space
+!
+          if (right) call dcopy(n_max*n,evec_r,1,space_r,1)
+          if (left)  call dcopy(n_max*n,evec_l,1,space_l,1)
+!
+          ortho_ok = .false.
+          call get_time(t1)
+          if (right .and. left) then
+            call svd_biortho(n,n_act,space_r,space_l)
+          else if (right) then 
+            call ortho_cd(n,n_act,space_r,yy,ok) 
+          else if (left) then 
+            call ortho_cd(n,n_act,space_l,yy,ok) 
+          end if
+          call get_time(t2)
+          t_ortho = t_ortho + t2 - t1
+!
+          aspace_r  = zero
+          aspace_l  = zero
+          a_red     = zero
+          e_red_re  = zero
+          e_red_im  = zero
+!
+!         initialize indexes back to their starting values
+!
+          ldu   = 0
+          i_beg = 1
+          m_dim = 1
+!
+!         counting how many matvec we can skip at the next
+!         iteration
+!
+          do i_eig = 1, n_targ
+            if (done(i_eig)) then
+              n_frozen = n_frozen +1
+            else
+              exit
+            end if
+          end do
+          restart = .true.
+        end if
+        if (verbose) write(6,1050) n_targ, n_act, n_frozen
+      end do
+! 
+!     end of davidson, print results
+!
+      call get_time(t_tot2)
+      t_tot = t_tot2 - t_tot1
+!
+!     if required, print timings
+!
+      print * 
+      write(6,1100) t_mv, t_diag, t_ortho, t_tot
+      print * 
+      print * 
+!
+!     stop after one davidson evaluation or do a second one if side = consecutive 
+!
+      if (side.eq.'r' .or. side.eq.'l' .or. side.eq.'s') do_davidson = .false.
+      if (consecutive) then
+        if (left) then
+          left = .false.
+          do_davidson = .false.
+!
+!         check if energies are same
+!
+          if (maxval(eig_r - eig) .gt. tol) then
+            print *, "eigenvalues in the consecutive computation of right and left eigenpairs do not match." 
+            stop
+          end if
+!
+        else
+          right = .false.
+          left  = .true.
+          eig_r = eig
+!
+!         use evec_r as guess for evec_l
+!
+          call ortho_cd(n,n_max,evec_r,yy,ok) 
+          call dcopy(n*n_max,evec_r,1,evec_l,1) 
+        end if  
+        
+      end if
+    end do
+!
+!   final orthogonalization of  evec_r and evec_l, if both were computed.
+!
+    if (consecutive .or. left .and. right) then
+      call get_time(t1)
+      call svd_biortho(n,n_max,evec_l,evec_r)
+      call get_time(t2)
+!
+      t_ortho = t_ortho + t2 - t1
+    end if
+!      
+!   deallocate memory
+!
+    deallocate(work, tau, space_r, space_l, aspace_r, aspace_l, r_r, r_l, done, r_norm_r, r_norm_l)
+    deallocate(a_red, e_red_re, e_red_im, evec_red_r, evec_red_l, copy_r, copy_l)
+!
+1100 format(t3,'  timings for davidson (cpu/wall) : ',/, &
+            t3,'  matrix-vector multiplications   : ',2f12.4,/, &
+            t3,'  diagonalization                 : ',2f12.4,/, &
+            t3,'  orthogonalization               : ',2f12.4,/, &
+            t3,'                                   ',24('='),/,  &
+            t3,'  total                           : ',2f12.4)
+!
+1030 format(t5,'Davidson-nonsym iterations (tol=',d10.2,', right =',l2,', left =',l2,'):',/, &
+            t5,'------------------------------------------------------------------------------------------------',/, &
+            t7,'  iter  root              eigenvalue','         rms(right)              rms(left)     max ok',/, &
+            t5,'------------------------------------------------------------------------------------------------')
+!
+1040 format(t9,i4,2x,i4,f24.12,2d12.4,2d12.4,l3)
+!
+1050 format(t5,'----------------------------------------',/,&
+            t7,'# target vectors:    ',i4,/,&
+            t7,'# new vectors added: ',i4,/,&
+            t7,'# converged vectors: ',i4,/,&
+            t5,'----------------------------------------')
+!
+    return
+!
+  end subroutine nonsym_driver
+!
+  subroutine sort_eigenpairs(n,m,wr,wl,vr,vl,n_want,ldv,ignore,thresh,mask_in)
+!
+!   sort m real & imaginary eigenvalues and right & left eigenvectors of length n 
+!   in decreasing order according to the real eigenvalues in the rang.e of n_want
+! 
+    implicit none
+    integer,  intent(in)      :: n, m, ldv, n_want
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
+    real(dp), intent(in)      :: thresh
+    logical,  intent(in)      :: ignore
+    logical,  optional        :: mask_in(m)
+!   
+!   local variables
+!
+    real(dp)                  :: w, v(ldv)
+    integer                   :: i, j, idx, min_idx(1), fin
+    logical                   :: mask(m)
+!
+    real(dp)                  :: dnrm2
+!
+!   define initial mask
+!
+    if (present(mask_in)) then
+      mask = mask_in
+    else
+      mask = .true.
+    end if
+!
+    do i = 1, n_want
+! 
+!     identify minimal value and mask first position for next iteration
+!
+      min_idx = minloc(wr, mask=mask) 
+      idx     = min_idx(1)
+!
+!     check complex contribution, if so, move it to with to the last position 
+!     of the array and mask it. search again for lowest eigenvalue and 
+!     continue with that.
+!
+      if (ignore .and. abs(wl(idx)) > thresh) then
+        fin = m
+!
+        do j = 1, m
+          if (.not. mask(fin)) then
+            fin = fin - 1
+          else 
+            exit
+          end if
+        end do
+!
+        mask(fin) = .false.
+!
+!       do various swaps for double value on last available position fin
+!
+        call swap_eigenpairs(fin,idx,n,m,wr,wl,vr,vl,ldv)
+!
+!       now search again for lowest and find automatically the corresponding 
+!       pair with imaginary contribution
+!
+        min_idx = minloc(wr, mask=mask) 
+        idx     = min_idx(1)
+      end if
+!
+      mask(i) = .false.
+!
+!     do various swaps to move minimum value et alii on position i
+!
+      call swap_eigenpairs(i,idx,n,m,wr,wl,vr,vl,ldv)
+! 
+!
+    end do
+!
+  end subroutine sort_eigenpairs
+!
+  subroutine swap_eigenpairs(i,j,n,m,wr,wl,vr,vl,ldv)
+!
+!   swaps m real & immaginary eigenvalues and eigenvectors of length l of the
+!   indices i and j with each other 
+!
+    implicit none
+    integer, intent(in)       :: n, m, ldv, i, j
+    real(dp), intent(inout)   :: wr(m), wl(m), vr(ldv,m), vl(ldv,m)
+!
+    real(dp)                  :: w, v(ldv)
+!
+    w       = wr(i)
+    wr(i)   = wr(j)
+    wr(j)   = w
+!
+    w       = wl(i)
+    wl(i)   = wl(j)
+    wl(j)   = w
+!
+    v         = vr(:,i)
+    vr(:,i)   = vr(:,j)
+    vr(:,j)   = v
+!   
+    v         = vl(:,i)
+    vl(:,i)   = vl(:,j)
+    vl(:,j)   = v
+!
+    return
+  end subroutine 
+!
 ! orthogonalization routines:
 ! ===========================
 !
@@ -2541,6 +3331,310 @@ module diaglib
     deallocate (metric)
     return
   end subroutine ortho_cd
+!
+  subroutine ortho_lu(n,m,u_l,u_r,ok)
+  implicit none
+
+! 
+!   orthogonalize m vectors of length n using the Cholesky factorization
+!   of their overlap.
+!   this is done by metric = U_l^t U_r and then by computing its lu 
+!   decomposition metric = L U. The orthogonal vectors are obtained then
+!   by solving the triangular linear systems
+! 
+!     U_l(ortho) L^t = U_l
+!     U_r(ortho) U   = U_r
+!   
+!   as lu decomposition can be instable for orthogonalizing a set of 
+!   vectors, the orthogonalization is refined iteratively. 
+!   a conservative estimate of the orthogonalization error is used to
+!   assess convergency
+! 
+!   a logical flag is set to false, if the routine fails, so that the
+!   calling program can call a more robust orthogonalization routine
+!   without aborting.
+! 
+!   arguments:
+!   ==========
+! 
+    integer,                   intent(in)    :: n, m
+    real(dp),  dimension(n,m), intent(inout) :: u_r, u_l
+    logical,                   intent(inout) :: ok
+! 
+!   local variables:
+!   ================
+! 
+    integer             :: it, it_micro
+    real(dp)            :: error, dnrm2, alpha, unorm, shift
+    logical             :: macro_done, micro_done, direct_solv
+    real(dp), parameter :: tol_ortho_lu = 1.d-14 !two * epsilon(one)
+    integer,  parameter :: maxit = 10
+!
+!   local scratch:
+!   ==============
+!
+    real(dp), allocatable :: metric(:,:), msave(:,:), identity(:,:), ipiv(:)
+! 
+!   external functions:
+!   ===================
+!     
+    external                                 :: dgemm, dgetrf, dtrtri
+! 
+!   get memory for the lu routine 
+!
+    allocate (metric(m,m), msave(m,m), identity(m,m))
+    allocate (ipiv(m))
+!
+    metric      =  zero
+    macro_done  = .false.
+    direct_solv = .true.
+!
+    identity = zero
+    forall(it = 1:m) identity(it, it) = one
+!
+!   start iteration and handle failure
+!
+    it = 0
+    do while(.not. macro_done)
+      it = it + 1
+      if (it .gt. maxit) then
+!
+!       ortho_lu failed. return with an error message
+!
+        ok = .false.
+        write(6,*) " maximum number of iterations reached in ortho_lu."
+        write(6,'(A, E14.5)') " error of lu:", error
+        return
+      end if
+!
+!     assemble the metric 
+!
+      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
+      msave = metric
+!
+      print*, "iteration lu", it
+      print *
+      print *, "overlap of non biorthogonalized"
+      call printMatrix(m,m,metric,m)
+      print*
+!
+!
+!     compute the lu factorization of the metric
+!
+      call dgetrf(m,m,metric,m,ipiv,info) 
+!
+!
+!     if dgetrf failed, try a second time, after level-shifting the diagonal of the metric.
+!
+      if (info.ne.0) then
+!  
+        alpha      = 100.0_dp
+        unorm      = dnrm2(n*m,u_r,1) ! TODO also do for u_l
+        it_micro   = 0
+        micro_done = .false.
+! 
+!       add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
+!  
+        do while (.not. micro_done)
+          it_micro = it_micro + 1
+          if (it_micro.gt.maxit) then 
+!  
+!            ortho_lu failed. return with an error message
+!  
+            ok = .false.
+            write(6,*) ' maximum number of the iterations reached.'
+            stop
+            return
+          end if 
+!  
+          shift = max(epsilon(one)*alpha*unorm,tol_ortho)
+          print*, "shift", shift
+          metric = msave
+          call diag_shift(m,shift,metric)
+          print *
+          print*, "Level shifted:"
+          call printMatrix(m,m,metric,m)
+          call dgetrf(m,m,metric,m,ipiv,info) 
+          print *, "result"
+          call printMatrix(m,m,metric,m)
+          print*, "info", info
+          print *
+          alpha = alpha * 10.0_dp
+          micro_done = info.eq.0
+        end do
+!  
+      end if
+!
+      if (direct_solv) then
+!
+!       solve the matrix equations: U_l = U_l(ortho) l^t     
+!                                   U_r = U_r(ortho) r
+!
+        call dtrsm('r','u','n','n',n,m,one,metric,m,u_r,n) 
+        call dtrsm('r','l','t','u',n,m,one,metric,m,u_l,n) 
+!
+      else 
+!
+!       compute l^-1 and u^-1, using msave to store the inverse considering that
+!       l is a unit triangular
+!
+        call dtrtri('u','n',m,metric,m,info)
+        call checkInfo(info, "inverse of metric")
+        call dtrtri('l','u',m,metric,m,info)
+        call checkInfo(info, "inverse of metric")
+!
+        print *
+        print *, "inverse of lower and upper and metric"
+        call dgetrf(m,m,metric,m,ipiv,info) 
+        print *
+!
+!       orthogonalize U_l and U_r:  U_l(ortho) = U_l l^(-t) 
+!                                   U_r(ortho) = U_r u^(-1)  
+!
+        call dtrmm('r','u','n','n',n,m,one,metric,m,u_r,n) 
+        call dtrmm('r','l','t','u',n,m,one,metric,m,u_l,n) 
+!
+      end if
+!
+!     calculate overlap of L^T & R, substract identity and check it's norm to
+!     obtain the error
+!
+      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
+!
+      metric = metric - identity
+      error = dnrm2(m,metric,1)
+      print*
+      print *, "error", error, error .lt. tol_ortho_lu
+      macro_done = error .lt. tol_ortho_lu
+!
+      print*, "print L^T*R overlap - I (residual overlap)"
+      call printMatrix(m,m,metric,m)
+      print*
+!
+    end do 
+!
+    ok = .true.
+!
+    deallocate (ipiv)
+    deallocate (metric)
+    deallocate (msave)
+!
+    return
+  end subroutine ortho_lu
+!
+  subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
+    implicit none
+    integer,                  intent(in)    :: n, m, k
+    real(dp), dimension(n,m), intent(in)    :: xl, xr
+    real(dp), dimension(n,k), intent(inout) :: ul, ur
+!
+!   local variables:
+!
+    integer               :: it, istat
+    real(dp)              :: xu_norm(2), xx
+    logical               :: done, ok
+    real(dp), allocatable :: xu(:,:)
+!
+    integer, parameter    :: maxit = 20
+    real(dp)              :: dnrm2
+!
+    allocate (xu(m,k), stat = istat)
+    call check_mem(istat)
+!
+    done = .false.
+    it   = 0
+!
+    do while(.not. done)
+      it = it + 1
+      if (it.gt.maxit) stop 'biortho_vs_x failed.'
+!
+!     biorthogonalize ul and ur to xr and xl:
+!
+      call dgemm('t','n',m,k,n,one,xl,n,ur,n,zero,xu,m)
+      call dgemm('n','n',n,k,m,-one,xr,n,xu,m,one,ur,n)
+      call dgemm('t','n',m,k,n,one,xr,n,ul,n,zero,xu,m)
+      call dgemm('n','n',n,k,m,-one,xl,n,xu,m,one,ul,n)
+!
+!     now, orthogonalize ur and ul. 
+!     if allsvd is true, biorthogonalize them (to be tested)
+!
+!      if (allsvd) then 
+!        call svd_biortho(n,k,ul,ur)
+!      else
+        call ortho_cd(n,k,ul,xx,ok)
+        call ortho_cd(n,k,ur,xx,ok)
+!      end if
+!
+!     compute the overlap between the orthonormalized ul, ur and xr, xl
+!
+      call dgemm('t','n',m,k,n,one,xl,n,ur,n,zero,xu,m)
+      xu_norm(1) = dnrm2(m*k,xu,1)
+      call dgemm('t','n',m,k,n,one,xr,n,ul,n,zero,xu,m)
+      xu_norm(2) = dnrm2(m*k,xu,1)
+!
+      done = xu_norm(1) .lt. tol_ortho .and. xu_norm(2) .lt. tol_ortho
+    end do
+!
+!   if we didn't make the vectors already biorthogonal, do it now:
+!
+!    if (.not. allsvd) call svd_biortho(n,k,ul,ur)
+     call svd_biortho(n,k,ul,ur)
+!
+    deallocate (xu)
+    return
+  end subroutine biortho_vs_x
+!
+  subroutine svd_biortho(n,m,u_l,u_r)
+    implicit none
+!
+!   given two set of vectors, biorthogonalize them by computing the LU decomposition
+!   of the overlap matrix and then solving
+!
+!     u_l = u_l l^t
+!     u_r = u_r u
+!
+    integer,                  intent(in)    :: n, m
+    real(dp), dimension(n,m), intent(inout) :: u_l, u_r
+!
+    integer               :: i, istat
+    real(dp)              :: fac
+!
+    real(dp), allocatable :: over(:,:), u(:,:), s(:), vt(:,:), tmp(:,:)
+!
+    real(dp)              :: dnrm2
+    external              :: dnrm2
+!
+!   allocate memory.
+!
+    allocate (over(m,m), s(m), u(m,m), vt(m,m), tmp(n,m), stat = istat)
+    call check_mem(istat)
+!
+!   compute the overlap:
+!
+    call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,over,m)
+!
+!   compute its singular value decomposition:
+!
+    call dgesvd('a','a',m,m,over,m,s,u,m,vt,m,work,lwork,info)
+!
+!   compute l*u and r*v
+!
+    call dgemm('n','n',n,m,m,one,u_l,n,u,m,zero,tmp,n)
+    u_l = tmp
+    call dgemm('n','t',n,m,m,one,u_r,n,vt,m,zero,tmp,n)
+    u_r = tmp
+!
+!   scale with square root of singular values
+!   here, dropping redundant vectors could be a good idea...
+!
+    do i = 1, m
+      fac = one/sqrt(s(i))
+      u_l(:,i) = fac * u_l(:,i) 
+      u_r(:,i) = fac * u_r(:,i) 
+    end do
+    deallocate(over, u, s, vt, tmp, stat = istat)
+    return
+  end subroutine svd_biortho
 !
   real(dp) function norm_est(m,a)
 !
