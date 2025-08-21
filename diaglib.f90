@@ -8,7 +8,8 @@ module diaglib
 !
 ! Implementation by
 !
-!   Ivan Gianni', Tommaso Nottoli, Federica Pes, Antoine Levitt, and Filippo Lipparini
+!   Ivan Gianni', Tommaso Nottoli, Federica Pes, Antoine Levitt, 
+!   Felix Broecker, and Filippo Lipparini
 !   MoLECoLab Pisa
 !   Department of Chemistry and Industrial Chemistry
 !   University of Pisa
@@ -147,7 +148,7 @@ module diaglib
 !
 ! convergence thresholds for orthogonalization
 !
-  real(dp), parameter    :: tol_ortho = 1.0d-12 ! two * epsilon(one)
+  real(dp), parameter    :: tol_ortho = two * epsilon(one)
 ! 
 ! memory and info for lapack routines
 !
@@ -2383,26 +2384,33 @@ module diaglib
     consecutive = .false.
     do_davidson = .true.
 !
+!
 !   extract from the input which eigenvectors shall be computed in which way
 !     r = only right eigenpairs
 !     l = only left eigenpairs
 !     s = both eigenpairs in simultaneous manner
 !     c = both eigenpairs in consecutive manner, start with right
 !
-      if (side == "r") then 
-        right = .true.
-      else if (side == "l") then 
-        left  = .true.
-      else if (side == "s") then
-        right = .true.
-        left  = .true. 
-      else if (side == "c") then 
-        consecutive = .true.
-        right = .true.
-      else
-        print *, "choice for side is not correct. can be r,l,s,c."
-        stop
-      end if
+    if (side .eq. "r") then 
+      right = .true.
+    else if (side .eq. "l") then 
+      left  = .true.
+    else if (side .eq. "s") then
+!
+!     the simultaneous diagonalization driver is less efficient than a consecutive
+!     run for the left eigenvectors. 
+!     switch it off manually, but leave it as an advanced debug feature.
+!
+!     left  = .true. 
+      right = .true.
+      consecutive = .true. 
+    else if (side .eq. "c") then 
+      consecutive = .true.
+      right = .true.
+    else
+      print *, "choice for side is not correct. can be r,l,s,c."
+      stop
+    end if
 !
 !   check weather we have a guess for the eigenvectors in evec, and
 !   weather it is orthonormal.
@@ -3332,196 +3340,6 @@ module diaglib
     return
   end subroutine ortho_cd
 !
-  subroutine ortho_lu(n,m,u_l,u_r,ok)
-  implicit none
-
-! 
-!   orthogonalize m vectors of length n using the Cholesky factorization
-!   of their overlap.
-!   this is done by metric = U_l^t U_r and then by computing its lu 
-!   decomposition metric = L U. The orthogonal vectors are obtained then
-!   by solving the triangular linear systems
-! 
-!     U_l(ortho) L^t = U_l
-!     U_r(ortho) U   = U_r
-!   
-!   as lu decomposition can be instable for orthogonalizing a set of 
-!   vectors, the orthogonalization is refined iteratively. 
-!   a conservative estimate of the orthogonalization error is used to
-!   assess convergency
-! 
-!   a logical flag is set to false, if the routine fails, so that the
-!   calling program can call a more robust orthogonalization routine
-!   without aborting.
-! 
-!   arguments:
-!   ==========
-! 
-    integer,                   intent(in)    :: n, m
-    real(dp),  dimension(n,m), intent(inout) :: u_r, u_l
-    logical,                   intent(inout) :: ok
-! 
-!   local variables:
-!   ================
-! 
-    integer             :: it, it_micro
-    real(dp)            :: error, dnrm2, alpha, unorm, shift
-    logical             :: macro_done, micro_done, direct_solv
-    real(dp), parameter :: tol_ortho_lu = 1.d-14 !two * epsilon(one)
-    integer,  parameter :: maxit = 10
-!
-!   local scratch:
-!   ==============
-!
-    real(dp), allocatable :: metric(:,:), msave(:,:), identity(:,:), ipiv(:)
-! 
-!   external functions:
-!   ===================
-!     
-    external                                 :: dgemm, dgetrf, dtrtri
-! 
-!   get memory for the lu routine 
-!
-    allocate (metric(m,m), msave(m,m), identity(m,m))
-    allocate (ipiv(m))
-!
-    metric      =  zero
-    macro_done  = .false.
-    direct_solv = .true.
-!
-    identity = zero
-    forall(it = 1:m) identity(it, it) = one
-!
-!   start iteration and handle failure
-!
-    it = 0
-    do while(.not. macro_done)
-      it = it + 1
-      if (it .gt. maxit) then
-!
-!       ortho_lu failed. return with an error message
-!
-        ok = .false.
-        write(6,*) " maximum number of iterations reached in ortho_lu."
-        write(6,'(A, E14.5)') " error of lu:", error
-        return
-      end if
-!
-!     assemble the metric 
-!
-      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
-      msave = metric
-!
-      print*, "iteration lu", it
-      print *
-      print *, "overlap of non biorthogonalized"
-      call printMatrix(m,m,metric,m)
-      print*
-!
-!
-!     compute the lu factorization of the metric
-!
-      call dgetrf(m,m,metric,m,ipiv,info) 
-!
-!
-!     if dgetrf failed, try a second time, after level-shifting the diagonal of the metric.
-!
-      if (info.ne.0) then
-!  
-        alpha      = 100.0_dp
-        unorm      = dnrm2(n*m,u_r,1) ! TODO also do for u_l
-        it_micro   = 0
-        micro_done = .false.
-! 
-!       add larger and larger shifts to the diagonal until dgetrf manages to factorize it.
-!  
-        do while (.not. micro_done)
-          it_micro = it_micro + 1
-          if (it_micro.gt.maxit) then 
-!  
-!            ortho_lu failed. return with an error message
-!  
-            ok = .false.
-            write(6,*) ' maximum number of the iterations reached.'
-            stop
-            return
-          end if 
-!  
-          shift = max(epsilon(one)*alpha*unorm,tol_ortho)
-          print*, "shift", shift
-          metric = msave
-          call diag_shift(m,shift,metric)
-          print *
-          print*, "Level shifted:"
-          call printMatrix(m,m,metric,m)
-          call dgetrf(m,m,metric,m,ipiv,info) 
-          print *, "result"
-          call printMatrix(m,m,metric,m)
-          print*, "info", info
-          print *
-          alpha = alpha * 10.0_dp
-          micro_done = info.eq.0
-        end do
-!  
-      end if
-!
-      if (direct_solv) then
-!
-!       solve the matrix equations: U_l = U_l(ortho) l^t     
-!                                   U_r = U_r(ortho) r
-!
-        call dtrsm('r','u','n','n',n,m,one,metric,m,u_r,n) 
-        call dtrsm('r','l','t','u',n,m,one,metric,m,u_l,n) 
-!
-      else 
-!
-!       compute l^-1 and u^-1, using msave to store the inverse considering that
-!       l is a unit triangular
-!
-        call dtrtri('u','n',m,metric,m,info)
-        call checkInfo(info, "inverse of metric")
-        call dtrtri('l','u',m,metric,m,info)
-        call checkInfo(info, "inverse of metric")
-!
-        print *
-        print *, "inverse of lower and upper and metric"
-        call dgetrf(m,m,metric,m,ipiv,info) 
-        print *
-!
-!       orthogonalize U_l and U_r:  U_l(ortho) = U_l l^(-t) 
-!                                   U_r(ortho) = U_r u^(-1)  
-!
-        call dtrmm('r','u','n','n',n,m,one,metric,m,u_r,n) 
-        call dtrmm('r','l','t','u',n,m,one,metric,m,u_l,n) 
-!
-      end if
-!
-!     calculate overlap of L^T & R, substract identity and check it's norm to
-!     obtain the error
-!
-      call dgemm('t','n',m,m,n,one,u_l,n,u_r,n,zero,metric,m)
-!
-      metric = metric - identity
-      error = dnrm2(m,metric,1)
-      print*
-      print *, "error", error, error .lt. tol_ortho_lu
-      macro_done = error .lt. tol_ortho_lu
-!
-      print*, "print L^T*R overlap - I (residual overlap)"
-      call printMatrix(m,m,metric,m)
-      print*
-!
-    end do 
-!
-    ok = .true.
-!
-    deallocate (ipiv)
-    deallocate (metric)
-    deallocate (msave)
-!
-    return
-  end subroutine ortho_lu
-!
   subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
     implicit none
     integer,                  intent(in)    :: n, m, k
@@ -3531,7 +3349,7 @@ module diaglib
 !   local variables:
 !
     integer               :: it, istat
-    real(dp)              :: xu_norm(2), xx
+    real(dp)              :: xu_norm(2), growth
     logical               :: done, ok
     real(dp), allocatable :: xu(:,:)
 !
@@ -3556,28 +3374,18 @@ module diaglib
       call dgemm('n','n',n,k,m,-one,xl,n,xu,m,one,ul,n)
 !
 !     now, orthogonalize ur and ul. 
-!     if allsvd is true, biorthogonalize them (to be tested)
 !
-!      if (allsvd) then 
-!        call svd_biortho(n,k,ul,ur)
-!      else
-        call ortho_cd(n,k,ul,xx,ok)
-        call ortho_cd(n,k,ur,xx,ok)
-!      end if
-!
-!     compute the overlap between the orthonormalized ul, ur and xr, xl
-!
-      call dgemm('t','n',m,k,n,one,xl,n,ur,n,zero,xu,m)
-      xu_norm(1) = dnrm2(m*k,xu,1)
-      call dgemm('t','n',m,k,n,one,xr,n,ul,n,zero,xu,m)
-      xu_norm(2) = dnrm2(m*k,xu,1)
+      call ortho_cd(n,k,ul,growth,ok)
+      xu_norm(1) = growth * epsilon(one)
+      call ortho_cd(n,k,ur,growth,ok)
+      xu_norm(2) = growth * epsilon(one)
 !
       done = xu_norm(1) .lt. tol_ortho .and. xu_norm(2) .lt. tol_ortho
     end do
 !
-!   if we didn't make the vectors already biorthogonal, do it now:
+!   make the left and right eigenvectors biorthogonal using the singular value 
+!   decomposition
 !
-!    if (.not. allsvd) call svd_biortho(n,k,ul,ur)
      call svd_biortho(n,k,ul,ur)
 !
     deallocate (xu)
