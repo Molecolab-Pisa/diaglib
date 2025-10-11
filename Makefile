@@ -1,23 +1,45 @@
-#
-#   Makefile
-#
-FC = gfortran
+# Compilatori
+FC      = gfortran
+CC      = gcc
 
-FFLAGS = -O2 -fopenmp -std=f95 --pedantic -ftrapv
-#FFLAGS= -g -msse4.2  -fcheck=all -Waliasing -Wampersand -Wconversion -Wsurprising -Wintrinsics-std -Wno-tabs -Wintrinsic-shadow -Wline-truncation -Wreal-q-constant -Wuninitialized  -fbacktrace -ffpe-trap=zero,overflow -finit-real=nan
-LIBS = -lblas -llapack 
-#LIBS = -L/opt/OpenBLAS/lib -lopenblas
+# Flag
+FFLAGS  = -O2 -fPIC -Jinclude
+CFLAGS  = -O2 -Wall -Iinclude
 
-MODS   = real_precision.o utils.o diaglib.o
-OBJS   = main.o
-#
-all:    $(MODS) $(OBJS)
-	$(FC) $(FFLAGS) -o main.exe $(OBJS) $(MODS) $(LIBS)
-#
-%.o: %.f
-	$(FC) $(FFLAGS) -c $*.f
-%.o: %.f90
-	$(FC) $(FFLAGS) -c $*.f90
-#
+# Sorgenti
+F90SRC  = src/fortran/real_precision.f90 src/fortran/diaglib.f90 src/fortran/davidson_driver_c.f90\
+	src/fortran/lobpcg_driver_c.f90
+CSRC    = test/test_c/main.c
+
+# Oggetti
+OBJF90  = $(F90SRC:.f90=.o)
+OBJC    = $(CSRC:.c=.o)
+
+# Output
+EXE     = test/test_c/test_driver
+LIB     = lib/libdriver.so
+
+# Target principale
+all: $(EXE) $(LIB)
+
+# Eseguibile C
+$(EXE): $(OBJF90) $(OBJC)
+	$(FC) -o $@ $^ -lblas -llapack
+
+# Libreria condivisa per Python
+$(LIB): $(OBJF90)
+	$(FC) -shared -o $(LIB) $^ -lblas -llapack
+
+# Compilazione Fortran
+src/fortran/%.o: src/fortran/%.f90
+	$(FC) $(FFLAGS) -c $< -o $@
+
+# Compilazione C
+test/test_c/%.o: test/test_c/%.c
+	$(CC) $(CFLAGS) -fPIC -c $< -o $@
+
+# Pulizia
 clean:
-	rm -fr $(MODS) $(OBJS) *.exe *.mod
+	rm -f src/fortran/*.o test/test_c/*.o *.mod $(EXE) $(LIB)
+
+.PHONY: all lib clean

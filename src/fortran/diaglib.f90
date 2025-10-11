@@ -557,7 +557,7 @@ module diaglib
 !
   subroutine caslr_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
                           apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
-    use utils
+!   use utils, only : i_alg
     implicit none
     logical, intent(in)                          :: verbose
     integer,                       intent(in)    :: n, n2, n_targ, n_max
@@ -572,7 +572,7 @@ module diaglib
 !   local variables:
 !   ================
 !
-    integer, parameter    :: min_dav = 10
+    integer, parameter    :: min_dav = 10, i_alg = 0
     integer               :: istat
 !
 !   actual expansion space size and total dimension
@@ -1108,7 +1108,7 @@ module diaglib
 !
 !   ok:       logical, true if caslr_eff_driver converged.
 !
-    use utils
+!   use utils
     implicit none
     logical, intent(in)                          :: verbose
     integer,                       intent(in)    :: n, n2, n_targ, n_max
