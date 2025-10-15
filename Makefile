@@ -3,35 +3,44 @@ FC      = gfortran
 CC      = gcc
 
 # Flag
-FFLAGS  = -O2 -fPIC -Jinclude
-CFLAGS  = -O2 -Wall -Iinclude
+FFLAGS  = -O2 -fPIC -fopenmp -Jinclude -fcheck=all -fsanitize=address
+CFLAGS  = -O2 -Wall -fopenmp -Iinclude
 
 # Sorgenti
 F90SRC  = src/fortran/real_precision.f90 src/fortran/diaglib.f90 src/fortran/davidson_driver_c.f90\
-	src/fortran/lobpcg_driver_c.f90
-CSRC    = test/test_c/main.c
+	src/fortran/lobpcg_driver_c.f90 src/fortran/smogd_driver_c.f90 src/fortran/nonsym_driver_c.f90
+CTSTSRC = test/test_c/test_c.c
+FTSTSRC = test/test_fortran/test_fortran.f90
 
 # Oggetti
 OBJF90  = $(F90SRC:.f90=.o)
-OBJC    = $(CSRC:.c=.o)
+OBJTSTC = $(CTSTSRC:.c=.o)
+OBJTSTF = $(FTSTSRC:.f90=.o)
 
 # Output
-EXE     = test/test_c/test_driver
+CTEST   = test/test_c/test_c.exe
+FTEST   = test/test_fortran/test_fortran.exe
 LIB     = lib/libdriver.so
 
 # Target principale
-all: $(EXE) $(LIB)
+all: $(CTEST) $(FTEST) $(LIB)
 
 # Eseguibile C
-$(EXE): $(OBJF90) $(OBJC)
-	$(FC) -o $@ $^ -lblas -llapack
+$(CTEST): $(OBJF90) $(OBJTSTC)
+	$(FC) -o $@ $^ -lblas -llapack -fopenmp -fsanitize=address
+
+# Eseguibile Fortran
+$(FTEST): $(OBJF90) $(OBJTSTF)
+	$(FC) -o $@ $^ -lblas -llapack -fopenmp -fsanitize=address
 
 # Libreria condivisa per Python
 $(LIB): $(OBJF90)
-	$(FC) -shared -o $(LIB) $^ -lblas -llapack
+	$(FC) -shared -o $(LIB) $^ -lblas -llapack -fopenmp -fsanitize=address 
 
 # Compilazione Fortran
 src/fortran/%.o: src/fortran/%.f90
+	$(FC) $(FFLAGS) -c $< -o $@
+test/test_fortran/%.o: test/test_fortran/%.f90
 	$(FC) $(FFLAGS) -c $< -o $@
 
 # Compilazione C

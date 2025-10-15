@@ -163,7 +163,7 @@ module diaglib
 ! subroutines:
 ! ============
 !
-  public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, caslr_eff_driver, &
+  public :: lobpcg_driver, davidson_driver, gen_david_driver, caslr_driver, smogd_driver, &
             nonsym_driver, ortho, b_ortho, ortho_cd, ortho_vs_x, b_ortho_vs_x   
 !
   contains
@@ -1021,8 +1021,8 @@ module diaglib
     return
   end subroutine caslr_driver
 !
-  subroutine caslr_eff_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
-                              apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
+  subroutine smogd_driver(verbose,n,n2,n_targ,n_max,max_iter,tol,max_dav, &
+                          apbmul,ambmul,spdmul,smdmul,lrprec,eig,evec,ok)
 !
 !   main driver for the efficient solution to the following generalized 
 !   eigenvalue problem:
@@ -1106,9 +1106,8 @@ module diaglib
 !             in input, a guess for the eigenvectors.
 !             if ok is true, in output the computed eigenvectors.
 !
-!   ok:       logical, true if caslr_eff_driver converged.
+!   ok:       logical, true if smogd_driver converged.
 !
-!   use utils
     implicit none
     logical, intent(in)                          :: verbose
     integer,                       intent(in)    :: n, n2, n_targ, n_max
@@ -1478,7 +1477,7 @@ module diaglib
             t7,'# converged vectors: ',i4,/,&
             t5,'----------------------------------------')
     return
-  end subroutine caslr_eff_driver
+  end subroutine smogd_driver
 !
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
                              shift,matvec,precnd,eig,evec,ok)
@@ -2252,10 +2251,9 @@ module diaglib
   subroutine nonsym_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,shift,&
                             matvec,matvec_l,precnd,eig,evec_r,evec_l,side,ok)
     logical,                        intent(in)    :: verbose
-    integer,                        intent(in)    :: n, n_targ, n_max
+    integer,                        intent(in)    :: n, n_targ, n_max, side
     integer,                        intent(in)    :: max_iter, max_dav
     real(dp),                       intent(in)    :: tol, shift
-    character(len=1),               intent(in)    :: side
     real(dp), dimension(n_max),     intent(inout) :: eig
     real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
     logical,                        intent(inout) :: ok
@@ -2309,7 +2307,7 @@ module diaglib
 !   variables for left, right, or both eigenvectors
 !
     logical               :: left, right, consecutive, do_davidson
-    real(dp)              :: eig_r(n_targ)
+    real(dp)              :: eig_r(n_max)
 !
     integer               :: verbosity, k, i, j
 ! 
@@ -2320,8 +2318,8 @@ module diaglib
     logical, allocatable  :: mask_overlap(:)
 !
     real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), overlap_diff(:)
-    real(dp)              :: overlap_idx_r(2,n_max), overlap_val_r(2,n_max), overlap_self_l(n_max), &
-                              overlap_idx_l(2,n_max), overlap_val_l(2,n_max), overlap_self_r(n_max)
+    real(dp)              :: overlap_idx_r(n_max,2), overlap_val_r(n_max,2), overlap_self_l(n_max), &
+                             overlap_idx_l(n_max,2), overlap_val_l(n_max,2), overlap_self_r(n_max)
     real(dp),allocatable  :: perm_temp(:,:)
 !
 !   external functions:
@@ -2386,29 +2384,28 @@ module diaglib
 !
 !
 !   extract from the input which eigenvectors shall be computed in which way
-!     r = only right eigenpairs
-!     l = only left eigenpairs
-!     s = both eigenpairs in simultaneous manner
-!     c = both eigenpairs in consecutive manner, start with right
+!     1 = only right eigenpairs
+!     2 = only left eigenpairs
+!     3 = both eigenpairs in simultaneous manner
+!     4 = both eigenpairs in consecutive manner, start with right
 !
-    if (side .eq. "r") then 
+    if (side .eq. 1) then 
       right = .true.
-    else if (side .eq. "l") then 
+    else if (side .eq. 2) then 
       left  = .true.
-    else if (side .eq. "s") then
+    else if (side .eq. 3) then
 !
 !     the simultaneous diagonalization driver is less efficient than a consecutive
 !     run for the left eigenvectors. 
 !     switch it off manually, but leave it as an advanced debug feature.
 !
-!     left  = .true. 
       right = .true.
       consecutive = .true. 
-    else if (side .eq. "c") then 
+    else if (side .eq. 4) then 
       consecutive = .true.
       right = .true.
     else
-      print *, "choice for side is not correct. can be r,l,s,c."
+      print *, "choice for side is not correct. can be 1,2,3,4."
       stop
     end if
 !
@@ -2603,7 +2600,7 @@ module diaglib
           end do
           do j=1, n_max
             do k=1, n_max
-              if (k .ne. j .and. overlap_idx_l(j,1) .eq. overlap_idx_l(k,6)) then 
+              if (k .ne. j .and. overlap_idx_l(j,1) .eq. overlap_idx_l(k,1)) then 
                 double_l = .true.
               end if
             end do
@@ -2876,8 +2873,9 @@ module diaglib
 !
 !     stop after one davidson evaluation or do a second one if side = consecutive 
 !
-      if (side.eq.'r' .or. side.eq.'l' .or. side.eq.'s') do_davidson = .false.
+      if (side.eq.1 .or. side.eq.2) do_davidson = .false.
       if (consecutive) then
+        write(6,*) 'consecutive. right/left?', right, left
         if (left) then
           left = .false.
           do_davidson = .false.
