@@ -1,7 +1,93 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include "diaglib.h"
 
+//
+// simple minded test driver for diaglib called from c.
+//
+// list of functions:
+// ==================
+//
+// matvec_c(int* n, int*m, double*x, double* ax)
+//
+//   applies the symmetric matrix 
+//
+//     a_{ij} = \delta_{ij} (i+1) + (1-\delta_{ij})/(i+j) 
+//
+//   to m vectors of length n (in x, assumed column major
+//   as in fortran)
+//
+//
+// precnd_c(int* n, int*m, double* shift, double*x, double* ax)
+//
+//   applies the preconditioner
+//
+//     p_{ij} = \delta_{ij} (a_{ii} + shift)
+//
+//   to m vectors of length n (in x, assumed column major
+//   as in fortran), where a is the matrix from matvec_c.
+//
+// matvec_r_c(int* n, int* m, double* x, double* y)
+// matvec_l_c(int* n, int* m, double* x, double* y)
+//
+//   apply the non-symmetric matrix
+//
+//     m = d^{-1} a d (matvec_r_c)
+//
+//   or its transpose 
+//
+//     m^t = d a d^{-1} (matvec_l_c)
+//
+//   to m vectors of length n (in x, assumed column major
+//   as in fortran), where a is the matrix from matvec_c,
+//   and d is a diagonal matrix defined as 
+//
+//     d_{ii} = 1/i
+//    
+// bvec_c(int* n, int* m, double* x, double* bx)
+//
+//   applies a positive definite matrix b (here, just the identity)
+//   to m vectors of length n (in x, assumed column major
+//   as in fortran)
+// 
+// apbmul_c(int* n, int* m, double* x, double* ax)
+// ambmul_c(int* n, int* m, double* x, double* ax)
+//
+//   apply the SPD matrices (a+b) and (a-b), respectively, where
+//
+//     (a + b)_{ij} = \delta_{ij} (i+5) + (1-\delta_{ij})/(i+j)
+//     (a - b)_{ij} = \delta_{ij} (i+2) + 0.2 * (1-\delta_{ij})/(i+j)
+//
+//   to m vectors of length n (in x, assumed column major
+//   as in fortran). There matrices have the correct structure and 
+//   signature for linear response problems and can be used to test
+//   the smogd routine.
+//
+// spdmul_c(int* n, int* m, double* x, double* ax)
+// smdmul_c(int* n, int* m, double* x, double* ax)
+//
+//   apply the matrices (\sigma+\delta) and (\sigma-\delta), respectively, where
+//
+//     \sigma_{ij} = \delta_{ij}
+//     \delta_{ij} = 0,    i = j;
+//                   0.05, i > j;
+//                  -0.05, i < j.
+//
+//   to m vectors of length n (in x, assumed column major
+//   as in fortran). 
+//   note that sigma is SPD, while delta is antisymmetric, as they are
+//   in linear response problems. these routines can thus be used to
+//   test smogd. 
+// 
+// lrprec_c(int* n, int* m, double* fac, double* xp, double* xm,  double* yp, double* ym)
+//
+//   applies the smogd diagonal preconditioner to m vectors xp and xm (note that the two
+//   quantities are used to define both yp and ym), which are assumed to be column major
+//   as in fortran. 
+//   this routine implements the same definitions of a and sigma as in the previous 
+//   routines, and can be used to test smogd. 
+//
 void matvec_c(int* n, int* m, double* x, double* ax) {
   int N = *n;
   int M = *m;
@@ -31,60 +117,43 @@ void precnd_c(int* n, int* m, double* shift, double* r, double* z) {
 }
 
 void matvec_r_c(int* n, int* m, double* x, double* y) {
-    int N = *n;
-    int M = *m;
-    int i, j, k;
-    double fac;
+    int N = *n, M = *m;
 
-    for (i = 0; i < N; ++i)
-        for (k = 0; k < M; ++k)
-            y[i + N * k] = 0.0;
-
-    for (k = 0; k < M; ++k) {
-        for (i = 0; i < N; ++i) {
-            for (j = 0; j < N; ++j) {
-                if (j == i) {
-                    y[i + N * k] += (i + 1.0 + 1.0) * x[j + N * k];
-                } else {
-                    fac = (i + 1.0) / (j + 1.0);
-                    y[i + N * k] += fac * x[j + N * k] / (i + j + 2.0);
-                }
+    for (int k = 0; k < M; ++k)
+        for (int i = 0; i < N; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < N; ++j) {
+                double xval = x[j + N * k];
+                sum += (j == i)
+                    ? (i + 2.0) * xval
+                    : ((i + 1.0) / (j + 1.0)) * xval / (i + j + 2.0);
             }
+            y[i + N * k] = sum;
         }
-    }
 }
 
 void matvec_l_c(int* n, int* m, double* x, double* y) {
-    int i, j, k;
-    double fac;
-    int N = *n;
-    int M = *m;
+    int N = *n, M = *m;
 
-    for (i = 0; i < N; ++i)
-        for (k = 0; k < M; ++k)
-            y[i + N * k] = 0.0;
-
-    for (k = 0; k < M; ++k) {
-        for (i = 0; i < N; ++i) {
-            for (j = 0; j < N; ++j) {
-                if (j == i) {
-                    y[i + N * k] += (i + 1.0 + 1.0) * x[j + N * k];
-                } else {
-                    fac = (j + 1.0) / (i + 1.0);
-                    y[i + N * k] += fac * x[j + N * k] / (i + j + 2.0);
-                }
+    for (int k = 0; k < M; ++k)
+        for (int i = 0; i < N; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < N; ++j) {
+                double xval = x[j + N * k];
+                sum += (j == i)
+                    ? (i + 2.0) * xval
+                    : ((j + 1.0) / (i + 1.0)) * xval / (i + j + 2.0);
             }
+            y[i + N * k] = sum;
         }
-    }
 }
-
 
 void bvec_c(int* n, int* m, double* x, double* bx) {
   int N = *n;
   int M = *m;
   for (int j = 0; j < M; ++j)
     for (int i = 0; i < N; ++i)
-      bx[i + j * N] = x[i + j * N];  // identità
+      bx[i + j * N] = x[i + j * N];  
 }
 
 void apbmul_c(int* n, int* m, double* x, double* ax) {
@@ -118,57 +187,35 @@ void ambmul_c(int* n, int* m, double* x, double* ax) {
 }
 
 void spdmul_c(int* n, int* m, double* x, double* y) {
-  int N = *n;
-  int M = *m;
+    int N = *n, M = *m;
 
-  // Inizializza y a zero
-  for (int j = 0; j < M; ++j) {
-    for (int i = 0; i < N; ++i) {
-      y[i + j * N] = 0.0;
-    }
-  }
-
-  // Applica la logica della matrice SPD modificata
-  for (int k = 0; k < M; ++k) {
-    for (int j = 0; j < N; ++j) {
-      for (int i = 0; i < N; ++i) {
-        if (i == j) {
-          y[i + k * N] += x[i + k * N];
-        } else if (i > j) {
-          y[i + k * N] += 0.05 * x[j + k * N];
-        } else {
-          y[i + k * N] -= 0.05 * x[j + k * N];
+    for (int k = 0; k < M; ++k)
+        for (int i = 0; i < N; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < N; ++j) {
+                double xval = x[j + k * N];
+                sum += (i == j)     ? xval
+                     : (i > j)      ? 0.05 * xval
+                                   : -0.05 * xval;
+            }
+            y[i + k * N] = sum;
         }
-      }
-    }
-  }
 }
 
 void smdmul_c(int* n, int* m, double* x, double* y) {
-  int N = *n;
-  int M = *m;
+    int N = *n, M = *m;
 
-  // Inizializza y a zero
-  for (int j = 0; j < M; ++j) {
-    for (int i = 0; i < N; ++i) {
-      y[i + j * N] = 0.0;
-    }
-  }
-
-  // Applica la logica della matrice SPD modificata
-  for (int k = 0; k < M; ++k) {
-    for (int j = 0; j < N; ++j) {
-      for (int i = 0; i < N; ++i) {
-        if (i == j) {
-          y[i + k * N] += x[i + k * N];
-        } else if (i > j) {
-          y[i + k * N] -= 0.05 * x[j + k * N];
-        } else {
-          y[i + k * N] += 0.05 * x[j + k * N];
+    for (int k = 0; k < M; ++k)
+        for (int i = 0; i < N; ++i) {
+            double sum = 0.0;
+            for (int j = 0; j < N; ++j) {
+                double xval = x[j + k * N];
+                sum += (i == j)     ? xval
+                     : (i > j)      ? -0.05 * xval
+                                   : 0.05 * xval;
+            }
+            y[i + k * N] = sum;
         }
-      }
-    }
-  }
 }
 
 void lrprec_c(int* n, int* m, double* fac, double* xp, double* xm, 
@@ -186,32 +233,107 @@ void lrprec_c(int* n, int* m, double* fac, double* xp, double* xm,
     }
   }
 }
-  
+//
+// small function to output the results to a file:
+//
+#include <stdio.h>
 
+void write_results_c(const char* label, int n, int n_targ, double* eig, double* evec, const char* filename) {
+  FILE* f = fopen(filename, "a");
+  if (!f) return;
+
+  fprintf(f, "  %s results\n\n", label);
+  fprintf(f, "  Eigenvalues:\n");
+  for (int i = 0; i < n_targ; ++i)
+    fprintf(f, "  %5d%14.6f\n", i + 1, eig[i]);
+
+  for (int i = 0; i < n_targ; ++i) {
+    fprintf(f, "   Eigenvector %3d:\n", i + 1);
+    for (int j = 0; j < n; ++j)
+      fprintf(f, "  %5d%14.6f\n", j + 1, evec[j + i * n]);
+  }
+
+  fprintf(f, "\n");
+  fclose(f);
+}
+
+void write_results_c_1(const char* label, int n, int n_targ, double* eig, const char* filename) {
+  FILE* f = fopen(filename, "a");
+  if (!f) return;
+
+  fprintf(f, "  %s results\n\n", label);
+  fprintf(f, "  Eigenvalues:\n");
+  for (int i = 0; i < n_targ; ++i)
+    fprintf(f, "  %5d%14.6f\n", i + 1, eig[i]);
+
+  fprintf(f, "\n");
+  fclose(f);
+}
+
+void write_results_c_2(const char* label, int n, int n_targ, double* eig, double* evec, 
+                       double* evec_l, const char* filename) {
+  FILE* f = fopen(filename, "a");
+  if (!f) return;
+
+  fprintf(f, "  %s results\n\n", label);
+  fprintf(f, "  Eigenvalues:\n");
+  for (int i = 0; i < n_targ; ++i)
+    fprintf(f, "  %5d%14.6f\n", i + 1, eig[i]);
+
+  for (int i = 0; i < n_targ; ++i) {
+    fprintf(f, "  right Eigenvector %3d:\n", i + 1);
+    for (int j = 0; j < n; ++j)
+      fprintf(f, "  %5d%12.4f\n", j + 1, evec[j + i * n]);
+  }
+  for (int i = 0; i < n_targ; ++i) {
+    fprintf(f, "  left Eigenvector %3d:\n", i + 1);
+    for (int j = 0; j < n; ++j)
+      fprintf(f, "  %5d%12.4f\n", j + 1, evec_l[j + i * n]);
+  }
+
+  fprintf(f, "\n");
+  fclose(f);
+}
+void fix_phase(int n, int n_targ, double* evec) {
+  for (int i = 0; i < n_targ; ++i) {
+    int idx = i * n;  // indice del primo elemento della colonna i
+    if (evec[idx] < 0.0) {
+      for (int j = 0; j < n; ++j)
+        evec[j + i * n] = -evec[j + i * n];
+    }
+  }
+}
+//
+// main program: test davidson, non-symmetric davidson, lobpcg and smogd.
+//  
 int main() {
-  const int n = 1000, n_targ = 20, n_max = 25, max_iter = 100, max_dav = 20;
-  const double tol = 1e-8, shift = 0.0;
+  const int n = 100, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const double tol = 1e-10, shift = 0.0;
   double eig[n_max];
   double evec[n * n_max], evec_l[n * n_max];
   bool ok;
+//
+// get rid of the output file if it's already present.
+//
+  remove("output_c.txt");
+//
+  printf("\nCalling DAVIDSON driver...\n");
+  for (int i = 0; i < n * n_max; ++i)
+    evec[i] = 0.0;
+  for (int j = 0; j < n_max; ++j)
+    for (int i = 0; i < n; ++i)
+      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
 
-//  printf("\nCalling DAVIDSON driver...\n");
-//  for (int i = 0; i < n * n_max; ++i)
-//    evec[i] = 0.0;
-//  for (int j = 0; j < n_max; ++j)
-//    for (int i = 0; i < n; ++i)
-//      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-//
-//  davidson_driver_c(true, n, n_targ, n_max, max_iter, max_dav, tol, shift,
-//                    matvec_c, precnd_c, eig, evec, &ok);
-//
-//  if (ok) {
-//    printf("Davidson converged.\nEigenvalues:\n");
-//    for (int i = 0; i < n_targ; ++i)
-//      printf("  %.8f\n", eig[i]);
-//  } else {
-//    printf("Davidson failed to converge.\n");
-//  }
+  davidson_driver_c(false, n, n_targ, n_max, max_iter, max_dav, tol, shift,
+                    matvec_c, precnd_c, eig, evec, &ok);
+  fix_phase(n,n_targ,evec);
+
+  if (ok) {
+    printf("Davidson converged.\n");
+    write_results_c("Davidson", n, n_targ, eig, evec, "output_c.txt");
+  } else {
+    printf("Davidson failed to converge.\n");
+  }
 
   printf("\nCalling non-symmetric DAVIDSON driver...\n");
   for (int i = 0; i < n * n_max; ++i)
@@ -225,15 +347,16 @@ int main() {
     for (int i = 0; i < n; ++i)
       evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
 
-  nonsym_driver_c(true, n, n_targ, n_max, max_iter, tol, max_dav, shift,
-                  matvec_c, matvec_c, precnd_c, eig, evec, evec_l, 
-//                  matvec_r_c, matvec_l_c, precnd_c, eig, evec, evec_l, 
+  nonsym_driver_c(false, n, n_targ, n_max, max_iter, tol, max_dav, shift,
+//                matvec_c, matvec_c, precnd_c, eig, evec, evec_l, 
+                  matvec_r_c, matvec_l_c, precnd_c, eig, evec, evec_l, 
                   4, &ok);
+  fix_phase(n,n_targ,evec);
+  fix_phase(n,n_targ,evec_l);
 
   if (ok) {
-    printf("Non-symmetric Davidson converged.\nEigenvalues:\n");
-    for (int i = 0; i < n_targ; ++i)
-      printf("  %.8f\n", eig[i]);
+    printf("Non-symmetric Davidson converged.\n");
+    write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
   } else {
     printf("Non-symmetric Davidson failed to converge.\n");
   }
@@ -249,22 +372,22 @@ int main() {
   ok = false;
   
   lobpcg_driver_c(
-    true,         // verbose
-    false,        // gen_eig = false → problema standard
+    false,         // verbose
+    true,        // gen_eig = false → problema standard
     n, n_targ, n_max, max_iter, tol, shift,
     matvec_c, precnd_c, bvec_c,
     eig, evec, &ok
   );
+  fix_phase(n,n_targ,evec);
   
   if (ok) {
-    printf("LOBPCG converged.\nEigenvalues:\n");
-    for (int i = 0; i < n_targ; ++i)
-      printf("  %.8f\n", eig[i]);
+    printf("LOBPCG converged.\n");
+    write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
   } else {
     printf("LOBPCG failed to converge.\n");
   }
 
-printf("\nCalling CASLR-EFF driver...\n");
+printf("\nCalling SMOGD driver...\n");
 
   int n2 = 2 * n;
   double* evec2 = malloc(sizeof(double) * n2 * n_max);
@@ -275,18 +398,17 @@ printf("\nCalling CASLR-EFF driver...\n");
   
   ok = false;
   
-  caslr_eff_driver_c(
-    true, n, n2, n_targ, n_max, max_iter, tol, max_dav,
+  smogd_driver_c(
+    false, n, n2, n_targ, n_max, max_iter, tol, max_dav,
     apbmul_c, ambmul_c, spdmul_c, smdmul_c, lrprec_c,
     eig, evec2, &ok
   );
   
   if (ok) {
-    printf("CASLR-EFF converged.\nEigenvalues:\n");
-    for (int i = 0; i < n_targ; ++i)
-      printf("  %.8f\n", eig[i]);
+    printf("SMOGD converged.\n");
+    write_results_c_1("SMOGD", n2, n_targ, eig, "output_c.txt");
   } else {
-    printf("CASLR-EFF failed to converge.\n");
+    printf("SMOGD failed to converge.\n");
   }
 
 free(evec2);

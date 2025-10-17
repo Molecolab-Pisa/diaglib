@@ -52,9 +52,6 @@ contains
     real(dp), intent(in)  :: x(n,m)
     real(dp), intent(out) :: ax(n,m)
 !
-    write(6,*) 'calling matvec.r'
-    write(6,'(10f12.4)') x(1:10,:)
-    write(6,*) 'associated?', associated(matvec_r_ptr)
     call matvec_r_ptr(n, m, x, ax)
 !
   end subroutine

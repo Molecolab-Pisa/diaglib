@@ -55,7 +55,7 @@ void lobpcg_driver_c(
     bool* ok
 );
 
-void smogd_c(
+void smogd_driver_c(
     bool verbose,
     int n,
     int n2,
@@ -68,7 +68,7 @@ void smogd_c(
     void (*ambmul)(int*, int*, double*, double*),
     void (*spdmul)(int*, int*, double*, double*),
     void (*smdmul)(int*, int*, double*, double*),
-    void (*lrprec)(int*, int*, double*, double*, double*),
+    void (*lrprec)(int*, int*, double*, double*, double*, double*, double*),
     double* eig,
     double* evec,
     bool* ok

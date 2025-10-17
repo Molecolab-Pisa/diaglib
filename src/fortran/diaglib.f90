@@ -2866,16 +2866,17 @@ module diaglib
 !
 !     if required, print timings
 !
-      print * 
-      write(6,1100) t_mv, t_diag, t_ortho, t_tot
-      print * 
-      print * 
+      if (verbose) then
+        print * 
+        write(6,1100) t_mv, t_diag, t_ortho, t_tot
+        print * 
+        print * 
+      end if
 !
 !     stop after one davidson evaluation or do a second one if side = consecutive 
 !
       if (side.eq.1 .or. side.eq.2) do_davidson = .false.
       if (consecutive) then
-        write(6,*) 'consecutive. right/left?', right, left
         if (left) then
           left = .false.
           do_davidson = .false.
