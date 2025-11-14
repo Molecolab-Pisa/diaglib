@@ -2,7 +2,7 @@ subroutine nonsym_driver_c(verbose, n, n_targ, n_max, max_iter, tol, max_dav, sh
                            matvec_r, matvec_l, precnd, eig, evec_r, evec_l, side, ok) &
                            bind(C, name="nonsym_driver_c")
   use iso_c_binding
-  use real_precision
+  use diaglib_global_utils
   use diaglib
   implicit none
 

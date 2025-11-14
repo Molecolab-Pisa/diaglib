@@ -1,7 +1,7 @@
 subroutine davidson_driver_c(verbose, n, n_targ, n_max, max_iter, max_dav, tol, shift, &
                              matvec, precnd, eig, evec, ok) bind(C, name="davidson_driver_c")
   use iso_c_binding
-  use real_precision
+  use diaglib_global_utils
   use diaglib
   implicit none
 

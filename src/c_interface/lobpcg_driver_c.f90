@@ -1,7 +1,7 @@
 subroutine lobpcg_driver_c(verbose, gen_eig, n, n_targ, n_max, max_iter, tol, shift, &
                            matvec, precnd, bvec, eig, evec, ok) bind(C, name="lobpcg_driver_c")
   use iso_c_binding
-  use real_precision
+  use diaglib_global_utils
   use diaglib
   implicit none
 

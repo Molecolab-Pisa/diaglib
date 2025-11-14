@@ -1,7 +1,7 @@
 subroutine smogd_driver_c(verbose, n, n2, n_targ, n_max, max_iter, tol, maxdav, &
                           apbmul, ambmul, spdmul, smdmul, lrprec, eig, evec, ok) bind(C, name="smogd_driver_c")
   use iso_c_binding
-  use real_precision
+  use diaglib_global_utils
   use diaglib
   implicit none
 
