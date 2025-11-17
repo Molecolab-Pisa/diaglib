@@ -105,4 +105,5 @@ integer, parameter :: dp = selected_real_kind(15)
 !
     return
   end subroutine get_time
+
 end module diaglib_global_utils

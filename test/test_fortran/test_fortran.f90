@@ -1,6 +1,6 @@
 program test_fortran
   use diaglib_global_utils
-  use diaglib
+  !use diaglib
   implicit none
 !
 ! tests the various functionalities of diaglib.
