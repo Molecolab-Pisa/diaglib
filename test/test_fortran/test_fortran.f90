@@ -1,5 +1,5 @@
 program test_fortran
-  use real_precision
+  use diaglib_global_utils
   use diaglib
   implicit none
 !
@@ -7,7 +7,7 @@ program test_fortran
 !
   integer,  parameter :: n = 100, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20
   integer,  parameter :: lutest=100
-  real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp, zero = 0.0_dp, one = 1.0_dp
+  real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
 !
   integer               :: i, j
   logical               :: ok

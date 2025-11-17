@@ -54,6 +54,6 @@ test/test_c/%.o: test/test_c/%.c
 
 # Pulizia
 clean:
-	rm -f src/fortran/*.o src/c_interface/*o test/test_c/*.o include/*.mod $(EXE) $(LIB)
+	rm -f src/fortran/*.o src/c_interface/*.o test/test_c/*.o test/test_fortran/*.o include/*.mod $(EXE) $(LIB)
 
 .PHONY: all lib clean
