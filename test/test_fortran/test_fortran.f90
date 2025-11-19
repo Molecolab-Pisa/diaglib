@@ -1,6 +1,5 @@
 program test_fortran
   use diaglib_global_utils
-  !use diaglib
   implicit none
 !
 ! tests the various functionalities of diaglib.
@@ -18,14 +17,22 @@ program test_fortran
   open (file='output_fortran.txt',form='formatted',access='sequential', & 
         unit=lutest,status='unknown')
 !
+  1000 format(t3,a,1x,'results')
+  1010 format(t3,'Eigenvalues:')
+  1020 format(t3,i5,f14.6)
+  1021 format(t3,i5,f12.4)
+  1022 format(t3,i5,*(f14.6))
+  1030 format(t3,'Eigenvector ',i3,':')
+  1031 format(t3,'Eigenvector ',tl1,*(i8,6x))
+!
 ! allocate space for eigenvalues and eigenvectors
 !
   allocate (eig(n_max), evec(n, n_max))
-  eig  = zero
-  evec = zero
 !
 ! test davidson:
 !
+  eig  = zero
+  evec = zero
   do i = 1, n_max
     evec(i,i) = one
   end do
@@ -35,16 +42,45 @@ program test_fortran
   call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
                        ax, dx, eig, evec, ok)
 !
-  1000 format(t3,a,1x,'results')
-  1010 format(t3,'Eigenvalues:')
-  1020 format(t3,i5,f14.6)
-  1021 format(t3,i5,f12.4)
-  1022 format(t3,i5,*(f14.6))
-  1030 format(t3,'Eigenvector ',i3,':')
-  1031 format(t3,'Eigenvector ',tl1,*(i8,6x))
   if (ok) then
     write(6,*) ' Davidson converged.'
     write(lutest,1000) 'Davidson'
+    write(lutest,*)
+    write(lutest,1010)
+    do i = 1, n_targ
+      write(lutest,1020) i, eig(i)
+    end do
+    do i = 1, n_targ
+!
+!     fix the phase
+!
+      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+    end do
+    write(lutest,1031) (i, i = 1, n_targ)
+    do j = 1, n
+      write(lutest,1022) j, (evec(j,i), i = 1, n_targ)
+    end do
+    write(lutest,*)
+  else
+    write(6,*) ' Davidson failed to converge.'
+  end if
+!
+! test generalized davidson:
+!
+  eig  = zero
+  evec = zero
+  do i = 1, n_max
+    evec(i,i) = one
+  end do
+  ok = .false.
+!
+  write(6,*) ' testing Davidson:'
+  call gen_davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
+                       ax, dx, mx, eig, evec, ok)
+!
+  if (ok) then
+    write(6,*) ' Generalized Davidson converged.'
+    write(lutest,1000) 'Generalized Davidson'
     write(lutest,*)
     write(lutest,1010)
     do i = 1, n_targ
@@ -112,43 +148,43 @@ program test_fortran
 !  end if
 !!
 !  deallocate (evec_l)
-!!
-!! test lobpcg:
-!!
-!  eig  = zero
-!  evec = zero
-!!
-!  do i = 1, n_max
-!    evec(i,i) = one
-!  end do
-!  ok = .false.
-!!
-!  write(6,*) ' testing LOBPCG:'
-!  call lobpcg_driver(.false., .true., n, n_targ, n_max, max_iter, tol, shift, &
-!                     ax, dx, sx, eig, evec, ok)
-!!
-!  if (ok) then
-!    write(6,*) ' LOBPCG converged.'
-!    write(lutest,1000) 'LOBPCG'
-!    write(lutest,*)
-!    write(lutest,1010)
-!    do i = 1, n_targ
-!      write(lutest,1020) i, eig(i)
-!    end do
-!    do i = 1, n_targ
-!      write(lutest,1030) '', i
-!!
-!!     fix the phase
-!!
-!      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
-!      do j = 1, n
-!        write(lutest,1020) j, evec(j,i)
-!      end do
-!    end do
-!    write(lutest,*)
-!  else
-!    write(6,*) ' LOBPCG failed to converge.'
-!  end if
+!
+! test lobpcg:
+!
+  eig  = zero
+  evec = zero
+!
+  do i = 1, n_max
+    evec(i,i) = one
+  end do
+  ok = .false.
+!
+  write(6,*) ' testing LOBPCG:'
+  call lobpcg_driver(.true., .true., n, n_targ, n_max, max_iter, tol, shift, &
+                     ax, dx, sx, eig, evec, ok)
+!
+  if (ok) then
+    write(6,*) ' LOBPCG converged.'
+    write(lutest,1000) 'LOBPCG'
+    write(lutest,*)
+    write(lutest,1010)
+    do i = 1, n_targ
+      write(lutest,1020) i, eig(i)
+    end do
+    do i = 1, n_targ
+!
+!     fix the phase
+!
+      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+    end do
+    write(lutest,1031) (i, i = 1, n_targ)
+    do j = 1, n
+      write(lutest,1022) j, (evec(j,i), i = 1, n_targ)
+    end do
+    write(lutest,*)
+  else
+    write(6,*) ' LOBPCG failed to converge.'
+  end if
 !!
 !! test smogd:
 !!
@@ -212,6 +248,31 @@ program test_fortran
 !
     return
   end subroutine ax
+!
+  subroutine mx(n,m,x,y)
+    implicit none
+    integer,                  intent(in)    :: n, m
+    real(dp), dimension(n,m), intent(in)    :: x
+    real(dp), dimension(n,m), intent(inout) :: y
+!
+    integer :: i, j, k
+!
+    y = 0.0_dp
+!
+    do k = 1, m
+      do i = 1, n
+        do j = 1, n
+          if (j.eq.i) then
+            y(i,k) = y(i,k) + x(j,k)
+          else
+            y(i,k) = y(i,k) + x(j,k) / real(i+j,dp)
+          end if
+        end do
+      end do
+    end do
+!
+    return
+  end subroutine mx
 !
   subroutine dx(n,m,shift,x,y)
     implicit none

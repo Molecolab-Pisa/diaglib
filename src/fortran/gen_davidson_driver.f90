@@ -1,4 +1,4 @@
-  subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
+  subroutine gen_davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
                               shift,matvec,precnd,bvec,eig,evec,ok)
   use diaglib_minor_utils
   implicit none
@@ -94,12 +94,15 @@
 !
 !   expansion spaces, residuals and their norms.
 !
-    real(dp), allocatable           :: space(:,:), aspace(:,:), r(:,:), r_norm(:,:)
-    real(dp), allocatable, optional :: bspace(:,:)
+    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), r(:,:), r_norm(:,:)
 !
 !   subspace matrix and eigenvalues.
 !
-    real(dp), allocatable :: a_red(:,:), a_copy(:,:), e_red(:)
+    real(dp), allocatable :: a_red(:,:), a_copy(:,:), s_red(:,:), s_copy(:,:), e_red(:)
+!
+!   scratch:
+!
+    real(dp), allocatable :: b_evec(:,:)
 !
 !   restarting variables
 !
@@ -111,6 +114,10 @@
 !
     real(dp)              :: dnrm2
     external              :: dcopy, dnrm2, dgemm, dsyev
+!
+!   check what problem we are dealing with
+!
+    generalized = present(bvec)
 !
 !   compute the actual size of the expansion space, checking that
 !   the input makes sense.
@@ -130,6 +137,10 @@
 !
     allocate (space(n,lda), aspace(n,lda), r(n,n_max), stat = istat)
     call check_mem(istat)
+    if (generalized) then
+      allocate (bspace(n,lda), b_evec(n,n_max), stat = istat)
+      call check_mem(istat)
+    endif
 !
 !   allocate memory for convergence check
 !
@@ -140,6 +151,10 @@
 !
     allocate (a_red(lda,lda), a_copy(lda,lda), e_red(lda), stat=istat)
     call check_mem(istat)
+    if (generalized) then
+      allocate (s_red(lda,lda), s_copy(lda,lda), stat=istat)
+      call check_mem(istat)
+    endif
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
 !
@@ -156,6 +171,10 @@
     space   = zero
     aspace  = zero
     a_red   = zero
+    if (generalized) then
+      bspace  = zero
+      s_red   = zero
+    endif
     ok      = .false.
     done    = .false.
 !
@@ -170,6 +189,13 @@
 !   move the guess into the expansion space.
 !
     call dcopy(n*n_max,evec,1,space,1)
+!
+!   apply the b matrix and b-orthogonalize the guess:
+!
+    if (generalized) then
+      call bvec(n,n_max,space,bspace)
+      call b_ortho(n,n_max,space,bspace)
+    endif
 !
 !   initialize the number of active vectors and the associated indices.
 !
@@ -188,7 +214,7 @@
 !
 !   main loop:
 !
-    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+    1030 format(t5,'Generalized Davidson-Liu iterations (tol=',d10.2,'):',/, &
                 t5,'------------------------------------------------------------------',/, &
                 t7,'  iter  root              eigenvalue','         rms         max ok',/, &
                 t5,'------------------------------------------------------------------')
@@ -207,12 +233,14 @@
 !
       call get_time(t1)
       call matvec(n,n_act,space(1,i_beg+n_rst),aspace(1,i_beg+n_rst))
+!     call bvec(n,n_act,space(1,i_beg+n_rst),bspace(1,i_beg+n_rst))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
-!     update the reduced matrix 
+!     update the reduced matrices 
 !
       call dgemm('t','n',ldu,n_act,n,one,space,n,aspace(1,i_beg+n_rst),n,zero,a_red(1,i_beg+n_rst),lda)
+!     call dgemm('t','n',ldu,n_act,n,one,space,n,bspace(1,i_beg+n_rst),n,zero,s_red(1,i_beg+n_rst),lda)
 !
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
@@ -225,10 +253,12 @@
         n_rst   = 0
       end if
       a_copy = a_red
+!     s_copy = s_red
 !
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
+!     call dsygv(1,'v','u',ldu,a_copy,lda,s_copy,lda,e_red,work,lwork,info)
       call dsyev('v','u',ldu,a_copy,lda,e_red,work,lwork,info)
       call get_time(t2)
       t_diag = t_diag + t2 - t1
@@ -243,6 +273,7 @@
 !     compute the residuals, and their rms and sup norms:
 !
       call dgemm('n','n',n,n_max,ldu,one,aspace,n,a_copy,lda,zero,r,n)
+      if (generalized) call dgemm('n','n',n,n_max,ldu,one,bspace,n,a_copy,lda,zero,b_evec,n)
 !
       do i_eig = 1, n_targ
 !
@@ -250,7 +281,11 @@
 !
         if (done(i_eig)) cycle
 !
+        if (generalized) then
+          call daxpy(n,-eig(i_eig),b_evec(:,i_eig),1,r(:,i_eig),1)
+        else
         call daxpy(n,-eig(i_eig),evec(:,i_eig),1,r(:,i_eig),1)
+        endif
         r_norm(1,i_eig) = dnrm2(n,r(:,i_eig),1)/sqrtn
         r_norm(2,i_eig) = maxval(abs(r(:,i_eig)))
       end do
@@ -313,7 +348,13 @@
 !       orthonormalize them.
 !
         call get_time(t1)
-        call ortho_vs_x(n,ldu,n_act,space,space(1,i_beg),xx,xx)
+        if (generalized) then
+          call b_ortho_vs_x(n,ldu,n_act,space,bspace,space(1,i_beg))
+          call bvec(n,n_act,space(1,i_beg),bspace(1,i_beg))
+          call b_ortho(n,n_act,space(1,i_beg),bspace(1,i_beg))
+        else
+          call ortho_vs_x(n,ldu,n_act,space,space(1,i_beg),xx,xx)
+        endif
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
       else
@@ -327,6 +368,12 @@
         call dcopy(n_max*n,evec,1,space,1)
         aspace = zero
         a_red  = zero
+        if (generalized) then
+          call dcopy(n_max*n,b_evec,1,bspace,1)
+          call b_ortho(n,n_max,space,bspace)
+          bspace = zero
+          s_red  = zero
+        endif
 !
 !       initialize indexes back to their starting values 
 !
@@ -356,7 +403,7 @@
 !
 !   if required, print timings
 !
-    1000 format(t3,'timings for Davidson-Liu (cpu/wall): ',/, &
+    1000 format(t3,'timings for davidson (cpu/wall): ',/, &
                 t3,'  matrix-vector multiplications: ',2f12.4,/, &
                 t3,'  diagonalization:               ',2f12.4,/, &
                 t3,'  orthogonalization:             ',2f12.4,/, &
@@ -374,5 +421,5 @@
             t7,'# converged vectors: ',i4,/,&
             t5,'----------------------------------------')
     return
-  end subroutine davidson_driver
+  end subroutine gen_davidson_driver
 

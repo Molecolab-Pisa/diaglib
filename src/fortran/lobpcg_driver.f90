@@ -1,8 +1,6 @@
   subroutine lobpcg_driver(verbose,gen_eig,n,n_targ,n_max,max_iter,tol, &
                            shift,matvec,precnd,bvec,eig,evec,ok)
-  !use diaglib_global_utils
   use diaglib_minor_utils
-  !use orthogonalizations
   implicit none
 !
 !   main driver for lobpcg.
@@ -371,7 +369,7 @@
 !
 !   if required, print timings
 !
-    1000 format(t3,'timings for lobpcg (cpu/wall):   ',/, &
+    1000 format(t3,'timings for LOBPCG (cpu/wall):   ',/, &
                 t3,'  matrix-vector multiplications: ',2f12.4,/, &
                 t3,'  diagonalization:               ',2f12.4,/, &
                 t3,'  orthogonalization:             ',2f12.4,/, &
