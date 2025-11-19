@@ -1,6 +1,6 @@
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
-                              shift,matvec,precnd,bvec,eig,evec,ok)
-  use diaglib_minor_utils
+                              shift,matvec,precnd,eig,evec,ok)
+  use dgl_minor_utils
   implicit none
 !
 !   main driver for davidson-liu.
@@ -37,8 +37,6 @@
 !
 !   precnd:   external subroutine that applies a preconditioner.
 !
-!   bvec:     external subroutine that applies the metric.
-!
 !   output variables:
 !   =================
 !
@@ -59,7 +57,6 @@
     real(dp), dimension(n,n_max), intent(inout) :: evec
     logical,                      intent(inout) :: ok
     external                                    :: matvec, precnd
-    external, optional                          :: bvec
 !
 !   local variables:
 !   ================
@@ -95,7 +92,6 @@
 !   expansion spaces, residuals and their norms.
 !
     real(dp), allocatable           :: space(:,:), aspace(:,:), r(:,:), r_norm(:,:)
-    real(dp), allocatable, optional :: bspace(:,:)
 !
 !   subspace matrix and eigenvalues.
 !

@@ -1,4 +1,4 @@
-module diaglib_global_utils
+module dgl_global_utils
   implicit none
 !
 ! global kind for double precision
@@ -106,4 +106,4 @@ integer, parameter :: dp = selected_real_kind(15)
     return
   end subroutine get_time
 
-end module diaglib_global_utils
+end module dgl_global_utils

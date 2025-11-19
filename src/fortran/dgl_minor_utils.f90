@@ -1,5 +1,5 @@
-module diaglib_minor_utils
-  use orthogonalizations
+module dgl_minor_utils
+  use dgl_orthogonalizations
   implicit none
   contains
 
@@ -161,4 +161,4 @@ module diaglib_minor_utils
     return
   end subroutine 
 
-end module diaglib_minor_utils
+end module dgl_minor_utils

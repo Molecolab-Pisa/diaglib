@@ -1,10 +1,10 @@
 add_library(diaglib SHARED 
-        diaglib_global_utils.f90 
-        diaglib_minor_utils.f90 
-        orthogonalizations.f90 
+        dgl_global_utils.f90 
+        dgl_minor_utils.f90 
+        dgl_orthogonalizations.f90 
         lobpcg_driver.f90 
         davidson_driver.f90
-        gen_davidson_driver.f90
+        #gen_davidson_driver.f90
         )
 
 target_link_libraries(diaglib PUBLIC ${BLAS_LIBRARIES})
@@ -17,12 +17,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 
 elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
-        if(${CMAKE_Fortran_COMPILER} MATCHES "usr/bin/gfortran")
+        if(${CMAKE_Fortran_COMPILER} MATCHES "gfortran" OR
+           ${CMAKE_Fortran_COMPILER} MATCHES "f95")
 
                 target_compile_options(diaglib PUBLIC -fbacktrace -fcheck=all)
 
-        elseif(${CMAKE_Fortran_COMPILER} MATCHES ".*ifort.*" OR
-               ${CMAKE_Fortran_COMPILER} MATCHES ".*ifx.*")
+        elseif(${CMAKE_Fortran_COMPILER} MATCHES "ifort" OR
+               ${CMAKE_Fortran_COMPILER} MATCHES "ifx")
 
        target_compile_options(diaglib PUBLIC -traceback -check all)
 

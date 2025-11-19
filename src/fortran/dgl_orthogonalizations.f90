@@ -1,5 +1,5 @@
-module orthogonalizations
-use diaglib_global_utils  
+module dgl_orthogonalizations
+use dgl_global_utils  
 
   contains
 
@@ -634,4 +634,4 @@ use diaglib_global_utils
     return
   end subroutine b_ortho_vs_x
 
-end module orthogonalizations
+end module dgl_orthogonalizations

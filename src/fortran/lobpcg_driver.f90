@@ -1,6 +1,6 @@
   subroutine lobpcg_driver(verbose,gen_eig,n,n_targ,n_max,max_iter,tol, &
                            shift,matvec,precnd,bvec,eig,evec,ok)
-  use diaglib_minor_utils
+  use dgl_minor_utils
   implicit none
 !
 !   main driver for lobpcg.

@@ -1,6 +1,6 @@
   subroutine gen_davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav, &
                               shift,matvec,precnd,bvec,eig,evec,ok)
-  use diaglib_minor_utils
+  use dgl_minor_utils
   implicit none
 !
 !   main driver for davidson-liu.

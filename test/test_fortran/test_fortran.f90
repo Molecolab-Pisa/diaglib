@@ -1,5 +1,5 @@
 program test_fortran
-  use diaglib_global_utils
+  use dgl_global_utils
   implicit none
 !
 ! tests the various functionalities of diaglib.
@@ -75,8 +75,8 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Davidson:'
-  call gen_davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-                       ax, dx, mx, eig, evec, ok)
+  !call gen_davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
+  !                     ax, dx, mx, eig, evec, ok)
 !
   if (ok) then
     write(6,*) ' Generalized Davidson converged.'
@@ -98,7 +98,7 @@ program test_fortran
     end do
     write(lutest,*)
   else
-    write(6,*) ' Davidson failed to converge.'
+    write(6,*) 'Generalized Davidson failed to converge.'
   end if
 !!
 !! test non-symmetric davidson:
