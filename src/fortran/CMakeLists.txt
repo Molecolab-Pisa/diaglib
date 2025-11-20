@@ -1,9 +1,10 @@
-add_library(diaglib SHARED 
-        dgl_global_utils.f90 
-        dgl_minor_utils.f90 
-        dgl_orthogonalizations.f90 
-        lobpcg_driver.f90 
+add_library(diaglib SHARED
+        dgl_global_utils.f90
+        dgl_minor_utils.f90
+        dgl_orthogonalizations.f90
+        lobpcg_driver.f90
         davidson_driver.f90
+        #test_module.f90
         #gen_davidson_driver.f90
         )
 
@@ -11,11 +12,12 @@ target_link_libraries(diaglib PUBLIC ${BLAS_LIBRARIES})
 target_include_directories(diaglib PUBLIC ${BLAS_INCLUDE_DIRS})
 
 # Set Fortran flags depending on build type
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+STRING(TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_l)
+if(CMAKE_BUILD_TYPE_l MATCHES "release")
 
         target_compile_options(diaglib PUBLIC -march=native)
 
-elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+elseif(CMAKE_BUILD_TYPE_l MATCHES "debug")
 
         if(${CMAKE_Fortran_COMPILER} MATCHES "gfortran" OR
            ${CMAKE_Fortran_COMPILER} MATCHES "f95")
