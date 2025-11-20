@@ -4,7 +4,7 @@ add_library(diaglib SHARED
         dgl_orthogonalizations.f90
         lobpcg_driver.f90
         davidson_driver.f90
-        #test_module.f90
+        dgl_interfaces.f90
         #gen_davidson_driver.f90
         )
 

@@ -1,5 +1,6 @@
 program test_fortran
   use dgl_global_utils
+  use dgl_interfaces
   implicit none
 !
 ! tests the various functionalities of diaglib.
@@ -11,6 +12,8 @@ program test_fortran
   integer               :: i, j
   logical               :: ok
   real(dp), allocatable :: eig(:), evec(:,:), evec_l(:,:)
+  procedure(myproc), pointer :: proc_pointer => null()
+
 !
 ! open a text file for the output, to be used to compare the results with a reference.
 !
@@ -39,8 +42,9 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Davidson:'
+  proc_pointer => test
   call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-                       ax, dx, eig, evec, ok)
+                       ax, dx, eig, evec, ok, proc_pointer=proc_pointer)
 !
   if (ok) then
     write(6,*) ' Davidson converged.'
@@ -496,5 +500,10 @@ program test_fortran
 !
     return
   end subroutine lrprc
+
+  subroutine test(a)
+    real :: a
+    print *, "is called, a=", a
+  end subroutine
 end program test_fortran
 

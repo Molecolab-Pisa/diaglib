@@ -1,6 +1,7 @@
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
-                              shift,matvec,precnd,eig,evec,ok)
+                              shift,matvec,precnd,eig,evec,ok,proc_pointer)
   use dgl_minor_utils
+  use dgl_interfaces, only : myproc
   implicit none
 !
 !   main driver for davidson-liu.
@@ -107,6 +108,17 @@
 !
     real(dp)              :: dnrm2
     external              :: dcopy, dnrm2, dgemm, dsyev
+!
+    procedure(myproc), pointer, optional :: proc_pointer
+    
+    if (present(proc_pointer)) then
+      print *, "is present"
+      if (associated(proc_pointer)) then
+        print *, "is associated"
+        call proc_pointer(1.0)
+      endif
+    endif
+    stop "debug"
 !
 !   compute the actual size of the expansion space, checking that
 !   the input makes sense.
@@ -370,5 +382,5 @@
             t7,'# converged vectors: ',i4,/,&
             t5,'----------------------------------------')
     return
+!
   end subroutine davidson_driver
-
