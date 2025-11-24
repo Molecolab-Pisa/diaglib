@@ -1,13 +1,13 @@
-module dgl_interfaces
-  implicit none
-  interface
-        subroutine myproc(a)
-            real :: a
-        end subroutine myproc
+module dgl_drivers_interfaces
+    use dgl_global_utils, only: dp
+    use dgl_external_interfaces
+    implicit none
+
+    interface
 
         subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
-                                shift,matvec,precnd,eig,evec,ok,proc_pointer)
-            use dgl_minor_utils
+                                shift,matvec,precnd,eig,evec,ok,metvec)
+            import
             implicit none
 
             logical,                      intent(in)    :: verbose
@@ -17,11 +17,12 @@ module dgl_interfaces
             real(dp), dimension(n_max),   intent(inout) :: eig
             real(dp), dimension(n,n_max), intent(inout) :: evec
             logical,                      intent(inout) :: ok
-            external                                    :: matvec, precnd
-            procedure(myproc), pointer, optional :: proc_pointer
-
+            procedure(matvec_) :: matvec
+            procedure(precnd_) :: precnd
+            procedure(metvec_), pointer, optional :: metvec
 
         end subroutine
+
     end interface
 
-end module dgl_interfaces
+end module dgl_drivers_interfaces

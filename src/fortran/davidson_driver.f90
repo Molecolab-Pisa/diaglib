@@ -1,7 +1,7 @@
   subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
-                              shift,matvec,precnd,eig,evec,ok,proc_pointer)
+                              shift,matvec,precnd,eig,evec,ok,metvec)
   use dgl_minor_utils
-  use dgl_interfaces, only : myproc
+  use dgl_external_interfaces
   implicit none
 !
 !   main driver for davidson-liu.
@@ -57,7 +57,9 @@
     real(dp), dimension(n_max),   intent(inout) :: eig
     real(dp), dimension(n,n_max), intent(inout) :: evec
     logical,                      intent(inout) :: ok
-    external                                    :: matvec, precnd
+    procedure(matvec_) :: matvec
+    procedure(precnd_) :: precnd
+    procedure(metvec_), pointer, optional :: metvec
 !
 !   local variables:
 !   ================
@@ -108,17 +110,6 @@
 !
     real(dp)              :: dnrm2
     external              :: dcopy, dnrm2, dgemm, dsyev
-!
-    procedure(myproc), pointer, optional :: proc_pointer
-    
-    if (present(proc_pointer)) then
-      print *, "is present"
-      if (associated(proc_pointer)) then
-        print *, "is associated"
-        call proc_pointer(1.0)
-      endif
-    endif
-    stop "debug"
 !
 !   compute the actual size of the expansion space, checking that
 !   the input makes sense.

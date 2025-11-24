@@ -4,4 +4,4 @@ add_executable(main.exe
 
 # Link DiagLib
 target_link_libraries(main.exe PUBLIC diaglib)
-#target_include_directories(main.exe PUBLIC ${CMAKE_SOURCE_DIR}/src/fortran)
+#target_include_directories(main.exe PUBLIC ${CMAKE_SOURCE_DIR}/include)
