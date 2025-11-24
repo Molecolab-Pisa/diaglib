@@ -12,7 +12,7 @@ program test_fortran
   integer               :: i, j
   logical               :: ok
   real(dp), allocatable :: eig(:), evec(:,:), evec_l(:,:)
-  procedure(), pointer :: sx_p => null()
+  procedure(), pointer :: mx_p => null()
 !
 ! open a text file for the output, to be used to compare the results with a reference.
 !
@@ -40,10 +40,10 @@ program test_fortran
   end do
   ok = .false.
 !
-  sx_p => sx
+  mx_p => mx
   write(6,*) ' testing Davidson:'
   call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-                       ax, dx, eig, evec, ok, metvec=sx_p)
+                       ax, dx, eig, evec, ok)
 !
   if (ok) then
     write(6,*) ' Davidson converged.'
@@ -78,8 +78,8 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Davidson:'
-  !call gen_davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-  !                     ax, dx, mx, eig, evec, ok)
+  call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
+                       ax, dx, eig, evec, ok, metvec=mx_p)
 !
   if (ok) then
     write(6,*) ' Generalized Davidson converged.'
@@ -163,8 +163,8 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing LOBPCG:'
-  call lobpcg_driver(.true., .true., n, n_targ, n_max, max_iter, tol, shift, &
-                     ax, dx, sx, eig, evec, ok)
+  call lobpcg_driver(.true., n, n_targ, n_max, max_iter, tol, shift, &
+                     ax, dx, eig, evec, ok)
 !
   if (ok) then
     write(6,*) ' LOBPCG converged.'
@@ -187,6 +187,43 @@ program test_fortran
     write(lutest,*)
   else
     write(6,*) ' LOBPCG failed to converge.'
+  end if
+!
+! test lobpcg:
+!
+  eig  = zero
+  evec = zero
+!
+  do i = 1, n_max
+    evec(i,i) = one
+  end do
+  ok = .false.
+!
+  write(6,*) ' testing Generalized LOBPCG:'
+  call lobpcg_driver(.true., n, n_targ, n_max, max_iter, tol, shift, &
+                     ax, dx, eig, evec, ok, metvec=mx_p)
+!
+  if (ok) then
+    write(6,*) ' Generalized LOBPCG converged.'
+    write(lutest,1000) 'Generalized LOBPCG'
+    write(lutest,*)
+    write(lutest,1010)
+    do i = 1, n_targ
+      write(lutest,1020) i, eig(i)
+    end do
+    do i = 1, n_targ
+!
+!     fix the phase
+!
+      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+    end do
+    write(lutest,1031) (i, i = 1, n_targ)
+    do j = 1, n
+      write(lutest,1022) j, (evec(j,i), i = 1, n_targ)
+    end do
+    write(lutest,*)
+  else
+    write(6,*) ' Generalized LOBPCG failed to converge.'
   end if
 !!
 !! test smogd:

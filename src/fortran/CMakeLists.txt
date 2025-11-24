@@ -6,7 +6,6 @@ add_library(diaglib SHARED
         dgl_drivers_interfaces.f90
         davidson_driver.f90
         lobpcg_driver.f90
-        #gen_davidson_driver.f90
         )
 
 target_link_libraries(diaglib PUBLIC ${BLAS_LIBRARIES})

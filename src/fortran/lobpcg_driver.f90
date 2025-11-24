@@ -1,6 +1,7 @@
-  subroutine lobpcg_driver(verbose,gen_eig,n,n_targ,n_max,max_iter,tol, &
-                           shift,matvec,precnd,bvec,eig,evec,ok)
+  subroutine lobpcg_driver(verbose,n,n_targ,n_max,max_iter,tol, &
+                           shift,matvec,precnd,eig,evec,ok,metvec)
   use dgl_minor_utils
+  use dgl_external_interfaces
   implicit none
 !
 !   main driver for lobpcg.
@@ -10,9 +11,6 @@
 !
 !   verbose:  logical, whether to print various information at each 
 !             iteration (eigenvalues, residuals...).
-!
-!   gen_eig:  logical, whether a generalized eigenvalue problem has
-!             to be solved. 
 !
 !   n:        integer, size of the matrix to be diagonalized.
 !
@@ -35,7 +33,7 @@
 !
 !   precnd:   external subroutine that applies a preconditioner.
 !
-!   bvec:     external subroutine that applies the metric to a vector.
+!   metvec:     external subroutine that applies the metric to a vector.
 !             only referenced is gen is true.
 !
 !   output variables:
@@ -50,14 +48,17 @@
 !
 !   ok:       logical, true if lobpcg converged.
 !
-    logical,                      intent(in)    :: verbose, gen_eig
+    logical,                      intent(in)    :: verbose
     integer,                      intent(in)    :: n, n_targ, n_max
     integer,                      intent(in)    :: max_iter
     real(dp),                     intent(in)    :: tol, shift
     real(dp), dimension(n_max),   intent(inout) :: eig
     real(dp), dimension(n,n_max), intent(inout) :: evec
     logical,                      intent(inout) :: ok
-    external                                    :: matvec, precnd, bvec
+    procedure(matvec_) :: matvec
+    procedure(precnd_) :: precnd
+    procedure(metvec_), pointer, optional :: metvec
+
 !
 !   local variables:
 !   ================
@@ -72,11 +73,19 @@
                              bx_new(:,:)
     logical,  allocatable :: done(:)
 !
+!   varible to determine the type of problem
+!    
+    logical               :: generalized
+!
 !   external functions:
 !   ===================
 !
     real(dp)              :: dnrm2
     external              :: dnrm2, daxpy, dsyev, dcopy
+!
+!   check what problem we are dealing with
+!
+    generalized = present(metvec)
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -128,15 +137,15 @@
 !
 !   if required, compute b*evec and b-orthogonalize the guess
 !
-    if (gen_eig) then 
-      call bvec(n,n_max,evec,bx_new)
+    if (generalized) then 
+      call metvec(n,n_max,evec,bx_new)
       call b_ortho(n,n_max,evec,bx_new)
     end if
 !
 !   compute the first eigenpairs by diagonalizing the reduced matrix:
 !
     call dcopy(n*n_max,evec,1,space,1)
-    if (gen_eig) call dcopy(n*n_max,bx_new,1,bspace,1)
+    if (generalized) call dcopy(n*n_max,bx_new,1,bspace,1)
     call get_time(t1)
     call matvec(n,n_max,space,aspace)
     call get_time(t2)
@@ -158,7 +167,7 @@
 !
 !   if required, also get b times the ritz vector:
 !
-    if (gen_eig) then 
+    if (generalized) then 
       call dgemm('n','n',n,n_max,n_max,one,bspace,n,a_red,len_a,zero,evec,n)
       call dcopy(n*n_max,evec,1,bspace,1)
     end if
@@ -167,7 +176,7 @@
 !   build the residuals:
 !
     call dcopy(n*n_max,aspace,1,r,1)
-    if (gen_eig) then 
+    if (generalized) then 
       do i_eig = 1, n_max
         call daxpy(n,-eig(i_eig),bspace(:,i_eig),1,r(:,i_eig),1)
       end do
@@ -186,13 +195,13 @@
 !   orthogonalize:
 !
     call get_time(t1)
-    if (gen_eig) then
+    if (generalized) then
       call b_ortho_vs_x(n,n_max,n_max,space,bspace,space(1,ind_w))
 !
 !     after b_ortho, w is b-orthogonal to x, and orthonormal. 
 !     compute the application of b to w, and b-orthonormalize it.
 !
-      call bvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
+      call metvec(n,n_max,space(1,ind_w),bspace(1,ind_w))
       call b_ortho(n,n_max,space(1,ind_w),bspace(1,ind_w))
     else
       call ortho_vs_x(n,n_max,n_max,space,space(1,ind_w),xx,xx)
@@ -251,7 +260,7 @@
 !
       call dgemm('n','n',n,n_max,len_u,one,space,n,a_red,len_a,zero,x_new,n)
       call dgemm('n','n',n,n_max,len_u,one,aspace,n,a_red,len_a,zero,ax_new,n)
-      if (gen_eig) then
+      if (generalized) then
         call dgemm('n','n',n,n_max,len_u,one,bspace,n,a_red,len_a,zero,bx_new,n)
       end if
 !
@@ -264,7 +273,7 @@
 !
         if (done(i_eig)) cycle
 !
-        if (gen_eig) then
+        if (generalized) then
           call daxpy(n,-eig(i_eig),bx_new(:,i_eig),1,r(:,i_eig),1)
         else
           call daxpy(n,-eig(i_eig),x_new(:,i_eig),1,r(:,i_eig),1)
@@ -329,7 +338,7 @@
       call dgemm('n','n',n,n_act,len_u,one,aspace,n,u_p,len_u,zero,evec,n)
       call dcopy(n_act*n,evec,1,aspace(1,ind_p),1)
 !
-      if (gen_eig) then
+      if (generalized) then
         call dgemm('n','n',n,n_act,len_u,one,bspace,n,u_p,len_u,zero,evec,n)
         call dcopy(n_act*n,evec,1,bspace(1,ind_p),1)
       end if
@@ -341,7 +350,7 @@
 !
       call dcopy(n*n_max,x_new,1,space,1)
       call dcopy(n*n_max,ax_new,1,aspace,1)
-      if (gen_eig) then 
+      if (generalized) then 
         call dcopy(n*n_max,bx_new,1,bspace,1)
       end if
 !
@@ -352,9 +361,9 @@
 !     orthogonalize w against x and p, and then orthonormalize it:
 !
       call get_time(t1)
-      if (gen_eig) then 
+      if (generalized) then 
         call b_ortho_vs_x(n,n_max+n_act,n_act,space,bspace,space(1,ind_w))
-        call bvec(n,n_act,space(1,ind_w),bspace(1,ind_w))
+        call metvec(n,n_act,space(1,ind_w),bspace(1,ind_w))
         call b_ortho(n,n_act,space(1,ind_w),bspace(1,ind_w))
       else
         call ortho_vs_x(n,n_max+n_act,n_act,space,space(1,ind_w),xx,xx)
