@@ -21,7 +21,7 @@
 !             n_max and (n,n_max) rather than n_targ and (n,n_targ). 
 !             for better convergence, a value larger than n_targ (eg.,
 !             n_targ + 10) is recommended.
-!   
+!
 !   max_iter: integer, maximum allowed number of iterations.
 !
 !   tol:      double precision real, the convergence threshold.
@@ -66,29 +66,40 @@
 !   local variables:
 !   ================
 !
+!
+!   expansion space varibles: 
+!       minimum number of iterations before restart,
+!       actual number of iterations before restart, total dimension, current dimension
+!
     integer, parameter    :: min_dav = 10
-    integer               :: istat
-!
-!   actual expansion space size and total dimension
-!
-    integer               :: dim_dav, lda
+    integer               :: dim_dav, lda, ld_current
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
     integer               :: n_act, ind, i_beg
 !
-!   current size and total dimension of the expansion space
-!
-    integer               :: m_dim, ldu
-!
 !   number of frozen (i.e. converged) vectors
 !
     integer               :: n_frozen
 !
-    integer               :: it, i_eig
+!   tolerances on residuals norms, used for convergence
 !
-    real(dp)              :: sqrtn, tol_rms, tol_max
-    real(dp)              :: xx(1)
+    real (dp)             :: tol_rms, tol_max
+!
+!   variables for the restart
+!
+    integer               :: n_rst
+    logical               :: restart
+!
+!   type of problem (standard or generalized)
+!    
+    logical               :: generalized
+!
+!   iterators and utilities
+!
+    integer               :: it, i_eig
+    real(dp)              :: sqrtn, xx(1)
+    integer               :: istat
 !
 !   arrays to control convergence and orthogonalization
 !
@@ -96,7 +107,7 @@
 !
 !   expansion spaces, residuals and their norms.
 !
-    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), r(:,:), r_norm(:,:)
+    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), residuals(:,:), r_norm(:,:)
 !
 !   subspace matrix and eigenvalues.
 !
@@ -105,15 +116,6 @@
 !   scratch:
 !
     real(dp), allocatable :: b_evec(:,:)
-!
-!   restarting variables
-!
-    integer               :: n_rst
-    logical               :: restart
-!
-!   varible to determine the type of problem
-!    
-    logical               :: generalized
 !
 !   external functions:
 !   ===================
@@ -124,10 +126,15 @@
 !   check what problem we are dealing with
 !
     generalized = present(metvec)
+    if (generalized) then
+      if (.not.associated(metvec)) then
+        stop "DiagLib: Non associated pointer to metric-vector product routine"
+      endif
+    endif
 !
 !   compute the actual size of the expansion space, checking that
 !   the input makes sense.
-!   no expansion space smaller than max_dav = 10 is deemed acceptable.
+!   no expansion space smaller than min_dav = 10 is deemed acceptable.
 !
     dim_dav = max(min_dav,max_dav)
     lda     = dim_dav*n_max
@@ -141,9 +148,9 @@
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residual:
 !
-    allocate (space(n,lda), aspace(n,lda), r(n,n_max), stat = istat)
+    allocate (space(n,lda), aspace(n,lda), residuals(n,n_max), stat = istat)
     call check_mem(istat)
-        if (generalized) then
+    if (generalized) then
       allocate (bspace(n,lda), b_evec(n,n_max), stat = istat)
       call check_mem(istat)
     endif
@@ -211,8 +218,7 @@
 !
 !   initialize the counter for the expansion of the subspace
 !
-    m_dim = 1
-    ldu   = 0
+    ld_current   = 0
 !
 !   initialize to false the restart
 !
@@ -233,7 +239,7 @@
 !
 !     update the size of the expansion space.
 !
-      ldu = ldu + n_act
+      ld_current = ld_current + n_act
 !
 !     perform this iteration's matrix-vector multiplication:
 !
@@ -244,7 +250,7 @@
 !
 !     update the reduced matrix 
 !
-      call dgemm('t','n',ldu,n_act,n,one,space,n,aspace(1,i_beg+n_rst),n,zero,a_red(1,i_beg+n_rst),lda)
+      call dgemm('t','n',ld_current,n_act,n,one,space,n,aspace(1,i_beg+n_rst),n,zero,a_red(1,i_beg+n_rst),lda)
 !
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
@@ -261,7 +267,7 @@
 !     diagonalize the reduced matrix
 !
       call get_time(t1)
-      call dsyev('v','u',ldu,a_copy,lda,e_red,work,lwork,info)
+      call dsyev('v','u',ld_current,a_copy,lda,e_red,work,lwork,info)
       call get_time(t2)
       t_diag = t_diag + t2 - t1
 !
@@ -270,12 +276,12 @@
 !
       eig = e_red(1:n_max)
 !
-      call dgemm('n','n',n,n_max,ldu,one,space,n,a_copy,lda,zero,evec,n)
+      call dgemm('n','n',n,n_max,ld_current,one,space,n,a_copy,lda,zero,evec,n)
 !
 !     compute the residuals, and their rms and sup norms:
 !
-      call dgemm('n','n',n,n_max,ldu,one,aspace,n,a_copy,lda,zero,r,n)
-      if (generalized) call dgemm('n','n',n,n_max,ldu,one,bspace,n,a_copy,lda,zero,b_evec,n)
+      call dgemm('n','n',n,n_max,ld_current,one,aspace,n,a_copy,lda,zero,residuals,n)
+      if (generalized) call dgemm('n','n',n,n_max,ld_current,one,bspace,n,a_copy,lda,zero,b_evec,n)
 !
       do i_eig = 1, n_targ
 !
@@ -284,12 +290,12 @@
         if (done(i_eig)) cycle
 !
         if (generalized) then
-          call daxpy(n,-eig(i_eig),b_evec(:,i_eig),1,r(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),b_evec(:,i_eig),1,residuals(:,i_eig),1)
         else
-          call daxpy(n,-eig(i_eig),evec(:,i_eig),1,r(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),evec(:,i_eig),1,residuals(:,i_eig),1)
         endif
-        r_norm(1,i_eig) = dnrm2(n,r(:,i_eig),1)/sqrtn
-        r_norm(2,i_eig) = maxval(abs(r(:,i_eig)))
+        r_norm(1,i_eig) = dnrm2(n,residuals(:,i_eig),1)/sqrtn
+        r_norm(2,i_eig) = maxval(abs(residuals(:,i_eig)))
       end do
 !
 !     check convergence. lock the first contiguous converged eigenvalues
@@ -323,7 +329,7 @@
 !     check whether an update is required. 
 !     if not, perform a davidson restart.
 !
-      if (m_dim .lt. dim_dav) then
+      if (ld_current .lt. lda) then
 !
 !       compute the preconditioned residuals using davidson's procedure
 !       note that this is done with a user-supplied subroutine, that can
@@ -331,7 +337,6 @@
 !       be more effective than the diagonal one, as in the original 
 !       algorithm.
 !
-        m_dim = m_dim + 1
         i_beg = i_beg + n_act
         n_act = n_max
         n_frozen = 0
@@ -344,18 +349,18 @@
           end if
         end do
         ind   = n_max - n_act + 1
-        call precnd(n,n_act,-eig(ind),r(1,ind),space(1,i_beg))
+        call precnd(n,n_act,-eig(ind),residuals(1,ind),space(1,i_beg))
 !
 !       orthogonalize the new vectors to the existing ones and then
 !       orthonormalize them.
 !
         call get_time(t1)
         if (generalized) then
-          call b_ortho_vs_x(n,ldu,n_act,space,bspace,space(1,i_beg))
+          call b_ortho_vs_x(n,ld_current,n_act,space,bspace,space(1,i_beg))
           call metvec(n,n_act,space(1,i_beg),bspace(1,i_beg))
           call b_ortho(n,n_act,space(1,i_beg),bspace(1,i_beg))
         else
-            call ortho_vs_x(n,ldu,n_act,space,space(1,i_beg),xx,xx)
+            call ortho_vs_x(n,ld_current,n_act,space,space(1,i_beg),xx,xx)
         endif
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
@@ -379,9 +384,8 @@
 !
 !       initialize indexes back to their starting values 
 !
-        ldu   = 0
+        ld_current   = 0
         i_beg = 1 
-        m_dim = 1
         n_rst = 0
 !
 !       counting how many matvec we can skip at the next
@@ -415,7 +419,7 @@
 !      
 !   deallocate memory
 !
-    deallocate (work, tau, space, aspace, r, done, r_norm, a_red, a_copy, e_red)
+    deallocate (work, tau, space, aspace, residuals, done, r_norm, a_red, a_copy, e_red)
 !
 1050 format(t5,'----------------------------------------',/,&
             t7,'# target vectors:    ',i4,/,&

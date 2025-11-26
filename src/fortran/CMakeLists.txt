@@ -22,7 +22,8 @@ elseif(CMAKE_BUILD_TYPE_l MATCHES "debug")
         if(${CMAKE_Fortran_COMPILER} MATCHES "gfortran" OR
            ${CMAKE_Fortran_COMPILER} MATCHES "f95")
 
-                target_compile_options(diaglib PUBLIC -fbacktrace -fcheck=all)
+                target_compile_options(diaglib PUBLIC 
+                -fbacktrace -fcheck=all -Wconversion -Wuninitialized)
 
         elseif(${CMAKE_Fortran_COMPILER} MATCHES "ifort" OR
                ${CMAKE_Fortran_COMPILER} MATCHES "ifx")
