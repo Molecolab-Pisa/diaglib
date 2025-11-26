@@ -1,8 +1,13 @@
 module dgl_orthogonalizations
-use dgl_global_utils  
-
+use dgl_global_utils
+implicit none
+!
+! convergence thresholds for orthogonalizations
+!
+  real(dp), parameter    :: tol_ortho = two * epsilon(one)
+!
   contains
-
+!
   subroutine ortho(n,m,u,w)
     implicit none
 !
@@ -27,11 +32,6 @@ use dgl_global_utils
 !   =============
 !
     real(dp), allocatable :: v(:,:)
-!
-!   external functions:
-!   ===================
-!
-    external dgeqrf, dtrsm
 !
     allocate (v(n,m))
     v = u
@@ -69,10 +69,6 @@ use dgl_global_utils
     real(dp), parameter   :: tol_svd = 1.0e-5_dp
     logical,  parameter   :: use_svd = .false.
 !
-!   external functions:
-!   ===================
-!
-    external dpotrf, dtrsm, dgemm
 !
     allocate (metric(m,m))
 !
@@ -192,7 +188,7 @@ use dgl_global_utils
     real(dp)              :: error, dnrm2, alpha, unorm, shift
     real(dp)              :: rcond, l_norm, linv_norm
     logical               :: macro_done, micro_done
-    real(dp), parameter   :: tol_ortho_cd = two * epsilon(one)
+    real(dp), parameter   :: tol_ortho = two * epsilon(one)
     integer,  parameter   :: maxit = 10
 !
 !   local scratch
@@ -200,10 +196,6 @@ use dgl_global_utils
 !
     real(dp), allocatable :: metric(:,:), msave(:,:)
 !
-!   external functions:
-!   ===================
-!
-    external              :: dgemm, dgeqrf, dtrsm, dnrm2, dtrcon
 !
 !   get memory for the metric.
 !
@@ -301,7 +293,7 @@ use dgl_global_utils
 !     check the error:
 !
       error      = epsilon(one) * rcond*rcond
-      macro_done = error .lt. tol_ortho_cd
+      macro_done = error .lt. tol_ortho
     end do
 !
     100 format(t3,'ortho_cd failed with the following error:',a)
@@ -380,9 +372,6 @@ use dgl_global_utils
     real(dp)              :: fac
 !
     real(dp), allocatable :: over(:,:), u(:,:), s(:), vt(:,:), tmp(:,:)
-!
-    real(dp)              :: dnrm2
-    external              :: dnrm2
 !
 !   allocate memory.
 !
@@ -482,13 +471,6 @@ use dgl_global_utils
     integer                :: it
     real(dp)               :: xu_norm, growth
     real(dp),  allocatable :: xu(:,:)
-!
-!   external functions:
-!   ===================
-!
-    intrinsic              :: random_number
-    real(dp)               :: dnrm2
-    external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
     logical, parameter     :: useqr = .false.
@@ -571,13 +553,6 @@ use dgl_global_utils
     integer                :: it
     real(dp)               :: xu_norm, growth, xx(1)
     real(dp),  allocatable :: xu(:,:)
-!
-!   external functions:
-!   ===================
-!
-    intrinsic              :: random_number
-    real(dp)               :: dnrm2
-    external               :: dnrm2, dgemm
 !   
     integer, parameter     :: maxit = 10
     logical, parameter     :: useqr = .false.

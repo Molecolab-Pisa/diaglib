@@ -8,10 +8,6 @@ integer, parameter :: dp = selected_real_kind(15)
 ! useful constants
 !
   real(dp), parameter    :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
-!
-! convergence thresholds for orthogonalization
-!
-  real(dp), parameter    :: tol_ortho = two * epsilon(one)
 ! 
 ! memory and info for lapack routines
 !
@@ -23,7 +19,16 @@ integer, parameter :: dp = selected_real_kind(15)
   real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &
                             t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
 !
+! external functions:
+! ===================
 !
+  real(dp)  :: dnrm2
+  external dgeqrf, dtrsm, dpotrf, dtrcon, dgemm, dnrm2
+!
+! intrisic functions:
+! ===================
+!
+  intrinsic              :: random_number
 !
   contains
 !

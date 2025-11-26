@@ -101,7 +101,7 @@
     real(dp)              :: sqrtn, xx(1)
     integer               :: istat
 !
-!   arrays to control convergence and orthogonalization
+!   array to control convergence and orthogonalization
 !
     logical,  allocatable :: done(:)
 !
@@ -117,11 +117,9 @@
 !
     real(dp), allocatable :: b_evec(:,:)
 !
-!   external functions:
-!   ===================
-!
-    real(dp)              :: dnrm2
-    external              :: dcopy, dnrm2, dgemm, dsyev
+!   ================
+!   START EXECUTION
+!   ================
 !
 !   check what problem we are dealing with
 !

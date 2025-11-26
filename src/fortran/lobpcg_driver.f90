@@ -63,25 +63,47 @@
 !   local variables:
 !   ================
 !
-    integer               :: it, i_eig, n_act, ind_x, ind_w, ind_p, &
-                             len_a, len_u
-    integer               :: istat
-    real(dp)              :: sqrtn, tol_rms, tol_max, xx(1)
-    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), &
-                             a_red(:,:), e_red(:), r(:,:), r_norm(:,:)
-    real(dp), allocatable :: u_x(:,:), u_p(:,:), x_new(:,:), ax_new(:,:), &
-                             bx_new(:,:)
-    logical,  allocatable :: done(:)
+!   expansion space varibles: 
+!       total dimension, current dimension
+    integer               :: lda, ld_current
+!
+!   tolerances on residuals norms, used for convergence
+!
+    real (dp)             :: tol_rms, tol_max
+!
+!   number of active vectors at a given iteration, and indices to access them
+!
+    integer               :: n_act
+!
+!   indexes to access specific parts of the expansion space
+!
+    integer               :: ind_x, ind_w, ind_p
 !
 !   varible to determine the type of problem
 !    
     logical               :: generalized
 !
-!   external functions:
-!   ===================
+!   iterators and utilities
 !
-    real(dp)              :: dnrm2
-    external              :: dnrm2, daxpy, dsyev, dcopy
+    integer               :: istat, it, i_eig
+    real(dp)              :: sqrtn, xx(1)
+!
+!   array to control convergence and orthogonalization
+!
+    logical,  allocatable :: done(:)
+!
+!   expansion spaces, residuals and their norms.
+!   
+    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), residuals(:,:), r_norm(:,:)
+!
+!   subspace matrix and eigenvalues.
+!
+    real(dp), allocatable :: a_red(:,:), e_red(:)
+    real(dp), allocatable :: u_x(:,:), u_p(:,:), x_new(:,:), ax_new(:,:), bx_new(:,:)
+!
+!   ================
+!   START EXECUTION
+!   ================
 !
 !   check what problem we are dealing with
 !
@@ -96,14 +118,14 @@
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residual:
 !
-    len_a = 3*n_max
-    allocate (space(n,len_a), aspace(n,len_a), bspace(n,len_a), &
-              r(n,n_max), stat=istat)
+    lda = 3*n_max
+    allocate (space(n,lda), aspace(n,lda), bspace(n,lda), &
+              residuals(n,n_max), stat=istat)
     call check_mem(istat)
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-    allocate (a_red(len_a,len_a), e_red(len_a), stat=istat)
+    allocate (a_red(lda,lda), e_red(lda), stat=istat)
     call check_mem(istat)
 !
 !   allocate memory for temporary copies of x, ax, and bx:
@@ -151,38 +173,38 @@
     call get_time(t2)
     t_mv = t_mv + t2 - t1
     if (shift.ne.zero) call daxpy(n*n_max,shift,space,1,aspace,1)
-    call dgemm('t','n',n_max,n_max,n,one,space,n,aspace,n,zero,a_red,len_a)
+    call dgemm('t','n',n_max,n_max,n,one,space,n,aspace,n,zero,a_red,lda)
     call get_time(t1)
-    call dsyev('v','l',n_max,a_red,len_a,e_red,work,lwork,info)
+    call dsyev('v','l',n_max,a_red,lda,e_red,work,lwork,info)
     call get_time(t2)
     t_diag = t_diag + t2 - t1
     eig = e_red(1:n_max)
 !
 !   get the ritz vectors:
 !
-    call dgemm('n','n',n,n_max,n_max,one,space,n,a_red,len_a,zero,evec,n)
+    call dgemm('n','n',n,n_max,n_max,one,space,n,a_red,lda,zero,evec,n)
     call dcopy(n*n_max,evec,1,space,1)
-    call dgemm('n','n',n,n_max,n_max,one,aspace,n,a_red,len_a,zero,evec,n)
+    call dgemm('n','n',n,n_max,n_max,one,aspace,n,a_red,lda,zero,evec,n)
     call dcopy(n*n_max,evec,1,aspace,1)
 !
 !   if required, also get b times the ritz vector:
 !
     if (generalized) then 
-      call dgemm('n','n',n,n_max,n_max,one,bspace,n,a_red,len_a,zero,evec,n)
+      call dgemm('n','n',n,n_max,n_max,one,bspace,n,a_red,lda,zero,evec,n)
       call dcopy(n*n_max,evec,1,bspace,1)
     end if
 !
 !   do the first iteration explicitly. 
 !   build the residuals:
 !
-    call dcopy(n*n_max,aspace,1,r,1)
+    call dcopy(n*n_max,aspace,1,residuals,1)
     if (generalized) then 
       do i_eig = 1, n_max
-        call daxpy(n,-eig(i_eig),bspace(:,i_eig),1,r(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),bspace(:,i_eig),1,residuals(:,i_eig),1)
       end do
     else
       do i_eig = 1, n_max
-        call daxpy(n,-eig(i_eig),space(:,i_eig),1,r(:,i_eig),1)
+        call daxpy(n,-eig(i_eig),space(:,i_eig),1,residuals(:,i_eig),1)
       end do
     end if
 !
@@ -190,7 +212,7 @@
 !
     ind_x = 1
     ind_w = ind_x + n_max 
-    call precnd(n,n_max,shift-eig(ind_x),r(1,ind_x),space(1,ind_w))
+    call precnd(n,n_max,shift-eig(ind_x),residuals(1,ind_x),space(1,ind_w))
 !
 !   orthogonalize:
 !
@@ -239,12 +261,12 @@
 !
 !     build the reduced matrix and diagonalize it:
 !
-      len_u = n_max + 2*n_act
-      if (it.eq.1) len_u = 2*n_max
-      call dgemm('t','n',len_u,len_u,n,one,space,n,aspace,n,zero,a_red,len_a)
+      ld_current = n_max + 2*n_act
+      if (it.eq.1) ld_current = 2*n_max
+      call dgemm('t','n',ld_current,ld_current,n,one,space,n,aspace,n,zero,a_red,lda)
 !
       call get_time(t1)
-      call dsyev('v','l',len_u,a_red,len_a,e_red,work,lwork,info)
+      call dsyev('v','l',ld_current,a_red,lda,e_red,work,lwork,info)
       call get_time(t2)
       t_diag = t_diag + t2 - t1
 !
@@ -258,15 +280,15 @@
 !
 !     update x and ax, and, if required, bx:
 !
-      call dgemm('n','n',n,n_max,len_u,one,space,n,a_red,len_a,zero,x_new,n)
-      call dgemm('n','n',n,n_max,len_u,one,aspace,n,a_red,len_a,zero,ax_new,n)
+      call dgemm('n','n',n,n_max,ld_current,one,space,n,a_red,lda,zero,x_new,n)
+      call dgemm('n','n',n,n_max,ld_current,one,aspace,n,a_red,lda,zero,ax_new,n)
       if (generalized) then
-        call dgemm('n','n',n,n_max,len_u,one,bspace,n,a_red,len_a,zero,bx_new,n)
+        call dgemm('n','n',n,n_max,ld_current,one,bspace,n,a_red,lda,zero,bx_new,n)
       end if
 !
 !     compute the residuals and their rms and sup norms:
 !
-      call dcopy(n*n_max,ax_new,1,r,1)
+      call dcopy(n*n_max,ax_new,1,residuals,1)
       do i_eig = 1, n_max
 !
 !       if the eigenvalue is already converged, skip it.
@@ -274,12 +296,12 @@
         if (done(i_eig)) cycle
 !
         if (generalized) then
-          call daxpy(n,-eig(i_eig),bx_new(:,i_eig),1,r(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),bx_new(:,i_eig),1,residuals(:,i_eig),1)
         else
-          call daxpy(n,-eig(i_eig),x_new(:,i_eig),1,r(:,i_eig),1)
+          call daxpy(n,-eig(i_eig),x_new(:,i_eig),1,residuals(:,i_eig),1)
         end if
-        r_norm(1,i_eig) = dnrm2(n,r(:,i_eig),1)/sqrtn
-        r_norm(2,i_eig) = maxval(abs(r(:,i_eig)))
+        r_norm(1,i_eig) = dnrm2(n,residuals(:,i_eig),1)/sqrtn
+        r_norm(2,i_eig) = maxval(abs(residuals(:,i_eig)))
       end do
 !
 !     only lock the first converged eigenvalues/vectors.
@@ -323,23 +345,23 @@
 !     -x in the basis of (x,p,w), and then by orthogonalizing then to
 !     the coefficients u_x of x_new. 
 !
-      allocate (u_x(len_u,n_max), u_p(len_u,n_act), stat = istat)
+      allocate (u_x(ld_current,n_max), u_p(ld_current,n_act), stat = istat)
       call check_mem(istat)
 !
-      call get_coeffs(len_a,len_u,n_max,n_act,a_red,u_x,u_p)
+      call get_coeffs(lda,ld_current,n_max,n_act,a_red,u_x,u_p)
 !
 !     p  = space  * u_p
 !     ap = aspace * u_p
 !     bp = bspace * u_p
 !     note that this is numerically safe, as u_p is orthogonal.
 !
-      call dgemm('n','n',n,n_act,len_u,one,space,n,u_p,len_u,zero,evec,n)
+      call dgemm('n','n',n,n_act,ld_current,one,space,n,u_p,ld_current,zero,evec,n)
       call dcopy(n_act*n,evec,1,space(1,ind_p),1)
-      call dgemm('n','n',n,n_act,len_u,one,aspace,n,u_p,len_u,zero,evec,n)
+      call dgemm('n','n',n,n_act,ld_current,one,aspace,n,u_p,ld_current,zero,evec,n)
       call dcopy(n_act*n,evec,1,aspace(1,ind_p),1)
 !
       if (generalized) then
-        call dgemm('n','n',n,n_act,len_u,one,bspace,n,u_p,len_u,zero,evec,n)
+        call dgemm('n','n',n,n_act,ld_current,one,bspace,n,u_p,ld_current,zero,evec,n)
         call dcopy(n_act*n,evec,1,bspace(1,ind_p),1)
       end if
 !
@@ -356,7 +378,7 @@
 !
 !     compute the preconditioned residuals w:
 !
-      call precnd(n,n_act,shift-eig(1),r(1,ind_x),space(1,ind_w))
+      call precnd(n,n_act,shift-eig(1),residuals(1,ind_x),space(1,ind_w))
 !
 !     orthogonalize w against x and p, and then orthonormalize it:
 !
@@ -388,7 +410,7 @@
 !
 !   deallocate memory and return.
 !
-    deallocate (work, tau, space, aspace, bspace, r, a_red, e_red, & 
+    deallocate (work, tau, space, aspace, bspace, residuals, a_red, e_red, & 
                 x_new, ax_new, bx_new, done, r_norm, stat = istat)
     call check_mem(istat)
 !
@@ -396,7 +418,7 @@
 
   contains
 
-  subroutine get_coeffs(len_a,len_u,n_max,n_act,a_red,u_x,u_p)
+  subroutine get_coeffs(lda,ld_current,n_max,n_act,a_red,u_x,u_p)
     implicit none
 !
 !   given the eigenvetors of the reduced matrix in a_red, extract
@@ -411,10 +433,10 @@
 !   to reuse the ax, aw, and ap vectors to compute ap_new, without
 !   loosing numerical precision.
 !
-    integer,                          intent(in)    :: len_a, len_u, n_max, n_act
-    real(dp), dimension(len_a,len_a), intent(in)    :: a_red
-    real(dp), dimension(len_u,n_max), intent(inout) :: u_x
-    real(dp), dimension(len_u,n_act), intent(inout) :: u_p
+    integer,                          intent(in)    :: lda, ld_current, n_max, n_act
+    real(dp), dimension(lda,lda), intent(in)    :: a_red
+    real(dp), dimension(ld_current,n_max), intent(inout) :: u_x
+    real(dp), dimension(ld_current,n_act), intent(inout) :: u_p
 !
     integer               :: ind_x, off_x, i_eig
     real(dp)              :: xx(1)
@@ -422,7 +444,7 @@
     off_x = n_max - n_act
     ind_x = off_x + 1
 !
-    u_x(1:len_u,1:n_max) = a_red(1:len_u,1:n_max)
+    u_x(1:ld_current,1:n_max) = a_red(1:ld_current,1:n_max)
 !
 !   u_p = u_x for the active vectors only
 !
@@ -436,7 +458,7 @@
 !
 !   orthogonalize:
 !
-    call ortho_vs_x(len_u,n_max,n_act,u_x,u_p,xx,xx)
+    call ortho_vs_x(ld_current,n_max,n_act,u_x,u_p,xx,xx)
 !
 !   all done.
 !
