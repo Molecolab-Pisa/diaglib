@@ -27,8 +27,8 @@ module dgl_minor_utils
 !
 !     compute the overlap and check that the vectors are orthonormal.
 !
-      allocate (overlap(m,m), stat=istat)
-      call check_mem(istat)
+      !allocate (overlap(m,m), stat=istat)
+      call mallocate(m,m,overlap)
       call dgemm('t','n',m,m,n,one,evec,n,evec,n,zero,overlap,m)
       diag_norm = zero
       out_norm  = zero
@@ -48,8 +48,9 @@ module dgl_minor_utils
         call ortho_cd(n,m,evec,growth,ok)
       end if
 !
-      deallocate (overlap, stat = istat)
-      call check_mem(istat)
+      !deallocate (overlap, stat = istat)
+      call mfree(overlap)
+
     end if
 !
     return

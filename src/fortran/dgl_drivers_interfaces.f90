@@ -40,6 +40,12 @@ module dgl_drivers_interfaces
 
         end subroutine lobpcg_driver
 
+        subroutine dgl_init(mem)
+        import
+        implicit none
+        integer :: mem
+        end subroutine dgl_init
+        
     end interface
 
 end module dgl_drivers_interfaces

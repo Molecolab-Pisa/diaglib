@@ -33,7 +33,8 @@ implicit none
 !
     real(dp), allocatable :: v(:,:)
 !
-    allocate (v(n,m))
+    !allocate (v(n,m))
+    call mallocate(n,m,v)
     v = u
     call dgeqrf(n,m,u,n,tau,work,lwork,info)
 !
@@ -41,8 +42,8 @@ implicit none
 !
     u = v
 !
-    deallocate (v)
-    return
+    !deallocate (v)
+    call mfree(v)
   end subroutine ortho
 !
   subroutine b_ortho(n,m,u,bu)
@@ -70,7 +71,8 @@ implicit none
     logical,  parameter   :: use_svd = .false.
 !
 !
-    allocate (metric(m,m))
+    !allocate (metric(m,m))
+    call mallocate(m,m,metric)
 !
     call dgemm('t','n',m,m,n,one,u,n,bu,n,zero,metric,m)
 !
@@ -79,7 +81,12 @@ implicit none
 !     debug option: use svd to b-orthonormalize, by computing
 !     b**(-1/2)
 !
-      allocate (sigma(m), u_svd(m,m), vt_svd(m,m), temp(n,m))
+      !allocate (sigma(m), u_svd(m,m), vt_svd(m,m), temp(n,m))
+      call mallocate(m,sigma)
+      call mallocate(m,m,u_svd)
+      call mallocate(m,m,vt_svd)
+      call mallocate(n,m,temp)
+!      
       call dgesvd('a','a',m,m,metric,m,sigma,u_svd,m,vt_svd,m,work,lwork,info)
 !
 !     compute sigma**(-1/2)
@@ -115,7 +122,11 @@ implicit none
       call dgemm('n','n',n,m,m,one,bu,n,metric,m,zero,temp,n)
       bu = temp
 !
-      deallocate (sigma, u_svd, vt_svd, temp)
+      !deallocate (sigma, u_svd, vt_svd, temp)
+      call mfree(sigma)
+      call mfree(u_svd)
+      call mfree(vt_svd)
+      call mfree(temp)
     else
 !
 !     compute the cholesky factorization of the metric.
@@ -128,8 +139,9 @@ implicit none
       call dtrsm('r','l','t','n',n,m,one,metric,m,bu,n)
     end if
 !
-    deallocate (metric)
-    return
+    !deallocate (metric)
+    call mfree(metric)
+!
   end subroutine b_ortho
 !
   subroutine diag_shift(n,shift,a)
@@ -199,7 +211,10 @@ implicit none
 !
 !   get memory for the metric.
 !
-    allocate (metric(m,m), msave(m,m))
+    !allocate (metric(m,m), msave(m,m))
+    call mallocate(m,m,metric)
+    call mallocate(m,m,msave)
+!    
     metric = zero
     macro_done = .false.
 !
@@ -300,8 +315,10 @@ implicit none
 !
     ok = .true.
 !
-    deallocate (metric)
-    return
+    !deallocate (metric)
+    call mfree(metric)
+    call mfree(msave)
+!
   end subroutine ortho_cd
 !
   subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
@@ -320,8 +337,8 @@ implicit none
     integer, parameter    :: maxit = 20
     real(dp)              :: dnrm2
 !
-    allocate (xu(m,k), stat = istat)
-    call check_mem(istat)
+    !allocate (xu(m,k), stat = istat)
+    call mallocate(m,k,xu)
 !
     done = .false.
     it   = 0
@@ -352,8 +369,8 @@ implicit none
 !
      call svd_biortho(n,k,ul,ur)
 !
-    deallocate (xu)
-    return
+    !deallocate (xu)
+    call mfree(xu)
   end subroutine biortho_vs_x
 !
   subroutine svd_biortho(n,m,u_l,u_r)
@@ -375,8 +392,13 @@ implicit none
 !
 !   allocate memory.
 !
-    allocate (over(m,m), s(m), u(m,m), vt(m,m), tmp(n,m), stat = istat)
-    call check_mem(istat)
+    !allocate (over(m,m), s(m), u(m,m), vt(m,m), tmp(n,m), stat = istat)
+    call mallocate(m,m,over)
+    call mallocate(m,s)
+    call mallocate(m,m,u)
+    call mallocate(m,m,vt)
+    call mallocate(n,m,tmp)
+
 !
 !   compute the overlap:
 !
@@ -401,8 +423,12 @@ implicit none
       u_l(:,i) = fac * u_l(:,i) 
       u_r(:,i) = fac * u_r(:,i) 
     end do
-    deallocate(over, u, s, vt, tmp, stat = istat)
-    return
+    !deallocate(over, u, s, vt, tmp, stat = istat)
+    call mfree(over)
+    call mfree(u)
+    call mfree(s)
+    call mfree(vt)
+    call mfree(tmp)
   end subroutine svd_biortho
 !
   real(dp) function norm_est(m,a)
@@ -478,7 +504,8 @@ implicit none
 !   allocate space for the overlap between x and u.
 !
     ok = .false.
-    allocate (xu(m,k))
+    !allocate (xu(m,k))
+    call mallocate(m,k,xu)
     done = .false.
     it   = 0
 !
@@ -522,7 +549,8 @@ implicit none
       if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x'
     end do
 !
-    deallocate(xu)
+    !deallocate(xu)
+    call mfree(xu)
 !
     return
   end subroutine ortho_vs_x
@@ -560,7 +588,8 @@ implicit none
 !   allocate space for the overlap between x and u.
 !
     ok = .false.
-    allocate (xu(m,k))
+    !allocate (xu(m,k))
+    call mallocate(m,k,xu)
     done = .false.
     it   = 0
 !
@@ -604,9 +633,9 @@ implicit none
       if (it.gt.maxit) stop ' catastrophic failure of b_ortho_vs_x'
     end do
 !
-    deallocate(xu)
+    !deallocate(xu)
+    call mfree(xu)
 !
-    return
   end subroutine b_ortho_vs_x
 
 end module dgl_orthogonalizations

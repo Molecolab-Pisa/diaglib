@@ -140,31 +140,40 @@
 !   start by allocating memory for the various lapack routines
 !
     lwork = get_mem_lapack(n,n_max)
-    allocate (work(lwork), tau(n_max), stat=istat)
-    call check_mem(istat)
+    !allocate (work(lwork), tau(n_max), stat=istat)
+    call mallocate(lwork,work)
+    call mallocate(n_max,tau)
 !
 !   allocate memory for the expansion space, the corresponding 
-!   matrix-multiplied vectors and the residual:
+!   matrix-multiplied vectors and the residuals:
 !
-    allocate (space(n,lda), aspace(n,lda), residuals(n,n_max), stat = istat)
-    call check_mem(istat)
+    !allocate (space(n,lda), aspace(n,lda), residuals(n,n_max), stat = istat)
+    call mallocate(n,lda,space)
+    call mallocate(n,lda,aspace)
+    call mallocate(n,n_max,residuals)
+
     if (generalized) then
-      allocate (bspace(n,lda), b_evec(n,n_max), stat = istat)
-      call check_mem(istat)
+      !allocate (bspace(n,lda), b_evec(n,n_max), stat = istat)
+      call mallocate(n,lda,bspace)
+      call mallocate(n,n_max,b_evec)
     endif
 !
 !   allocate memory for convergence check
 !
-    allocate (done(n_max), r_norm(2,n_max), stat=istat)
-    call check_mem(istat)
+    !allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call mallocate(n_max,done)
+    call mallocate(2,n_max,r_norm)
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-    allocate (a_red(lda,lda), a_copy(lda,lda), e_red(lda), stat=istat)
-    call check_mem(istat)
+    !allocate (a_red(lda,lda), a_copy(lda,lda), e_red(lda), stat=istat)
+    call mallocate(lda,lda,a_red)
+    call mallocate(lda,lda,a_copy)
+    call mallocate(lda,e_red)
     if (generalized) then
-      allocate (s_red(lda,lda), s_copy(lda,lda), stat=istat)
-      call check_mem(istat)
+      !allocate (s_red(lda,lda), s_copy(lda,lda), stat=istat)
+      call mallocate(lda,lda,s_red)
+      call mallocate(lda,lda,s_copy)
     endif
 !
 !   set the tolerances and compute a useful constant to compute rms norms:
@@ -407,23 +416,42 @@
 !
 !   if required, print timings
 !
-    1000 format(t3,'timings for Davidson-Liu (cpu/wall): ',/, &
-                t3,'  matrix-vector multiplications: ',2f12.4,/, &
-                t3,'  diagonalization:               ',2f12.4,/, &
-                t3,'  orthogonalization:             ',2f12.4,/, &
-                t3,'                                 ',24('='),/,  &
-                t3,'  total:                         ',2f12.4)
     if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
-!      
+!
 !   deallocate memory
 !
-    deallocate (work, tau, space, aspace, residuals, done, r_norm, a_red, a_copy, e_red)
+    !deallocate (work, tau, space, aspace, residuals, done, r_norm, a_red, a_copy, e_red)
+    call mfree(work)
+    call mfree(tau)
+    call mfree(space)
+    call mfree(aspace)
+    call mfree(bspace)
+    call mfree(residuals)
+    call mfree(done)
+    call mfree(r_norm)
+    call mfree(a_red)
+    call mfree(a_copy)
+    call mfree(e_red)
+    if (generalized) then
+      call mfree(bspace)
+      call mfree(b_evec)
+      call mfree(s_red)
+      call mfree(s_copy)
+    endif
+!
+    call dgl_check_memleak()
+!
+1000 format(t3,'timings for Davidson-Liu (cpu/wall): ',/, &
+            t3,'  matrix-vector multiplications: ',2f12.4,/, &
+            t3,'  diagonalization:               ',2f12.4,/, &
+            t3,'  orthogonalization:             ',2f12.4,/, &
+            t3,'                                 ',24('='),/,  &
+            t3,'  total:                         ',2f12.4)
 !
 1050 format(t5,'----------------------------------------',/,&
             t7,'# target vectors:    ',i4,/,&
             t7,'# new vectors added: ',i4,/,&
             t7,'# converged vectors: ',i4,/,&
             t5,'----------------------------------------')
-    return
 !
-  end subroutine davidson_driver
+end subroutine davidson_driver
