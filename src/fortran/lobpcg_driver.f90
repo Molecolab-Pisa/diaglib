@@ -94,12 +94,14 @@
 !
 !   expansion spaces, residuals and their norms.
 !   
-    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), residuals(:,:), r_norm(:,:)
+    real(dp), allocatable :: space(:,:), aspace(:,:), residuals(:,:), r_norm(:,:)
+    real(dp), allocatable :: bspace(:,:)
 !
 !   subspace matrix and eigenvalues.
 !
     real(dp), allocatable :: a_red(:,:), e_red(:)
-    real(dp), allocatable :: u_x(:,:), u_p(:,:), x_new(:,:), ax_new(:,:), bx_new(:,:)
+    real(dp), allocatable :: u_x(:,:), u_p(:,:), x_new(:,:), ax_new(:,:)
+    real(dp), allocatable :: bx_new(:,:)
 !
 !   ================
 !   START EXECUTION
@@ -112,31 +114,40 @@
 !   start by allocating memory for the various lapack routines
 !
     lwork = get_mem_lapack(n,n_max)
-    allocate (work(lwork), tau(2*n_max), stat=istat)
-    call check_mem(istat)
+    !allocate (work(lwork), tau(2*n_max), stat=istat)
+    call mallocate(lwork,work)
+    call mallocate(2*n_max,tau)
 !
 !   allocate memory for the expansion space, the corresponding 
-!   matrix-multiplied vectors and the residual:
+!   matrix-multiplied vectors and the residuals:
 !
     lda = 3*n_max
-    allocate (space(n,lda), aspace(n,lda), bspace(n,lda), &
-              residuals(n,n_max), stat=istat)
-    call check_mem(istat)
+!    allocate (space(n,lda), aspace(n,lda), bspace(n,lda), &
+!              residuals(n,n_max), stat=istat)
+    call mallocate(n,lda,space)
+    call mallocate(n,lda,aspace)
+    call mallocate(n,n_max,residuals)
+    if (generalized) call mallocate(n,lda,bspace)
+
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-    allocate (a_red(lda,lda), e_red(lda), stat=istat)
-    call check_mem(istat)
+    !allocate (a_red(lda,lda), e_red(lda), stat=istat)
+    call mallocate(lda,lda,a_red)
+    call mallocate(lda,e_red)
 !
 !   allocate memory for temporary copies of x, ax, and bx:
 !
-    allocate (x_new(n,n_max), ax_new(n,n_max), bx_new(n,n_max), stat=istat)
-    call check_mem(istat)
+    !allocate (x_new(n,n_max), ax_new(n,n_max), bx_new(n,n_max), stat=istat)
+    call mallocate(n,n_max,x_new)
+    call mallocate(n,n_max,ax_new)
+    if (generalized) call mallocate(n,n_max,bx_new)
 !
 !   allocate memory for convergence check
 !
-    allocate (done(n_max), r_norm(2,n_max), stat=istat)
-    call check_mem(istat)
+    !allocate (done(n_max), r_norm(2,n_max), stat=istat)
+    call mallocate(n_max,done)
+    call mallocate(2,n_max,r_norm)
 !
 !   clean out:
 !
@@ -145,9 +156,9 @@
     t_mv     = zero
     t_tot    = zero
     space    = zero
-    bspace   = zero
     aspace   = zero
     a_red    = zero
+    if (generalized) bspace = zero
 !
     call get_time(t_tot)
 !
@@ -345,8 +356,9 @@
 !     -x in the basis of (x,p,w), and then by orthogonalizing then to
 !     the coefficients u_x of x_new. 
 !
-      allocate (u_x(ld_current,n_max), u_p(ld_current,n_act), stat = istat)
-      call check_mem(istat)
+      !allocate (u_x(ld_current,n_max), u_p(ld_current,n_act), stat = istat)
+      call mallocate(ld_current,n_max,u_x)
+      call mallocate(ld_current,n_act,u_p)
 !
       call get_coeffs(lda,ld_current,n_max,n_act,a_red,u_x,u_p)
 !
@@ -365,8 +377,9 @@
         call dcopy(n_act*n,evec,1,bspace(1,ind_p),1)
       end if
 !
-      deallocate(u_x, u_p, stat = istat)
-      call check_mem(istat)
+      !deallocate(u_x, u_p, stat = istat)
+      call mfree(u_x)
+      call mfree(u_p)
 !
 !     now, move x_new and ax_new into space and aspace.
 !
@@ -395,10 +408,33 @@
 !
     end do
 !
-    call get_time(t2)
-    t_tot = t2 - t_tot
+!   deallocate memory and return.
+!
+    !deallocate (work, tau, space, aspace, bspace, residuals, a_red, e_red, & 
+    !            x_new, ax_new, bx_new, done, r_norm, stat = istat)
+    call mfree(work)
+    call mfree(tau)
+    call mfree(space)
+    call mfree(aspace)
+    call mfree(residuals)
+    call mfree(a_red)
+    call mfree(e_red)
+    call mfree(x_new)
+    call mfree(ax_new)
+    call mfree(done)
+    call mfree(r_norm)
+    if (generalized) then
+      call mfree(bspace)
+      call mfree(bx_new)
+    endif
+!
+    call dgl_check_memleak()
 !
 !   if required, print timings
+!
+    call get_time(t2)
+    t_tot = t2 - t_tot
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
 !
     1000 format(t3,'timings for LOBPCG (cpu/wall):   ',/, &
                 t3,'  matrix-vector multiplications: ',2f12.4,/, &
@@ -406,18 +442,9 @@
                 t3,'  orthogonalization:             ',2f12.4,/, &
                 t3,'                                 ',24('='),/,  &
                 t3,'  total:                         ',2f12.4)
-    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
-!
-!   deallocate memory and return.
-!
-    deallocate (work, tau, space, aspace, bspace, residuals, a_red, e_red, & 
-                x_new, ax_new, bx_new, done, r_norm, stat = istat)
-    call check_mem(istat)
-!
-    return
-
+!    
   contains
-
+!
   subroutine get_coeffs(lda,ld_current,n_max,n_act,a_red,u_x,u_p)
     implicit none
 !

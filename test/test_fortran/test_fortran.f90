@@ -9,7 +9,7 @@ program test_fortran
   integer,  parameter :: lutest=100
   real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
 !
-  integer               :: i, j
+  integer               :: i, j, memory = 1.e7
   logical               :: ok
   real(dp), allocatable :: eig(:), evec(:,:), evec_l(:,:)
   procedure(), pointer :: mx_p => null()
@@ -42,6 +42,7 @@ program test_fortran
 !
   mx_p => mx
   write(6,*) ' testing Davidson:'
+  call dgl_init(memory)
   call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
                        ax, dx, eig, evec, ok)
 !
@@ -78,6 +79,7 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Davidson:'
+  call dgl_init(memory)
   call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
                        ax, dx, eig, evec, ok, metvec=mx_p)
 !
@@ -163,6 +165,7 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing LOBPCG:'
+  call dgl_init(memory)
   call lobpcg_driver(.true., n, n_targ, n_max, max_iter, tol, shift, &
                      ax, dx, eig, evec, ok)
 !
@@ -200,6 +203,7 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Generalized LOBPCG:'
+  call dgl_init(memory)
   call lobpcg_driver(.true., n, n_targ, n_max, max_iter, tol, shift, &
                      ax, dx, eig, evec, ok, metvec=mx_p)
 !

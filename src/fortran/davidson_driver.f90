@@ -38,7 +38,7 @@
 !
 !   precnd:   external subroutine that applies a preconditioner.
 !
-!   metvec:     external subroutine that applies the metric.
+!   metvec:   external subroutine that applies the metric.
 !
 !   output variables:
 !   =================
@@ -107,15 +107,13 @@
 !
 !   expansion spaces, residuals and their norms.
 !
-    real(dp), allocatable :: space(:,:), aspace(:,:), bspace(:,:), residuals(:,:), r_norm(:,:)
+    real(dp), allocatable :: space(:,:), aspace(:,:), residuals(:,:), r_norm(:,:)
+    real(dp), allocatable :: bspace(:,:)
 !
 !   subspace matrix and eigenvalues.
 !
-    real(dp), allocatable :: a_red(:,:), a_copy(:,:), s_red(:,:), s_copy(:,:), e_red(:)
-!
-!   scratch:
-!
-    real(dp), allocatable :: b_evec(:,:)
+    real(dp), allocatable :: a_red(:,:), a_copy(:,:), e_red(:)
+    real(dp), allocatable :: s_red(:,:), s_copy(:,:), b_evec(:,:)
 !
 !   ================
 !   START EXECUTION
@@ -411,13 +409,6 @@
 !
     end do
 !
-    call get_time(t2)
-    t_tot = t2 - t_tot
-!
-!   if required, print timings
-!
-    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
-!
 !   deallocate memory
 !
     !deallocate (work, tau, space, aspace, residuals, done, r_norm, a_red, a_copy, e_red)
@@ -440,6 +431,12 @@
     endif
 !
     call dgl_check_memleak()
+!
+!   if required, print timings
+!
+    call get_time(t2)
+    t_tot = t2 - t_tot
+    if (verbose) write(6,1000) t_mv, t_diag, t_ortho, t_tot
 !
 1000 format(t3,'timings for Davidson-Liu (cpu/wall): ',/, &
             t3,'  matrix-vector multiplications: ',2f12.4,/, &
