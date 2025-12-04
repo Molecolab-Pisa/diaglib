@@ -8,15 +8,21 @@ project(diaglib VERSION 1.0
 set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(MAKE_DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY})
 
-# By now find a whatever system BLAS
-find_package(BLAS REQUIRED)
-
-# Set explicitly the build type at runtime
-if(NOT CMAKE_BUILD_TYPE)
-        set(CMAKE_BUILD_TYPE "Release")
+# Find required BLAS
+STRING(TOLOWER "${BLA_VENDOR}" BLA_VENDOR_l)
+if(BLA_VENDOR_l MATCHES "intel")
+        find_package(MKL REQUIRED)
+elseif(NOT BLA_VENDOR_l)
+        find_package(BLAS)
+        if (NOT BLAS_FOUND)
+                find_package(MKL REQUIRED)
+        endif()
+else()
+        find_package(BLAS REQUIRED)
 endif()
 
-#message(STATUS "SONO QUI")
+# Find OpenMP
+find_package(OpenMP REQUIRED)
 
 # Add appropriate subdirectories
 add_subdirectory(src/fortran)
