@@ -9,13 +9,14 @@ set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(MAKE_DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY})
 
 # Find required BLAS
-STRING(TOLOWER "${BLA_VENDOR}" BLA_VENDOR_l)
-if(BLA_VENDOR_l MATCHES "intel")
-        find_package(MKL REQUIRED)
-elseif(NOT BLA_VENDOR_l)
-        find_package(BLAS)
-        if (NOT BLAS_FOUND)
-                find_package(MKL REQUIRED)
+set(BLA_SIZEOF_INTEGER 4) # DiagLib only uses kind 4 integers
+set(BLA_THREAD CACHE STRING "Choice between SEQ or OMP BLAS")
+set(BLA_VENDOR CACHE STRING "Choice of BLAS vendor")
+
+if(NOT BLA_VENDOR)
+find_package(MKL)
+        if (NOT MKL_FOUND)
+                find_package(BLAS REQUIRED)
         endif()
 else()
         find_package(BLAS REQUIRED)
