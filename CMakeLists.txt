@@ -4,12 +4,23 @@ project(diaglib VERSION 1.0
         DESCRIPTION "A collection of iterative, matrix-free eigensolvers"
         LANGUAGES Fortran)
 
+
 # Put all the .mod files in the build/include directory
 set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(MAKE_DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY})
 
+# If wanted force double precision integers
+set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
+if (DGL_INTEGER_KIND EQUAL 8)
+        if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
+                add_compile_options(-fdefault-integer-8)
+        elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^Intel")
+                add_compile_options(-i8)
+        endif()
+endif()
+
 # Find required BLAS
-set(BLA_SIZEOF_INTEGER 4) # DiagLib only uses kind 4 integers
+set(BLA_SIZEOF_INTEGER ${DGL_INTEGER_KIND})
 set(BLA_THREAD CACHE STRING "Choice between SEQ or OMP BLAS")
 set(BLA_VENDOR CACHE STRING "Choice of BLAS vendor")
 

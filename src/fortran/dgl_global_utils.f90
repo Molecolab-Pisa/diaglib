@@ -68,7 +68,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1), stat=istat)
-    call chk_mall(len1,kind(v),istat)
+    call chk_mall(len1,istat)
 !
   end subroutine r_alloc1
 !
@@ -80,7 +80,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1,len2), stat=istat)
-    call chk_mall(len1*len2,kind(v),istat)
+    call chk_mall(len1*len2,istat)
 !
   end subroutine r_alloc2
 !
@@ -92,7 +92,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1), stat=istat)
-    call chk_mall(len1,kind(v),istat)
+    call chk_mall(len1,istat)
 !
   end subroutine i_alloc1
 !
@@ -104,7 +104,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1,len2), stat=istat)
-    call chk_mall(len1*len2,kind(v),istat)
+    call chk_mall(len1*len2,istat)
 !
   end subroutine i_alloc2
 !
@@ -116,7 +116,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1), stat=istat)
-    call chk_mall(len1,kind(v),istat)
+    call chk_mall(len1,istat)
 !
   end subroutine c_alloc1
 !
@@ -128,7 +128,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1,len2), stat=istat)
-    call chk_mall(len1*len2,kind(v),istat)
+    call chk_mall(len1*len2,istat)
 !
   end subroutine c_alloc2
 !
@@ -140,7 +140,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1), stat=istat)
-    call chk_mall(len1,kind(v),istat)
+    call chk_mall(len1,istat)
 !
   end subroutine ch_alloc1
 !
@@ -152,7 +152,7 @@ integer, parameter :: dp = selected_real_kind(15)
     integer :: istat
 !    
     allocate (v(len1), stat=istat)
-    call chk_mall(len1,kind(v),istat)
+    call chk_mall(len1,istat)
 !
   end subroutine l_alloc1
 !
@@ -252,32 +252,49 @@ integer, parameter :: dp = selected_real_kind(15)
 !
   end subroutine l_free1
 !
-  real(dp) function to_mbytes(num,knd)
+!
+  subroutine to_xbytes(num,b_num,b_unit)
     implicit none
-    integer,          intent(in) :: num, knd
+    integer,      intent(in) :: num
+    real(dp),         intent(inout) :: b_num
+    character(len=*), intent(inout) :: b_unit
 !
-      to_mbytes = num / (knd * 1.e6)
+    integer :: num_l
 !
-  end function to_mbytes
+    num_l = 8*num
+    select case(num_l)
+    case(:1000000)
+      b_num = real(num,kind=dp) / 1.e3_dp
+      b_unit = "KB"
+    case (1000001:1000000000)
+      b_num = real(num,kind=dp) / 1.e6_dp
+      b_unit = "MB"
+    case default
+      b_num = real(num,kind=dp) / 1.e9_dp
+      b_unit = "GB"
+    end select
 !
-  subroutine chk_mall(lall,knd,istat)
+  end subroutine to_xbytes
+!
+  subroutine chk_mall(lall,istat)
     implicit none
-    integer,           intent(in) :: lall, knd, istat
+    integer,           intent(in) :: lall,  istat
 !
-    real(dp) :: mb_lall, mb_maxmem
+    real(dp) :: b_lall, b_maxmem
+    character(len=2) :: lall_unit, maxmem_unit
 !
- 9000 format(t3,'allocation error, stat= ',i5)
- 9010 format(t3,'allocation error,',/,    &
-             t3,'not enough memory. ',f10.3,' MBs required',/, &
-             t3,'                   ',f10.3,' MBs available.')
+9000 format(t3,'allocation error, stat= ',i5)
+9010 format(t3,'allocation error,',/,    &
+            t3,'not enough memory. ',f10.3,' ',a2,' required',/, &
+            t3,'                   ',f10.3,' ',a2,' available.')
 !
     if (istat.ne.0) then
       write(*,9000) istat
       stop
     else if (lall.gt.maxmem) then
-      mb_lall = to_mbytes(lall,knd)
-      mb_maxmem = to_mbytes(maxmem,knd)
-      write(*,9010) mb_lall, mb_maxmem
+      call to_xbytes(lall,b_lall,lall_unit)
+      call to_xbytes(maxmem,b_maxmem,maxmem_unit)
+      write(*,9010) b_lall, lall_unit, b_maxmem, maxmem_unit
       stop
     else
       maxmem = maxmem - lall

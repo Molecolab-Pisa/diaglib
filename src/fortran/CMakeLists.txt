@@ -41,6 +41,8 @@ elseif(${CMAKE_Fortran_COMPILER_ID} MATCHES "Intel")
 
 endif()
 
+
+# Print out flags that will be used for diaglib compilation
 get_target_property(_ diaglib COMPILE_OPTIONS)
 message(STATUS "Diaglib compile options are: ${_}")
         
