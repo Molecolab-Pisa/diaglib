@@ -5,46 +5,43 @@ module dgl_drivers_interfaces
 
     interface
 
-        subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
-                                shift,matvec,precnd,eig,evec,ok,metvec)
+        subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
+              dgl_verbose, dgl_max_iter, dgl_tol, dgl_max_dav, &
+              dgl_shift, dgl_memory, metvec)
             import
             implicit none
-
-            logical,                      intent(in)    :: verbose
             integer,                      intent(in)    :: n, n_targ, n_max
-            integer,                      intent(in)    :: max_iter, max_dav
-            real(dp),                     intent(in)    :: tol, shift
             real(dp), dimension(n_max),   intent(inout) :: eig
             real(dp), dimension(n,n_max), intent(inout) :: evec
             logical,                      intent(inout) :: ok
             procedure(matvec_) :: matvec
             procedure(precnd_) :: precnd
+
+            logical,  optional,            intent(in)    :: dgl_verbose
+            integer,  optional,            intent(in)    :: dgl_max_iter, dgl_max_dav, dgl_memory
+            real(dp), optional,            intent(in)    :: dgl_tol, dgl_shift
             procedure(metvec_), pointer, optional :: metvec
 
-        end subroutine
+        end subroutine davidson_driver
 
-        subroutine lobpcg_driver(verbose,n,n_targ,n_max,max_iter,tol, &
-                           shift,matvec,precnd,eig,evec,ok,metvec)
-        import
-        implicit none
-            logical,                      intent(in)    :: verbose
+        subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
+              dgl_verbose, dgl_max_iter, dgl_tol, &
+              dgl_shift, dgl_memory, metvec)
+            import
+            implicit none
             integer,                      intent(in)    :: n, n_targ, n_max
-            integer,                      intent(in)    :: max_iter
-            real(dp),                     intent(in)    :: tol, shift
             real(dp), dimension(n_max),   intent(inout) :: eig
             real(dp), dimension(n,n_max), intent(inout) :: evec
             logical,                      intent(inout) :: ok
             procedure(matvec_) :: matvec
             procedure(precnd_) :: precnd
+
+            logical,  optional,            intent(in)    :: dgl_verbose
+            integer,  optional,            intent(in)    :: dgl_max_iter, dgl_memory
+            real(dp), optional,            intent(in)    :: dgl_tol, dgl_shift
             procedure(metvec_), pointer, optional :: metvec
 
         end subroutine lobpcg_driver
-
-        subroutine dgl_init(mem)
-        import
-        implicit none
-        integer :: mem
-        end subroutine dgl_init
         
     end interface
 

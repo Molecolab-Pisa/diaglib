@@ -3,7 +3,7 @@ module dgl_global_utils
 !
 ! global kind for double precision
 !
-integer, parameter :: dp = selected_real_kind(15)
+  integer, parameter :: dp = selected_real_kind(15)
 !
 ! useful constants
 !
@@ -264,13 +264,13 @@ integer, parameter :: dp = selected_real_kind(15)
     num_l = 8*num
     select case(num_l)
     case(:1000000)
-      b_num = real(num,kind=dp) / 1.e3_dp
+      b_num = real(num_l,kind=dp) / 1.e3_dp
       b_unit = "KB"
     case (1000001:1000000000)
-      b_num = real(num,kind=dp) / 1.e6_dp
+      b_num = real(num_l,kind=dp) / 1.e6_dp
       b_unit = "MB"
     case default
-      b_num = real(num,kind=dp) / 1.e9_dp
+      b_num = real(num_l,kind=dp) / 1.e9_dp
       b_unit = "GB"
     end select
 !
@@ -316,17 +316,6 @@ integer, parameter :: dp = selected_real_kind(15)
     end if
   end subroutine chk_free
 !
-  subroutine dgl_init_(mem)
-    implicit none
-    integer, intent(in) :: mem
-!
-! set maximum memory used by DiagLib to the input value
-!
-    maxcor = mem
-    maxmem = maxcor
-!
-  end subroutine dgl_init_
-!
   subroutine dgl_check_memleak()
     implicit none
 !
@@ -342,6 +331,22 @@ integer, parameter :: dp = selected_real_kind(15)
 !  =====================
 !  More global routines
 !  =====================
+!
+  subroutine dgl_init(mem)
+    implicit none
+    integer, intent(in) :: mem
+!
+    real(dp) :: b_mem
+    character(len=2) :: mem_unit
+!
+! set maximum memory used by DiagLib to the input value
+!
+    maxcor = mem
+    maxmem = maxcor
+!    call to_xbytes(mem,b_mem,mem_unit)
+!    if (verbose) write(*,"(t3,a,f10.3,a3,a)") "Diaglib will use up to", b_mem, mem_unit, " of memeory"
+!
+  end subroutine dgl_init
 !
   integer function get_mem_lapack(n,n_max)
     integer, intent(in)    :: n, n_max

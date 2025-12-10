@@ -1,5 +1,6 @@
-  subroutine davidson_driver(verbose,n,n_targ,n_max,max_iter,tol,max_dav,&
-                              shift,matvec,precnd,eig,evec,ok,metvec)
+subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
+              dgl_verbose, dgl_max_iter, dgl_tol, dgl_max_dav, &
+              dgl_shift, dgl_memory, metvec)
   use dgl_minor_utils
   use dgl_external_interfaces
   implicit none
@@ -52,20 +53,23 @@
 !
 !   ok:       logical, true if davidson converged.
 !
-    logical,                      intent(in)    :: verbose
     integer,                      intent(in)    :: n, n_targ, n_max
-    integer,                      intent(in)    :: max_iter, max_dav
-    real(dp),                     intent(in)    :: tol, shift
     real(dp), dimension(n_max),   intent(inout) :: eig
     real(dp), dimension(n,n_max), intent(inout) :: evec
     logical,                      intent(inout) :: ok
     procedure(matvec_) :: matvec
     procedure(precnd_) :: precnd
+!    
+    logical,  optional,            intent(in)    :: dgl_verbose
+    integer,  optional,            intent(in)    :: dgl_max_iter, dgl_max_dav, dgl_memory
+    real(dp), optional,            intent(in)    :: dgl_tol, dgl_shift
     procedure(metvec_), pointer, optional :: metvec
 !
 !   local variables:
 !   ================
-!
+    logical  :: verbose
+    integer  :: max_iter, max_dav, memory
+    real(dp) :: tol, shift
 !
 !   expansion space varibles: 
 !       minimum number of iterations before restart,
@@ -118,6 +122,16 @@
 !   ================
 !   START EXECUTION
 !   ================
+!
+! Parse optional arguments
+!
+    verbose = .false. ; if(present(dgl_verbose)) verbose = dgl_verbose
+    max_iter = 50     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    max_dav = 25      ; if(present(dgl_max_dav)) max_dav = dgl_max_dav
+    tol = 1.e-7_dp    ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp   ; if(present(dgl_shift)) shift = dgl_shift
+    memory= 1.d7      ; if(present(dgl_memory)) memory = dgl_memory !80MBs
+    call dgl_init(memory)
 !
 !   check what problem we are dealing with
 !

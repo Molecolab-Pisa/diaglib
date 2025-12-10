@@ -1,12 +1,13 @@
-  subroutine lobpcg_driver(verbose,n,n_targ,n_max,max_iter,tol, &
-                           shift,matvec,precnd,eig,evec,ok,metvec)
+subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
+              dgl_verbose, dgl_max_iter, dgl_tol, &
+              dgl_shift, dgl_memory, metvec)
   use dgl_minor_utils
   use dgl_external_interfaces
   implicit none
 !
 !   main driver for lobpcg.
 !
-!   input variables:
+!   input variables: 
 !   ================
 !
 !   verbose:  logical, whether to print various information at each 
@@ -48,20 +49,23 @@
 !
 !   ok:       logical, true if lobpcg converged.
 !
-    logical,                      intent(in)    :: verbose
     integer,                      intent(in)    :: n, n_targ, n_max
-    integer,                      intent(in)    :: max_iter
-    real(dp),                     intent(in)    :: tol, shift
     real(dp), dimension(n_max),   intent(inout) :: eig
     real(dp), dimension(n,n_max), intent(inout) :: evec
     logical,                      intent(inout) :: ok
     procedure(matvec_) :: matvec
     procedure(precnd_) :: precnd
+!    
+    logical,  optional,            intent(in)    :: dgl_verbose
+    integer,  optional,            intent(in)    :: dgl_max_iter, dgl_memory
+    real(dp), optional,            intent(in)    :: dgl_tol, dgl_shift
     procedure(metvec_), pointer, optional :: metvec
-
 !
 !   local variables:
 !   ================
+    logical  :: verbose
+    integer  :: max_iter, memory
+    real(dp) :: tol, shift
 !
 !   expansion space varibles: 
 !       total dimension, current dimension
@@ -107,9 +111,23 @@
 !   START EXECUTION
 !   ================
 !
+! Parse optional arguments
+!
+    verbose = .false. ; if(present(dgl_verbose)) verbose = dgl_verbose
+    max_iter = 50     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    tol = 1.e-7_dp    ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp   ; if(present(dgl_shift)) shift = dgl_shift
+    memory= 1.d7      ; if(present(dgl_memory)) memory = dgl_memory !80MBs
+    call dgl_init(memory)
+!
 !   check what problem we are dealing with
 !
     generalized = present(metvec)
+    if (generalized) then
+      if (.not.associated(metvec)) then
+        stop "DiagLib: Non associated pointer to metric-vector product routine"
+      endif
+    endif
 !
 !   start by allocating memory for the various lapack routines
 !

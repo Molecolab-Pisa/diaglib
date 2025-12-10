@@ -4,7 +4,6 @@ add_library(diaglib SHARED
         dgl_minor_utils.f90
         dgl_external_interfaces.f90
         dgl_drivers_interfaces.f90
-        dgl_init.f90
         davidson_driver.f90
         lobpcg_driver.f90
         )

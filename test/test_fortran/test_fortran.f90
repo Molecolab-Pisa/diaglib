@@ -42,9 +42,8 @@ program test_fortran
 !
   mx_p => mx
   write(6,*) ' testing Davidson:'
-  call dgl_init(memory)
-  call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-                       ax, dx, eig, evec, ok)
+  call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+                        dgl_verbose = .true.)
 !
   if (ok) then
     write(6,*) ' Davidson converged.'
@@ -78,10 +77,8 @@ program test_fortran
   end do
   ok = .false.
 !
-  write(6,*) ' testing Davidson:'
-  call dgl_init(memory)
-  call davidson_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-                       ax, dx, eig, evec, ok, metvec=mx_p)
+  write(6,*) ' testing Generalized Davidson:'
+  call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p)
 !
   if (ok) then
     write(6,*) ' Generalized Davidson converged.'
@@ -165,9 +162,8 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing LOBPCG:'
-  call dgl_init(memory)
-  call lobpcg_driver(.true., n, n_targ, n_max, max_iter, tol, shift, &
-                     ax, dx, eig, evec, ok)
+
+  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok)
 !
   if (ok) then
     write(6,*) ' LOBPCG converged.'
@@ -203,9 +199,8 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Generalized LOBPCG:'
-  call dgl_init(memory)
-  call lobpcg_driver(.true., n, n_targ, n_max, max_iter, tol, shift, &
-                     ax, dx, eig, evec, ok, metvec=mx_p)
+
+  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p)
 !
   if (ok) then
     write(6,*) ' Generalized LOBPCG converged.'
