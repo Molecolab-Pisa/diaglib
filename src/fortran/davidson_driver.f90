@@ -1,82 +1,56 @@
 subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
-              dgl_verbose, dgl_max_iter, dgl_tol, dgl_max_dav, &
+              dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
               dgl_shift, dgl_memory, metvec)
+!! ### Driver for Davidson-Liu symmetric diagonalization driver
+!! Can solve both standard and generalized eigenvalue problems.
+!! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
+!! Moreover, you need to use the [[dgl_drivers_interfaces]] module included in this library.
+
+!! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
   use dgl_minor_utils
   use dgl_external_interfaces
   implicit none
-!
-!   main driver for davidson-liu.
-!
-!   input variables:
-!   ================
-!
-!   verbose:  logical, whether to print various information at each 
-!             iteration (eigenvalues, residuals...).
-!
-!   n:        integer, size of the matrix to be diagonalized.
-!
-!   n_targ:   integer, number of required eigenpairs.
-!
-!   n_max:    integer, maximum size of the search space. should be 
-!             >= n_targ. note that eig and evec should be allocated 
-!             n_max and (n,n_max) rather than n_targ and (n,n_targ). 
-!             for better convergence, a value larger than n_targ (eg.,
-!             n_targ + 10) is recommended.
-!
-!   max_iter: integer, maximum allowed number of iterations.
-!
-!   tol:      double precision real, the convergence threshold.
-!
-!   max_dav:  integer. maximum allowed number of iterations before a 
-!             restart is forced. 
-!             when n_max eigenvalues are searched, this implies a maximum
-!             dimension of the expansion subspace of n_max * max_dav.
-!
-!   shift:    double precision real, a diagonal level shifting parameter
-!
-!   matvec:   external subroutine that performs the matrix-vector
-!             multiplication
-!
-!   precnd:   external subroutine that applies a preconditioner.
-!
-!   metvec:   external subroutine that applies the metric.
-!
-!   output variables:
-!   =================
-!
-!   eig:      double precision array of size n_max. if ok is true, 
-!             the computed eigenvalues in asceding order.
-!
-!   evec:     double precision array of size (n,n_max). 
-!             in input, a guess for the eigenvectors.
-!             if ok is true, in output the computed eigenvectors.
-!
-!   ok:       logical, true if davidson converged.
-!
-    integer,                      intent(in)    :: n, n_targ, n_max
+    integer,                      intent(in)    :: n
+!! Size of the matrix to be diagonalized
+    integer,                      intent(in)    :: n_targ
+!! Number of required eigenpairs.
+    integer,                      intent(in)    :: n_max
+!! Maximum size of the search space. Should be >= n_targ.
     real(dp), dimension(n_max),   intent(inout) :: eig
+!! Computed eigenvalues    
     real(dp), dimension(n,n_max), intent(inout) :: evec
+!! Computed eigenvectors. In input, it should contain a guess for the eigenvectors
     logical,                      intent(inout) :: ok
+!! True if davidson converged
     procedure(matvec_) :: matvec
+!! External subroutine that performs the matrix-vector multiplication
     procedure(precnd_) :: precnd
-!    
+!! External subroutine that applies a preconditioner
     logical,  optional,            intent(in)    :: dgl_verbose
-    integer,  optional,            intent(in)    :: dgl_max_iter, dgl_max_dav, dgl_memory
-    real(dp), optional,            intent(in)    :: dgl_tol, dgl_shift
+!! Verbose mode. Default = .false.
+    integer,  optional,            intent(in)    :: dgl_max_iter
+!! Maximum number of allowed iterations. Default = \(100\)
+    integer,  optional,            intent(in)    :: dgl_dav_iter
+!! Maximum number of iterations before Davidson restart. Default = \(25\)
+    integer,  optional,            intent(in)    :: dgl_memory
+!! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+    real(dp), optional,            intent(in)    :: dgl_tol
+!! Convergence threshold on residuals norms. Default = \(10^{-7}\)
+    real(dp), optional,            intent(in)    :: dgl_shift
+!! Diagonal level shifting parameter. Default = \(0.\)
     procedure(metvec_), pointer, optional :: metvec
+!! Pointer to External subroutine that applies the metric-vector multiplication
 !
 !   local variables:
 !   ================
     logical  :: verbose
-    integer  :: max_iter, max_dav, memory
+    integer  :: max_iter, dav_iter, memory
     real(dp) :: tol, shift
 !
 !   expansion space varibles: 
-!       minimum number of iterations before restart,
-!       actual number of iterations before restart, total dimension, current dimension
+!     total dimension, current dimension
 !
-    integer, parameter    :: min_dav = 10
-    integer               :: dim_dav, lda, ld_current
+    integer               :: lda, ld_current
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
@@ -126,8 +100,8 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 ! Parse optional arguments
 !
     verbose = .false. ; if(present(dgl_verbose)) verbose = dgl_verbose
-    max_iter = 50     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    max_dav = 25      ; if(present(dgl_max_dav)) max_dav = dgl_max_dav
+    max_iter = 100    ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
     tol = 1.e-7_dp    ; if(present(dgl_tol)) tol = dgl_tol
     shift = 0.e0_dp   ; if(present(dgl_shift)) shift = dgl_shift
     memory= 1.d7      ; if(present(dgl_memory)) memory = dgl_memory !80MBs
@@ -142,12 +116,9 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
       endif
     endif
 !
-!   compute the actual size of the expansion space, checking that
-!   the input makes sense.
-!   no expansion space smaller than min_dav = 10 is deemed acceptable.
+!   compute the actual size of the expansion space
 !
-    dim_dav = max(min_dav,max_dav)
-    lda     = dim_dav*n_max
+    lda     = dav_iter*n_max
 !
 !   start by allocating memory for the various lapack routines
 !

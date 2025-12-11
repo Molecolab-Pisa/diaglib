@@ -1,0 +1,16 @@
+[extra.ford]
+project = "DiagLib"
+author = "I. Giannì, T. Nottoli, R. Alessandro, D. Cianchino, L. Lapi, F. Lipparini"
+
+summary = """
+DiagLib is an awesome library that let's you diagonalize a lot of stuff
+"""
+
+src_dir = "../src"
+output_dir = "../doc"
+page_dir = "./pages"
+
+exclude_dir = "../src/c_interface"
+exclude = "../src/fortran/diaglib.f90"
+
+graph = false
