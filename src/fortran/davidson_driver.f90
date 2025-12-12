@@ -1,11 +1,11 @@
 subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
               dgl_shift, dgl_memory, metvec)
-!! ### Driver for Davidson-Liu symmetric diagonalization driver
+!! ### Driver for Davidson-Liu symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
 !! Moreover, you need to use the [[dgl_drivers_interfaces]] module included in this library.
-
+!!
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
   use dgl_minor_utils
   use dgl_external_interfaces

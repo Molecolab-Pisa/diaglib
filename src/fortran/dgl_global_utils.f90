@@ -1,41 +1,36 @@
 module dgl_global_utils
   implicit none
-!
-! global kind for double precision
-!
   integer, parameter :: dp = selected_real_kind(15)
-!
-! useful constants
-!
-  real(dp), parameter    :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
-! 
-! memory and info for lapack routines
-!
-  integer                :: lwork, info
+!! Global variable holding kind for double precision
+  real(dp), parameter :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
+!! Useful Constant
+  integer :: lwork, info
+!! Lapack utility  
   real(dp), allocatable  :: work(:), tau(:)
-!
-! timings:
-!
+!! Lapack utility
   real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &
                             t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
-!
-! variables to keep track of memory
-!
+!! Timings
   integer, private :: maxmem, maxcor
+!! Variables to keep track of memory
 !
 ! external functions:
 ! ===================
 !
   real(dp) :: dnrm2
+!! Lapack  
   external dgeqrf, dtrsm, dpotrf, dtrcon, dgemm, dnrm2
+!! Lapack  
 !
 ! intrisic functions:
 ! ===================
 !
   intrinsic :: random_number
+!! Intrinsic function  
 !
 ! allocation and deallocations routines
 !
+!> Overloading for general allocation
   interface mallocate
     module procedure r_alloc1
     module procedure r_alloc2
@@ -47,6 +42,7 @@ module dgl_global_utils
     module procedure l_alloc1
   end interface mallocate
 !
+!> Overloading for general deallocation
   interface mfree
     module procedure r_free1
     module procedure r_free2
@@ -254,6 +250,8 @@ module dgl_global_utils
 !
 !
   subroutine to_xbytes(num,b_num,b_unit)
+  !! Silly converter to Bytes. Actual unit dependins on the
+  !! magnitude of the number and it is returned
     implicit none
     integer,      intent(in) :: num
     real(dp),         intent(inout) :: b_num
@@ -277,6 +275,8 @@ module dgl_global_utils
   end subroutine to_xbytes
 !
   subroutine chk_mall(lall,istat)
+!! Check for proper allocations. Also keeps track of the memory used.
+!! Checks for out of memory condition.  
     implicit none
     integer,           intent(in) :: lall,  istat
 !
@@ -303,6 +303,8 @@ module dgl_global_utils
   end subroutine chk_mall
 !
   subroutine chk_free(lfree,istat)
+!! Check for proper deallocation.
+!! Also keeps track of memory released.
     implicit none
     integer,           intent(in) :: lfree, istat
 !
@@ -333,6 +335,7 @@ module dgl_global_utils
 !  =====================
 !
   subroutine dgl_init(mem)
+!! Global initializer for drivers  
     implicit none
     integer, intent(in) :: mem
 !
@@ -349,6 +352,8 @@ module dgl_global_utils
   end subroutine dgl_init
 !
   integer function get_mem_lapack(n,n_max)
+!! Get the highest optimal memory amount required by lapacks
+!! for the driver execution.
     integer, intent(in)    :: n, n_max
 !
     integer           :: lwork1, lwork2, len_rr, len_qr, nb
@@ -381,6 +386,7 @@ module dgl_global_utils
   end function get_mem_lapack
 !
   subroutine get_time(t)
+!! Stores cpu/wall time  
     real(dp), dimension(2), intent(inout) :: t
 !
 !$  real(dp) :: omp_get_wtime

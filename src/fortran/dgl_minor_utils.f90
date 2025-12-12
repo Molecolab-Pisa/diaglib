@@ -4,8 +4,11 @@ module dgl_minor_utils
   contains
 
   subroutine check_guess(n,m,evec)
+  !! Utility routine that checks orthogonality of the input vectors to a diagonalization driver
     implicit none
-    integer,                  intent(in)    :: n, m
+    integer,                  intent(in)    :: n
+!!     
+    integer,                  intent(in)    :: m
     real(dp), dimension(n,m), intent(inout) :: evec
 !
     integer               :: i, j, istat

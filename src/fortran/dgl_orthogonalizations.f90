@@ -2,38 +2,39 @@ module dgl_orthogonalizations
 use dgl_global_utils
 implicit none
 !
-! convergence thresholds for orthogonalizations
-!
-  real(dp), parameter    :: tol_ortho = two * epsilon(one)
+  real(dp), parameter, private    :: tol_ortho = two * epsilon(one)
+!! Convergence thresholds for orthogonalizations
 !
   contains
 !
   subroutine ortho(n,m,u,w)
+!! Orthogonalization routine based on QR decomposition.
+!! Orthogonalizes \(m\) vectors of lenght \(n\) contained in \(u\).
+!! \[ u^Tu = \textbf{I} \]
+!! 
+!! This is done by computing U = QR and then by solving the upper 
+!! triangular system U(ortho)R = U.
+!! Using this strategy allows to apply the same linear transformation
+!! that orthogonalizes U to a second set of vectors that usually contain
+!! the product AU, where A is some matrix that has already been applied
+!! to U. This is useful when U and AU are built together without explicitly 
+!! performing the matrix vector multiplication.
     implicit none
 !
-!   orthogonalize m vectors of lenght n using the QR decomposition.
-!   this is done by computing U = QR and then by solving the upper 
-!   triangular system U(ortho)R = U.
-!
-!   using this strategy allows to apply the same linear transformation
-!   that orthogonalizes U to a second set of vectors that usually contain
-!   the product AU, where A is some matrix that has already been applied
-!   to U. 
-!   this is useful when U and AU are built together without explicitly 
-!   performing the matrix vector multiplication.
-!
-!   arguments:
-!   ==========
-!
-    integer,                     intent(in)    :: n, m
-    real(dp),  dimension(n,m),   intent(inout) :: u, w
+    integer,                     intent(in)    :: n
+!! Lenght of the input vectors    
+    integer,                     intent(in)    :: m
+!! Number of input vectors    
+    real(dp),  dimension(n,m),   intent(inout) :: u
+!! Vectors to orthogonalize    
+    real(dp),  dimension(n,m),   intent(inout) :: w
+!! ????    
 !
 !   local scratch
 !   =============
 !
     real(dp), allocatable :: v(:,:)
 !
-    !allocate (v(n,m))
     call mallocate(n,m,v)
     v = u
     call dgeqrf(n,m,u,n,tau,work,lwork,info)
@@ -42,24 +43,29 @@ implicit none
 !
     u = v
 !
-    !deallocate (v)
     call mfree(v)
   end subroutine ortho
 !
   subroutine b_ortho(n,m,u,bu)
+!! Subroutine to B-orthogonalize \(m\) vectors of lenght \(n\)
+!! using the Cholesky factorization of their overlap.
+!! \[ u^TBu = \textbf{I} \]
+!!
+!! This is in principle not a good idea, as the \(u^TBu\) matrix can be very
+!! ill-conditioned, independently of how bad is \(B\). Also, only works if u is
+!! already orthonormal.
+!! More details on the orthoganlization scheme are available in the documentation 
+!! of the [[ortho_cd]] procedure
     implicit none
-!
-!   b-orthogonalize m vectors of lenght n using the cholesky decomposition
-!   of the overlap matrix.
-!   this is in principle not a good idea, as the u'bu matrix can be very
-!   ill-conditioned, independent of how bas is b, and only works if x is
-!   already orthonormal. 
-!
-!   arguments:
-!   ==========
-!
-    integer,                     intent(in)    :: n, m
-    real(dp),  dimension(n,m),   intent(inout) :: u, bu
+!    
+    integer,                     intent(in)    :: n
+!! Lenght of the vectors    
+    integer,                     intent(in)    :: m
+!! Number of vectors    
+    real(dp),  dimension(n,m),   intent(inout) :: u
+!! Vectors to B-orthogonalize    
+    real(dp),  dimension(n,m),   intent(inout) :: bu
+!! Application of an external matrix \(B\) on \(u\)
 !
 !   local variables
 !   ===============
@@ -71,7 +77,6 @@ implicit none
     logical,  parameter   :: use_svd = .false.
 !
 !
-    !allocate (metric(m,m))
     call mallocate(m,m,metric)
 !
     call dgemm('t','n',m,m,n,one,u,n,bu,n,zero,metric,m)
@@ -81,7 +86,6 @@ implicit none
 !     debug option: use svd to b-orthonormalize, by computing
 !     b**(-1/2)
 !
-      !allocate (sigma(m), u_svd(m,m), vt_svd(m,m), temp(n,m))
       call mallocate(m,sigma)
       call mallocate(m,m,u_svd)
       call mallocate(m,m,vt_svd)
@@ -122,7 +126,6 @@ implicit none
       call dgemm('n','n',n,m,m,one,bu,n,metric,m,zero,temp,n)
       bu = temp
 !
-      !deallocate (sigma, u_svd, vt_svd, temp)
       call mfree(sigma)
       call mfree(u_svd)
       call mfree(vt_svd)
@@ -139,15 +142,13 @@ implicit none
       call dtrsm('r','l','t','n',n,m,one,metric,m,bu,n)
     end if
 !
-    !deallocate (metric)
     call mfree(metric)
 !
   end subroutine b_ortho
 !
   subroutine diag_shift(n,shift,a)
-    implicit none
-!  
-!   add shift to the diagonal elements of the matric a
+!! Add a shift to the diagonal elements of the matrix \(a\)
+    implicit none 
 !  
     integer,                  intent(in)    :: n
     real(dp),                 intent(in)    :: shift
@@ -163,35 +164,36 @@ implicit none
   end subroutine diag_shift
 !
   subroutine ortho_cd(n,m,u,growth,ok)
+!! Subroutine to orthogonalize \(m\) vectors of lenght \(n\) 
+!! using the Cholesky factorization of their overlap.
+!! \[ u^Tu = \textbf{I} \]
+!! The metric is computed as \(metric = u^Tu \) and then by computing its cholesky 
+!! decompositoin \( metric = LL^T \). The orthogonal vectors are obtained then
+!! by solving the triangular linear system \( u(ortho)L^T = u \).
+!!
+!! As cholesky decomposition is not the most stable way of orthogonalizing
+!! a set of vectors, the orthogonalization is refined iteratively. 
+!! A conservative estimate of the orthogonalization error is used to 
+!! assess convergence. 
+!!
+!! This routine returns a growth factor, which can be used in (b_)ortho_vs_x
+!! to estimate the orthogonality error introduced by ortho_cd.
+!! While it is very unlikely to do so, this routine can fail. 
+!! The status of this procedure is retured in orther to invoke
+!! more robust routines (QR or SVD) in case of failure.
+!
     implicit none
 !
-!   orthogonalize m vectors of lenght n using the Cholesky factorization
-!   of their overlap. 
-!   this is done by metric = U^t U and then by computing its cholesky 
-!   decompositoin metric = L L^t. The orthogonal vectors are obtained then
-!   by solving the triangular linear system
-!
-!     U(ortho)L^T = U
-!
-!   as cholesky decomposition is not the most stable way of orthogonalizing
-!   a set of vectors, the orthogonalization is refined iteratively. 
-!   a conservative estimate of the orthogonalization error is used to 
-!   assess convergence. 
-!
-!   this routine returns a growth factor, which can be used in (b_)ortho_vs_x
-!   to estimate the orthogonality error introduced by ortho_cd.
-!
-!   while it is very unlikely to do so, this routine can fail. 
-!   a logical flag is then set to false, so that the calling program can 
-!   call a more robust orthogonalization routine without aborting.
-!
-!   arguments:
-!   ==========
-!
-    integer,                   intent(in)    :: n, m
+    integer,                   intent(in)    :: n
+!! Lenght of the vectors    
+    integer,                   intent(in)    :: m
+!! Number of vectors    
     real(dp),  dimension(n,m), intent(inout) :: u
+!! Vectors to orthogonalize    
     real(dp),                  intent(inout) :: growth
+!! Growth factor for the numerical error    
     logical,                   intent(inout) :: ok
+!! Status of the procedure in output
 !
 !   local variables
 !   ===============
@@ -211,7 +213,6 @@ implicit none
 !
 !   get memory for the metric.
 !
-    !allocate (metric(m,m), msave(m,m))
     call mallocate(m,m,metric)
     call mallocate(m,m,msave)
 !    
@@ -315,14 +316,21 @@ implicit none
 !
     ok = .true.
 !
-    !deallocate (metric)
     call mfree(metric)
     call mfree(msave)
 !
   end subroutine ortho_cd
 !
   subroutine biortho_vs_x(n,m,k,xl,xr,ul,ur)
+!* Given four sets: \(x_l(n,m)\), \(x_r(n,m)\) and \(u_l(n,k)\), \(u_r(n,k)\)
+!  of vectors, where \(x_l\) and \(x_r\) are assumed to be orthogonal,
+!  orthogonalize \(u_l\) against \(x_l\) and
+!  \(u_r\) against \(x_r\).
+!
+!  Furthermore, orthonormalize \(u_l\) and \(u_r\).
+!
     implicit none
+!    
     integer,                  intent(in)    :: n, m, k
     real(dp), dimension(n,m), intent(in)    :: xl, xr
     real(dp), dimension(n,k), intent(inout) :: ul, ur
@@ -337,7 +345,6 @@ implicit none
     integer, parameter    :: maxit = 20
     real(dp)              :: dnrm2
 !
-    !allocate (xu(m,k), stat = istat)
     call mallocate(m,k,xu)
 !
     done = .false.
@@ -369,21 +376,31 @@ implicit none
 !
      call svd_biortho(n,k,ul,ur)
 !
-    !deallocate (xu)
     call mfree(xu)
   end subroutine biortho_vs_x
 !
   subroutine svd_biortho(n,m,u_l,u_r)
-    implicit none
-!
-!   given two set of vectors, biorthogonalize them by computing the LU decomposition
+!*  Given two set of vectors, biorthogonalize them by computing the SVD decomposition
 !   of the overlap matrix and then solving
+! \[
+!     metric = u_l^Tu_r \\
+!     metric = U \Sigma V^T \\
+!     u_l = u_l V^T \\
+!     u_r = u_r U
+! \]
+! Resulting vectors obey:
+! \[ u_l^Tu_r = \textbf{I} \]
 !
-!     u_l = u_l l^t
-!     u_r = u_r u
-!
-    integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(inout) :: u_l, u_r
+    implicit none
+!    
+    integer,                  intent(in)    :: n
+!! Lenght of the vectors    
+    integer,                  intent(in)    :: m
+!! Number of vectors    
+    real(dp), dimension(n,m), intent(inout) :: u_l
+!! First set of vectors    
+    real(dp), dimension(n,m), intent(inout) :: u_r
+!! Second set of vectors
 !
     integer               :: i, istat
     real(dp)              :: fac
@@ -392,13 +409,11 @@ implicit none
 !
 !   allocate memory.
 !
-    !allocate (over(m,m), s(m), u(m,m), vt(m,m), tmp(n,m), stat = istat)
     call mallocate(m,m,over)
     call mallocate(m,s)
     call mallocate(m,m,u)
     call mallocate(m,m,vt)
     call mallocate(n,m,tmp)
-
 !
 !   compute the overlap:
 !
@@ -423,7 +438,7 @@ implicit none
       u_l(:,i) = fac * u_l(:,i) 
       u_r(:,i) = fac * u_r(:,i) 
     end do
-    !deallocate(over, u, s, vt, tmp, stat = istat)
+!    
     call mfree(over)
     call mfree(u)
     call mfree(s)
@@ -432,18 +447,22 @@ implicit none
   end subroutine svd_biortho
 !
   real(dp) function norm_est(m,a)
-!
-!   compute a cheap estimate of the norm of a lower triangular matrix.
-!   let a = d + o, where d = diag(a). as
-!   
-!   || a || <= || d || + || o ||
-!
-!   we compute || d || as max_i |d(i)| and || o || as its frobenius norm.
-!   this is tight enough, and goes to 1 when a approaches the identity.
+!* Compute a cheap estimate of the norm of a lower triangular matrix.
+!  Let \(a = d + o\), where \(d = diag(a)\). Since:
+!  \[
+!   || a || \leq || d || + || o ||
+!  \]
+!  We compute \(|| d ||\) as \(max_i |d(i)|\) and \(|| o ||\) as its frobenius norm.
+!  
+!  This is tight enough, and goes to 1 when \(a\) approaches the identity.
 !
     implicit none
     integer,                  intent(in) :: m
+!! Dimension of the matrix
     real(dp), dimension(m,m), intent(in) :: a
+!! Matrix to compute the norm    
+!
+!   Local vars
 !
     integer  :: i, j
     real(dp) :: diag_norm, od_norm
@@ -467,28 +486,35 @@ implicit none
 !
   subroutine ortho_vs_x(n,m,k,x,u,ax,au)
     implicit none
+!*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
+!   is assumed to be orthogonal, orthogonalize \(u\) against \(x\).
 !
-!   given two sets x(n,m) and u(n,k) of vectors, where x 
-!   is assumed to be orthogonal, orthogonalize u against x.
-!
-!   if required, orthogonalize au to ax using the same linear
+!   If required, orthogonalize au to ax using the same linear
 !   transformation, where ax and au are the results of the 
-!   application of a matrix a to both x and u.
+!   application of a matrix \(a\) to both \(x\) and \(u\).
 !
-!   furthermore, orthonormalize u and, if required, apply the
-!   same transformation to au.
+!   Furthermore, orthonormalize \(u\) and, if required, apply the
+!   same transformation to \(au\).
 !
-!   this routine performs the u vs x orthogonalization and the
-!   subsequent orthonormalization of u iteratively, until the
-!   overlap between x and the orthogonalized u is smaller than
-!   a (tight) threshold. 
+!   This routine performs the \(u\) vs \(x\) orthogonalization and the
+!   subsequent orthonormalization of \(u\) iteratively, until the
+!   overlap between \(x\) and the orthogonalized \(u\) is smaller than
+!   a (tight) threshold.
 !
-!   arguments:
-!   ==========
-!
-    integer,                   intent(in)    :: n, m, k
-    real(dp),  dimension(n,m), intent(in)    :: x, ax
-    real(dp),  dimension(n,k), intent(inout) :: u, au
+    integer,                   intent(in)    :: n
+!! Lenght of the vectors    
+    integer,                   intent(in)    :: m
+!! Number of reference vectors    
+    integer,                   intent(in)    :: k
+!! Number of vectors to orthogonalize again \(x\)    
+    real(dp),  dimension(n,m), intent(in)    :: x
+!! Reference vectors    
+    real(dp),  dimension(n,m), intent(in)    :: ax
+!! Application of an external matrix on \(x\)
+    real(dp),  dimension(n,k), intent(inout) :: u
+!! Vectors to orthogonalize    
+    real(dp),  dimension(n,k), intent(inout) :: au
+!! Application of an external matrix on \(u\)     
 !
 !   local variables:
 !   ================
@@ -504,7 +530,6 @@ implicit none
 !   allocate space for the overlap between x and u.
 !
     ok = .false.
-    !allocate (xu(m,k))
     call mallocate(m,k,xu)
     done = .false.
     it   = 0
@@ -549,30 +574,35 @@ implicit none
       if (it.gt.maxit) stop ' catastrophic failure of ortho_vs_x'
     end do
 !
-    !deallocate(xu)
     call mfree(xu)
 !
     return
   end subroutine ortho_vs_x
 !
   subroutine b_ortho_vs_x(n,m,k,x,bx,u)
-    implicit none
+!*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\) 
+!   is assumed to be orthogonal, B-orthogonalize \(u\) against \(x\).
+!   furthermore, orthonormalize \(u\).
 !
-!   given two sets x(n,m) and u(n,k) of vectors, where x 
-!   is assumed to be orthogonal, b-orthogonalize u against x.
-!   furthermore, orthonormalize u.
-!
-!   this routine performs the u vs x orthogonalization and the
-!   subsequent orthonormalization of u iteratively, until the
-!   overlap between x and the orthogonalized u is smaller than
+!   This routine performs the \(u\) vs \(x\) orthogonalization and the
+!   subsequent orthonormalization of \(u\) iteratively, until the
+!   overlap between \(x\) and the orthogonalized \(u\) is smaller than
 !   a (tight) threshold. 
 !
-!   arguments:
-!   ==========
+    implicit none
 !
-    integer,                   intent(in)    :: n, m, k
-    real(dp),  dimension(n,m), intent(in)    :: x, bx
+    integer,                   intent(in)    :: n
+!! Lenght of the vectors    
+    integer,                   intent(in)    :: m
+!! Number of reference vectors     
+    integer,                   intent(in)    :: k
+!! Number of vectors to orthogonalize    
+    real(dp),  dimension(n,m), intent(in)    :: x
+!! Reference vectors    
+    real(dp),  dimension(n,m), intent(in)    :: bx
+!! Application of an external \(B\) matrix to \(x\)
     real(dp),  dimension(n,k), intent(inout) :: u
+!! Vectors to orthogonalize    
 !
 !   local variables:
 !   ================
@@ -588,7 +618,6 @@ implicit none
 !   allocate space for the overlap between x and u.
 !
     ok = .false.
-    !allocate (xu(m,k))
     call mallocate(m,k,xu)
     done = .false.
     it   = 0
@@ -633,7 +662,6 @@ implicit none
       if (it.gt.maxit) stop ' catastrophic failure of b_ortho_vs_x'
     end do
 !
-    !deallocate(xu)
     call mfree(xu)
 !
   end subroutine b_ortho_vs_x
