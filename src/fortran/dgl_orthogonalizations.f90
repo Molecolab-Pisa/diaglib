@@ -199,7 +199,7 @@ implicit none
 !   ===============
 !
     integer               :: it, it_micro
-    real(dp)              :: error, dnrm2, alpha, unorm, shift
+    real(dp)              :: error, alpha, unorm, shift
     real(dp)              :: rcond, l_norm, linv_norm
     logical               :: macro_done, micro_done
     real(dp), parameter   :: tol_ortho = two * epsilon(one)
@@ -337,13 +337,12 @@ implicit none
 !
 !   local variables:
 !
-    integer               :: it, istat
+    integer               :: it
     real(dp)              :: xu_norm(2), growth
     logical               :: done, ok
     real(dp), allocatable :: xu(:,:)
 !
     integer, parameter    :: maxit = 20
-    real(dp)              :: dnrm2
 !
     call mallocate(m,k,xu)
 !
@@ -402,7 +401,7 @@ implicit none
     real(dp), dimension(n,m), intent(inout) :: u_r
 !! Second set of vectors
 !
-    integer               :: i, istat
+    integer               :: i
     real(dp)              :: fac
 !
     real(dp), allocatable :: over(:,:), u(:,:), s(:), vt(:,:), tmp(:,:)

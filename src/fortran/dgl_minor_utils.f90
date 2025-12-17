@@ -11,8 +11,8 @@ module dgl_minor_utils
     integer,                  intent(in)    :: m
     real(dp), dimension(n,m), intent(inout) :: evec
 !
-    integer               :: i, j, istat
-    real(dp)              :: fac, diag_norm, out_norm, growth, xx(1)
+    integer               :: i, j
+    real(dp)              :: fac, diag_norm, out_norm, growth
     logical               :: ok
 !
     real(dp), allocatable :: overlap(:,:)
@@ -20,7 +20,7 @@ module dgl_minor_utils
 !   check whether evec is zero.
 !
     fac = dnrm2(n*m,evec,1)
-    if (fac.eq.zero) then
+    if (fac .lt. num_thresh) then
 !
 !     no luck. make a random guess, then orthonormalize it.
 !
@@ -30,7 +30,6 @@ module dgl_minor_utils
 !
 !     compute the overlap and check that the vectors are orthonormal.
 !
-      !allocate (overlap(m,m), stat=istat)
       call mallocate(m,m,overlap)
       call dgemm('t','n',m,m,n,one,evec,n,evec,n,zero,overlap,m)
       diag_norm = zero
@@ -44,14 +43,14 @@ module dgl_minor_utils
 !
       diag_norm = diag_norm/real(m,dp)
 !
-      if (diag_norm .ne. one .or. out_norm.ne.zero) then
+      if (abs(diag_norm - one) .gt. num_thresh .or. &
+          out_norm .gt. num_thresh) then
 !
 !       orthogonalize the guess:
 !
         call ortho_cd(n,m,evec,growth,ok)
       end if
 !
-      !deallocate (overlap, stat = istat)
       call mfree(overlap)
 
     end if

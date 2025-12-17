@@ -6,6 +6,8 @@ module dgl_global_utils
 !! Useful Constant
   integer :: lwork, info
 !! Lapack utility  
+  real(dp), parameter   :: num_thresh = 1.e-13_dp
+!! Numerical threshold for real numbers comparisions with 0
   real(dp), allocatable  :: work(:), tau(:)
 !! Lapack utility
   real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &

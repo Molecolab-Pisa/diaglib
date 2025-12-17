@@ -84,7 +84,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
     integer               :: it, i_eig
     real(dp)              :: sqrtn, xx(1)
-    integer               :: istat
 !
 !   array to control convergence and orthogonalization
 !

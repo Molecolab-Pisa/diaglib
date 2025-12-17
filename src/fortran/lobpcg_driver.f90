@@ -75,7 +75,7 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   iterators and utilities
 !
-    integer               :: istat, it, i_eig
+    integer               :: it, i_eig
     real(dp)              :: sqrtn, xx(1)
 !
 !   array to control convergence and orthogonalization
@@ -135,8 +135,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residuals:
 !
-!    allocate (space(n,lda), aspace(n,lda), bspace(n,lda), &
-!              residuals(n,n_max), stat=istat)
     call mallocate(n,lda,space)
     call mallocate(n,lda,aspace)
     call mallocate(n,n_max,residuals)
@@ -193,7 +191,7 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     call matvec(n,n_max,space,aspace)
     call get_time(t2)
     t_mv = t_mv + t2 - t1
-    if (shift.ne.zero) call daxpy(n*n_max,shift,space,1,aspace,1)
+    if (abs(shift).gt.num_thresh) call daxpy(n*n_max,shift,space,1,aspace,1)
     call dgemm('t','n',n_max,n_max,n,one,space,n,aspace,n,zero,a_red,lda)
     call get_time(t1)
     call dsyev('v','l',n_max,a_red,lda,e_red,work,lwork,info)
@@ -278,7 +276,7 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
       call matvec(n,n_act,space(1,ind_w),aspace(1,ind_w))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
-      if (shift.ne.zero) call daxpy(n*n_act,shift,space(1,ind_w),1,aspace(1,ind_w),1)
+      if (abs(shift).gt.num_thresh) call daxpy(n*n_act,shift,space(1,ind_w),1,aspace(1,ind_w),1)
 !
 !     build the reduced matrix and diagonalize it:
 !
