@@ -103,6 +103,11 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !   START EXECUTION
 !   ================
 !
+!  Stupidity check
+!
+    if(n_targ.gt.n_max) call dgl_error(&
+    "Number of eigenvalues request is larger that size of arrays passed")
+!
 !   check what problem we are dealing with
 !
     generalized = present(metvec)
@@ -124,7 +129,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   compute the actual size of the expansion space
 !
-    lda     = dav_iter*n_max
+    lda = dav_iter*n_max
 !
     if(generalized) then
       n_arrs = lda*3 + n_max*2

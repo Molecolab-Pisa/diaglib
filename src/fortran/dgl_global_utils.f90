@@ -366,7 +366,7 @@ module dgl_global_utils
                     " more numbers from memory"
     endif
     call nums_to_bytes(maxcor - peakmem,p_mem,p_mem_unit)
-    if (verbose) write(*,"(t3,a,f10.3,a,/)") "Diaglib peak memory used:", p_mem, p_mem_unit
+    if (verbose) write(*,"(t3,a,f10.3,a3,/)") "DiagLib peak memory used:", p_mem, p_mem_unit
 !
   end subroutine dgl_check_memleak
 !
@@ -394,15 +394,23 @@ module dgl_global_utils
 !
     numbers_preview = lenght*n_arrs
     call nums_to_bytes(numbers_preview,memory_preview,memory_preview_unit)
-    if (verbose) write(*,"(t3,a,f10.3,a3,/)") "Diaglib esitmated memory usage is", memory_preview, memory_preview_unit
+    if (verbose) write(*,"(t3,a,f10.3,a3,/)") "DiagLib esitmated memory usage is", memory_preview, memory_preview_unit
 !
     call bytes_to_nums(mem,mem_unit,numbers)
-    if (numbers .lt. numbers_preview) write(*,"(t3,a)") "-- Diaglib Warning: provided memory is probably not sufficient"
+    if (numbers .lt. numbers_preview) write(*,"(t3,a)") "-- DiagLib Warning: provided memory is probably not sufficient"
     maxcor = numbers
     maxmem = maxcor
     peakmem = maxcor
 !
   end subroutine dgl_init
+!
+  subroutine dgl_error(string)
+    implicit none
+    character(len=*), intent(in) :: string
+
+    write(*,"(t3,a)") string
+    stop "DiagLib isseued stop signal"
+  end subroutine
 !
   integer function get_mem_lapack(n,n_max)
 !! Get the highest optimal memory amount required by lapacks
