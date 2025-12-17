@@ -1,6 +1,6 @@
 subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-              dgl_shift, dgl_memory, metvec)
+              dgl_shift, dgl_memory,dgl_memory_unit, metvec)
 !! ### Driver for Davidson-Liu symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -34,6 +34,8 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !! Maximum number of iterations before Davidson restart. Default = \(25\)
     integer,  optional,            intent(in)    :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+    character(len=2),  optional,   intent(in)    :: dgl_memory_unit
+!! Unit of memory. Default = MBs
     real(dp), optional,            intent(in)    :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
     real(dp), optional,            intent(in)    :: dgl_shift
@@ -43,14 +45,19 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   local variables:
 !   ================
-    logical  :: verbose
+    logical  :: verbose_l
     integer  :: max_iter, dav_iter, memory
     real(dp) :: tol, shift
+    character(len=2) :: memory_unit
 !
 !   expansion space varibles: 
 !     total dimension, current dimension
 !
     integer               :: lda, ld_current
+!
+!   number of large arrays that will be allocated
+!
+   integer               :: n_arrs
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
@@ -97,16 +104,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !   START EXECUTION
 !   ================
 !
-! Parse optional arguments
-!
-    verbose = .false. ; if(present(dgl_verbose)) verbose = dgl_verbose
-    max_iter = 100    ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
-    tol = 1.e-7_dp    ; if(present(dgl_tol)) tol = dgl_tol
-    shift = 0.e0_dp   ; if(present(dgl_shift)) shift = dgl_shift
-    memory= 1.d7      ; if(present(dgl_memory)) memory = dgl_memory !80MBs
-    call dgl_init(memory)
-!
 !   check what problem we are dealing with
 !
     generalized = present(metvec)
@@ -116,45 +113,56 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
       endif
     endif
 !
+! Parse optional arguments
+!
+    verbose_l = .false. ; if(present(dgl_verbose)) verbose_l = dgl_verbose
+    max_iter = 100      ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25       ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
+    tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp     ; if(present(dgl_shift)) shift = dgl_shift
+    memory = 80         ; if(present(dgl_memory)) memory = dgl_memory
+    memory_unit = "MB"  ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+!
 !   compute the actual size of the expansion space
 !
     lda     = dav_iter*n_max
 !
+    if(generalized) then
+      n_arrs = lda*3 + n_max*2
+    else
+      n_arrs = lda*2 + n_max
+    endif
+    call dgl_init(n,n_arrs,memory,memory_unit,verbose_l)
+!
 !   start by allocating memory for the various lapack routines
 !
     lwork = get_mem_lapack(n,n_max)
-    !allocate (work(lwork), tau(n_max), stat=istat)
     call mallocate(lwork,work)
     call mallocate(n_max,tau)
 !
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residuals:
 !
-    !allocate (space(n,lda), aspace(n,lda), residuals(n,n_max), stat = istat)
     call mallocate(n,lda,space)
     call mallocate(n,lda,aspace)
     call mallocate(n,n_max,residuals)
 
     if (generalized) then
-      !allocate (bspace(n,lda), b_evec(n,n_max), stat = istat)
       call mallocate(n,lda,bspace)
       call mallocate(n,n_max,b_evec)
     endif
 !
 !   allocate memory for convergence check
 !
-    !allocate (done(n_max), r_norm(2,n_max), stat=istat)
     call mallocate(n_max,done)
     call mallocate(2,n_max,r_norm)
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-    !allocate (a_red(lda,lda), a_copy(lda,lda), e_red(lda), stat=istat)
     call mallocate(lda,lda,a_red)
     call mallocate(lda,lda,a_copy)
     call mallocate(lda,e_red)
     if (generalized) then
-      !allocate (s_red(lda,lda), s_copy(lda,lda), stat=istat)
       call mallocate(lda,lda,s_red)
       call mallocate(lda,lda,s_copy)
     endif
@@ -355,7 +363,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
       else
-        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+        if (verbose) write(6,'(t7,a,/)') 'Restarting davidson.'
         n_act = n_max
         space = zero
 !
@@ -396,7 +404,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   deallocate memory
 !
-    !deallocate (work, tau, space, aspace, residuals, done, r_norm, a_red, a_copy, e_red)
     call mfree(work)
     call mfree(tau)
     call mfree(space)

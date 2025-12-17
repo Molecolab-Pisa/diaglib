@@ -1,6 +1,6 @@
 subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_max_iter, dgl_tol, &
-              dgl_shift, dgl_memory, metvec)
+              dgl_shift, dgl_memory,dgl_memory_unit, metvec)
 !! ### Driver for LOBPCG symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -32,6 +32,8 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !! Maximum number of allowed iterations. Default = \(100\)
     integer,  optional,            intent(in)    :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+    character(len=2),  optional,   intent(in)    :: dgl_memory_unit
+!! Unit of memory. Default = MBs
     real(dp), optional,            intent(in)    :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
     real(dp), optional,            intent(in)    :: dgl_shift
@@ -41,13 +43,19 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   local variables:
 !   ================
-    logical  :: verbose
+    logical  :: verbose_l
     integer  :: max_iter, memory
     real(dp) :: tol, shift
+    character(len=2) :: memory_unit
 !
 !   expansion space varibles: 
 !       total dimension, current dimension
+!
     integer               :: lda, ld_current
+!
+!   number of large arrays that will be allocated
+!
+   integer               :: n_arrs
 !
 !   tolerances on residuals norms, used for convergence
 !
@@ -89,15 +97,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !   START EXECUTION
 !   ================
 !
-! Parse optional arguments
-!
-    verbose = .false. ; if(present(dgl_verbose)) verbose = dgl_verbose
-    max_iter = 50     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    tol = 1.e-7_dp    ; if(present(dgl_tol)) tol = dgl_tol
-    shift = 0.e0_dp   ; if(present(dgl_shift)) shift = dgl_shift
-    memory= 1.d7      ; if(present(dgl_memory)) memory = dgl_memory !80MBs
-    call dgl_init(memory)
-!
 !   check what problem we are dealing with
 !
     generalized = present(metvec)
@@ -107,17 +106,35 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
       endif
     endif
 !
+! Parse optional arguments
+!
+    verbose_l = .false. ; if(present(dgl_verbose)) verbose_l = dgl_verbose
+    max_iter = 50       ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp     ; if(present(dgl_shift)) shift = dgl_shift
+    memory= 80          ; if(present(dgl_memory)) memory = dgl_memory !80MBs
+    memory_unit = "MB"  ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+!
+!   set size of the expansion space
+!
+    lda = 3*n_max
+!
+    if(generalized) then
+      n_arrs = lda*3 + n_max*4
+    else
+      n_arrs = lda*2 + n_max*3
+    endif
+    call dgl_init(n,n_arrs,memory,memory_unit,verbose_l)
+!
 !   start by allocating memory for the various lapack routines
 !
     lwork = get_mem_lapack(n,n_max)
-    !allocate (work(lwork), tau(2*n_max), stat=istat)
     call mallocate(lwork,work)
     call mallocate(2*n_max,tau)
 !
 !   allocate memory for the expansion space, the corresponding 
 !   matrix-multiplied vectors and the residuals:
 !
-    lda = 3*n_max
 !    allocate (space(n,lda), aspace(n,lda), bspace(n,lda), &
 !              residuals(n,n_max), stat=istat)
     call mallocate(n,lda,space)
@@ -128,20 +145,17 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-    !allocate (a_red(lda,lda), e_red(lda), stat=istat)
     call mallocate(lda,lda,a_red)
     call mallocate(lda,e_red)
 !
 !   allocate memory for temporary copies of x, ax, and bx:
 !
-    !allocate (x_new(n,n_max), ax_new(n,n_max), bx_new(n,n_max), stat=istat)
     call mallocate(n,n_max,x_new)
     call mallocate(n,n_max,ax_new)
     if (generalized) call mallocate(n,n_max,bx_new)
 !
 !   allocate memory for convergence check
 !
-    !allocate (done(n_max), r_norm(2,n_max), stat=istat)
     call mallocate(n_max,done)
     call mallocate(2,n_max,r_norm)
 !
@@ -352,7 +366,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !     -x in the basis of (x,p,w), and then by orthogonalizing then to
 !     the coefficients u_x of x_new. 
 !
-      !allocate (u_x(ld_current,n_max), u_p(ld_current,n_act), stat = istat)
       call mallocate(ld_current,n_max,u_x)
       call mallocate(ld_current,n_act,u_p)
 !
@@ -373,7 +386,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
         call dcopy(n_act*n,evec,1,bspace(1,ind_p),1)
       end if
 !
-      !deallocate(u_x, u_p, stat = istat)
       call mfree(u_x)
       call mfree(u_p)
 !
@@ -406,8 +418,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   deallocate memory and return.
 !
-    !deallocate (work, tau, space, aspace, bspace, residuals, a_red, e_red, & 
-    !            x_new, ax_new, bx_new, done, r_norm, stat = istat)
     call mfree(work)
     call mfree(tau)
     call mfree(space)

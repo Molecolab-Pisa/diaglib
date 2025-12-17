@@ -11,8 +11,10 @@ module dgl_global_utils
   real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &
                             t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
 !! Timings
-  integer, private :: maxmem, maxcor
+  integer, protected :: maxmem, maxcor, peakmem
 !! Variables to keep track of memory
+  logical, protected :: verbose
+!! Global verbosity mode
 !
 ! external functions:
 ! ===================
@@ -249,30 +251,60 @@ module dgl_global_utils
   end subroutine l_free1
 !
 !
-  subroutine to_xbytes(num,b_num,b_unit)
-  !! Silly converter to Bytes. Actual unit dependins on the
-  !! magnitude of the number and it is returned
+  subroutine nums_to_bytes(num,b_num,b_unit)
+  !! Converter from numbers to Bytes. Actual unit depends on the
+  !! magnitude of the number and it is returned. Assumes 8 Byte numbers
     implicit none
-    integer,      intent(in) :: num
+    integer,          intent(in) :: num
     real(dp),         intent(inout) :: b_num
     character(len=*), intent(inout) :: b_unit
 !
-    integer :: num_l
+    integer  :: num_l
+    real(dp) ::converter
 !
     num_l = 8*num
     select case(num_l)
-    case(:1000000)
-      b_num = real(num_l,kind=dp) / 1.e3_dp
+    case(:int(1.e6_dp))
       b_unit = "KB"
-    case (1000001:1000000000)
-      b_num = real(num_l,kind=dp) / 1.e6_dp
+      converter = 1.e3_dp
+!
+    case (int(1.e6_dp)+1:int(1.e9_dp))
+      converter = 1.e6_dp
       b_unit = "MB"
+!
     case default
-      b_num = real(num_l,kind=dp) / 1.e9_dp
+      converter = 1.e9_dp
       b_unit = "GB"
     end select
+!    
+      b_num = real(num_l,kind=dp) / converter
 !
-  end subroutine to_xbytes
+  end subroutine nums_to_bytes
+!
+  subroutine bytes_to_nums(bytes,bytes_unit,nums)
+  !! Converter from Bytes to numbers. Assumes 8 Byte numbers
+    implicit none
+    integer,          intent(in) :: bytes
+    character(len=*), intent(in) :: bytes_unit
+    integer,          intent(inout) :: nums
+!
+    integer :: converter
+!
+    select case(bytes_unit)
+    case("KB")
+      converter = int(1.e3_dp)
+    case ("MB")
+      converter = int(1.e6_dp)
+    case ("GB")
+      converter = int(1.e9_dp)
+    case default
+      if(verbose) write(*,"(t3,a,/)") "Unknown or Unspecified memory_unit, defaulting to MBs"
+      converter = int(1.e6_dp)
+    end select
+!
+    nums = int(bytes * converter / 8)
+!
+  end subroutine bytes_to_nums
 !
   subroutine chk_mall(lall,istat)
 !! Check for proper allocations. Also keeps track of the memory used.
@@ -292,12 +324,13 @@ module dgl_global_utils
       write(*,9000) istat
       stop
     else if (lall.gt.maxmem) then
-      call to_xbytes(lall,b_lall,lall_unit)
-      call to_xbytes(maxmem,b_maxmem,maxmem_unit)
+      call nums_to_bytes(lall,b_lall,lall_unit)
+      call nums_to_bytes(maxmem,b_maxmem,maxmem_unit)
       write(*,9010) b_lall, lall_unit, b_maxmem, maxmem_unit
       stop
     else
       maxmem = maxmem - lall
+      if (peakmem .gt. maxmem) peakmem = maxmem 
     end if
 !    
   end subroutine chk_mall
@@ -319,14 +352,19 @@ module dgl_global_utils
   end subroutine chk_free
 !
   subroutine dgl_check_memleak()
+!! Check for the presence of internal memory leaks
     implicit none
+    real(dp) :: p_mem
+    character(len=2) :: p_mem_unit
 !
 ! check if DiagLib is globally leaking data
 !
     if (maxmem.ne.maxcor) then
-      write(*,"(t3,a,/,t3,i0,a,/)") "Memory leak detected. DiagLib should free ", maxcor-maxmem, &
-                    " more words of space"
+      write(*,"(t3,a,/,t3,i0,a,/)") "DiagLib: Memory leak detected. DiagLib should free ", maxcor-maxmem, &
+                    " more numbers from memory"
     endif
+    call nums_to_bytes(maxcor - peakmem,p_mem,p_mem_unit)
+    if (verbose) write(*,"(t3,a,f10.3,a,/)") "Diaglib peak memory used:", p_mem, p_mem_unit
 !
   end subroutine dgl_check_memleak
 !
@@ -334,28 +372,43 @@ module dgl_global_utils
 !  More global routines
 !  =====================
 !
-  subroutine dgl_init(mem)
-!! Global initializer for drivers  
+  subroutine dgl_init(lenght,n_arrs,mem,mem_unit,verbose_in)
+!! Global initializer for all drivers  
     implicit none
-    integer, intent(in) :: mem
+    integer,          intent(in) :: lenght, n_arrs
+    integer,          intent(in) :: mem
+    character(len=2), intent(in) :: mem_unit
+    logical,          intent(in) :: verbose_in
 !
-    real(dp) :: b_mem
-    character(len=2) :: mem_unit
+    integer :: numbers, numbers_preview
+    real(dp) :: memory_preview
+    character(len=2) :: memory_preview_unit 
+!
+! Set global verbosity level to user input
+!
+    verbose = verbose_in
 !
 ! set maximum memory used by DiagLib to the input value
 !
-    maxcor = mem
+    numbers_preview = lenght*n_arrs
+    call nums_to_bytes(numbers_preview,memory_preview,memory_preview_unit)
+    if (verbose) write(*,"(t3,a,f10.3,a3,/)") "Diaglib esitmated memory usage is", memory_preview, memory_preview_unit
+!
+    call bytes_to_nums(mem,mem_unit,numbers)
+    if (numbers .lt. numbers_preview) write(*,"(t3,a)") "-- Diaglib Warning: provided memory is probably not sufficient"
+    maxcor = numbers
     maxmem = maxcor
-!    call to_xbytes(mem,b_mem,mem_unit)
-!    if (verbose) write(*,"(t3,a,f10.3,a3,a)") "Diaglib will use up to", b_mem, mem_unit, " of memeory"
+    peakmem = maxcor
 !
   end subroutine dgl_init
 !
   integer function get_mem_lapack(n,n_max)
 !! Get the highest optimal memory amount required by lapacks
 !! for the driver execution.
-    integer, intent(in)    :: n, n_max
-!
+    integer, intent(in)    :: n
+!! Number of rows of matrices that will be processed
+    integer, intent(in)    :: n_max
+!! Number of columns of matrices that will be processed
     integer           :: lwork1, lwork2, len_rr, len_qr, nb
 !fl
     integer           :: lwork3

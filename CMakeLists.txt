@@ -25,7 +25,7 @@ set(BLA_THREAD CACHE STRING "Choice between SEQ or OMP BLAS")
 set(BLA_VENDOR CACHE STRING "Choice of BLAS vendor")
 
 if(NOT BLA_VENDOR)
-find_package(MKL)
+        find_package(MKL)
         if (NOT MKL_FOUND)
                 find_package(BLAS REQUIRED)
         endif()

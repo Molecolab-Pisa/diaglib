@@ -7,7 +7,7 @@ module dgl_drivers_interfaces
 
         subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_max_iter, dgl_tol, dgl_dav_iter, &
-              dgl_shift, dgl_memory, metvec)
+              dgl_shift, dgl_memory, dgl_memory_unit, metvec)
         !! ### Interface for Davidson-Liu symmetric diagonalization
         !! Can solve both standard and generalized eigenvalue problems.
         !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -40,6 +40,8 @@ module dgl_drivers_interfaces
             !! Maximum number of iterations before Davidson restart. Default = \(25\)
             integer,  optional,            intent(in)    :: dgl_memory
             !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+            character(len=2),  optional,   intent(in)    :: dgl_memory_unit
+            !! Unit of memory. Default = MBs
             real(dp), optional,            intent(in)    :: dgl_tol
             !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
             real(dp), optional,            intent(in)    :: dgl_shift
@@ -50,7 +52,7 @@ module dgl_drivers_interfaces
 
         subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_max_iter, dgl_tol, &
-              dgl_shift, dgl_memory, metvec)
+              dgl_shift, dgl_memory,dgl_memory_unit, metvec)
         !! ### Interface for LOBPCG symmetric diagonalization
         !! Can solve both standard and generalized eigenvalue problems.
         !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -81,6 +83,8 @@ module dgl_drivers_interfaces
             !! Maximum number of allowed iterations. Default = \(100\)
             integer,  optional,            intent(in)    :: dgl_memory
             !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+            character(len=2),  optional,   intent(in)    :: dgl_memory_unit
+            !! Unit of memory. Default = MBs
             real(dp), optional,            intent(in)    :: dgl_tol
             !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
             real(dp), optional,            intent(in)    :: dgl_shift

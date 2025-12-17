@@ -5,11 +5,13 @@ program test_fortran
 !
 ! tests the various functionalities of diaglib.
 !
-  integer,  parameter :: n = 100, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20
+  integer,  parameter :: n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20
   integer,  parameter :: lutest=100
   real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
+  integer,  parameter :: memory = 100
+  character(len=2),parameter :: memory_unit = "MB"
 !
-  integer               :: i, j, memory = 1.e7
+  integer               :: i, j
   logical               :: ok
   real(dp), allocatable :: eig(:), evec(:,:), evec_l(:,:)
   procedure(), pointer :: mx_p => null()
@@ -43,7 +45,9 @@ program test_fortran
   mx_p => mx
   write(6,*) ' testing Davidson:'
   call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                        dgl_verbose = .true.)
+                        dgl_verbose = .true.,&
+                        dgl_memory = memory,&
+                        dgl_memory_unit = memory_unit)
 !
   if (ok) then
     write(6,*) ' Davidson converged.'
@@ -57,7 +61,7 @@ program test_fortran
 !
 !     fix the phase
 !
-      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -92,7 +96,7 @@ program test_fortran
 !
 !     fix the phase
 !
-      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -177,7 +181,7 @@ program test_fortran
 !
 !     fix the phase
 !
-      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -214,7 +218,7 @@ program test_fortran
 !
 !     fix the phase
 !
-      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
