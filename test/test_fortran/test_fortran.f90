@@ -28,6 +28,7 @@ program test_fortran
   1022 format(t3,i5,*(f14.6))
   1030 format(t3,'Eigenvector ',i3,':')
   1031 format(t3,'Eigenvector ',tl1,*(i8,6x))
+  1032 format(t3,a6,'Eigenvector ',tl7,*(i8,6x))
 !
 ! allocate space for eigenvalues and eigenvectors
 !
@@ -45,7 +46,7 @@ program test_fortran
   mx_p => mx
   write(6,*) ' testing Davidson:'
   call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                        dgl_verbose = .true.,&
+                        dgl_verbose = .false.,&
                         dgl_memory = memory,&
                         dgl_memory_unit = memory_unit)
 !
@@ -82,7 +83,10 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing Generalized Davidson:'
-  call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p)
+  call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
+                        dgl_verbose = .false.,&
+                        dgl_memory = memory,&
+                        dgl_memory_unit = memory_unit)
 !
   if (ok) then
     write(6,*) ' Generalized Davidson converged.'
@@ -106,54 +110,51 @@ program test_fortran
   else
     write(6,*) 'Generalized Davidson failed to converge.'
   end if
-!!
-!! test non-symmetric davidson:
-!!
-!  allocate (evec_l(n,n_max))
-!  evec_l = zero
-!  do i = 1, n_max
-!    evec_l(i,i) = one
-!  end do
-!  ok = .false.
-!!
-!  write(6,*) ' testing non-symmetric Davidson:'
-!  call nonsym_driver(.false., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-!                     arx, alx, dx, eig, evec, evec_l, 3, ok)
-!!
-!  if (ok) then
-!    write(6,*) ' non-symmetric Davidson converged.'
-!    write(lutest,1000) 'Non-Symmetric Davidson'
-!    write(lutest,*)
-!    write(lutest,1010)
-!    do i = 1, n_targ
-!      write(lutest,1020) i, eig(i)
-!    end do
-!    do i = 1, n_targ
-!      write(lutest,1030) 'right', i
-!!
-!!     fix the phase
-!!
-!      if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
-!      do j = 1, n
-!        write(lutest,1021) j, evec(j,i)
-!      end do
-!    end do
-!    do i = 1, n_targ
-!      write(lutest,1030) 'left', i
-!!
-!!     fix the phase
-!!
-!      if (evec_l(1,i).lt.zero) evec_l(:,i) = - evec_l(:,i)
-!      do j = 1, n
-!        write(lutest,1021) j, evec_l(j,i)
-!      end do
-!    end do
-!    write(lutest,*)
-!  else
-!    write(6,*) ' non-symmetric Davidson failed to converge.'
-!  end if
-!!
-!  deallocate (evec_l)
+!
+! test non-symmetric davidson:
+!
+  allocate (evec_l(n,n_max))
+  evec_l = zero
+  do i = 1, n_max
+    evec_l(i,i) = one
+  end do
+  ok = .false.
+!
+  write(6,*) ' testing non-symmetric Davidson:'
+  call davidson_nosym_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
+                     arx, alx, dx, eig, evec, evec_l, 3, ok)
+!
+  if (ok) then
+    write(6,*) ' non-symmetric Davidson converged.'
+    write(lutest,1000) 'Non-Symmetric Davidson'
+    write(lutest,*)
+    write(lutest,1010)
+    
+    do i = 1, n_targ
+      write(lutest,1020) i, eig(i)
+    end do
+
+    write(lutest,1032) 'Right ', (i, i = 1, n_targ)
+!     fix the phase
+    if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+    do j = 1, n
+      write(lutest,1022) j, (evec(j,i), i = 1, n_targ)
+    end do
+    write(lutest,*)
+
+    write(lutest,1032) 'Left ', (i, i = 1, n_targ)
+!     fix the phase
+    if (evec_l(1,i).lt.zero) evec_l(:,i) = - evec_l(:,i)
+    do j = 1, n
+      write(lutest,1022) j, (evec_l(j,i), i = 1, n_targ)
+    end do
+    write(lutest,*)
+
+  else
+    write(6,*) ' non-symmetric Davidson failed to converge.'
+  end if
+!
+  deallocate (evec_l)
 !
 ! test lobpcg:
 !
@@ -167,7 +168,10 @@ program test_fortran
 !
   write(6,*) ' testing LOBPCG:'
 
-  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok)
+  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+                        dgl_verbose = .false.,&
+                        dgl_memory = memory,&
+                        dgl_memory_unit = memory_unit)
 !
   if (ok) then
     write(6,*) ' LOBPCG converged.'
@@ -204,7 +208,10 @@ program test_fortran
 !
   write(6,*) ' testing Generalized LOBPCG:'
 
-  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p)
+  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
+                        dgl_verbose = .false.,&
+                        dgl_memory = memory,&
+                        dgl_memory_unit = memory_unit)
 !
   if (ok) then
     write(6,*) ' Generalized LOBPCG converged.'

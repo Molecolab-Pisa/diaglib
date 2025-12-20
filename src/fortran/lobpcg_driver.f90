@@ -164,10 +164,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   clean out:
 !
-    t_diag   = zero
-    t_ortho  = zero
-    t_mv     = zero
-    t_tot    = zero
     space    = zero
     aspace   = zero
     a_red    = zero

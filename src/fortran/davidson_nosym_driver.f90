@@ -13,8 +13,6 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !
 !   local variables:
 !   ================
-!
-    integer               :: istat
 !   
 !   actual expansion space size and total dimension
 !
@@ -81,35 +79,48 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !   start by allocating memory for the various lapack routines
 !
     lwork   = get_mem_lapack(n,n_max) 
-    allocate (work(lwork), tau(lda), stat=istat)
+    call mallocate(lwork,work)
+    call mallocate(lda,tau)
 
 !
 !   allocate memory for for expansion space, the corresponding
 !   matrix-multiplied vectors and the residuals
 !
-    allocate (space_r(n,lda), space_l(n,lda), aspace_r(n,lda), aspace_l(n,lda), residuals_r(n,n_max), &
-      residuals_l(n,n_max), stat=istat)
-
+    call mallocate(n,lda,space_r)
+    call mallocate(n,lda,space_l)
+    call mallocate(n,lda,aspace_l)
+    call mallocate(n,lda,aspace_r)
+    call mallocate(n,n_max,residuals_l)
+    call mallocate(n,n_max,residuals_r)
 !
 !   allocate memory for convergency check
 !
-    allocate (done(n_max), r_norm_r(2,n_max), r_norm_l(2,n_max), stat=istat)
+    call mallocate(n_max,done)
+    call mallocate(2,n_max,r_norm_l)
+    call mallocate(2,n_max,r_norm_r)
 !
 !   allocate memory for the reduced matrix, its eigenvalues with real &
 !   imaginary parts, and its left & right eigenvectors 
 !
-    allocate (a_red(lda,lda), e_red_re(2*lda), e_red_im(2*lda), evec_red_r(lda,lda), &
-              evec_red_l(lda,lda), copy_r(lda,lda), copy_l(lda,lda), copy_eig(2*lda), stat =istat)
-
+    call mallocate(lda,lda,a_red)
+    call mallocate(2*lda,e_red_re)
+    call mallocate(2*lda,e_red_im)
+    call mallocate(lda,lda,evec_red_l)
+    call mallocate(lda,lda,evec_red_r)
+    call mallocate(lda,lda,copy_l)
+    call mallocate(lda,lda,copy_r)
+    call mallocate(2*lda,copy_eig)
 !
 !   allocate space for orthogonalization routines
+!   and mask array for sorting routine
 !
-!   allocate mask array for sorting routine
-
-    allocate (overlap_diff(n_max), overlap(2*n_max,2*n_max), &
-      perm_mat(2*n_max,2*n_max), evec_temp(lda,n_max), eig_temp(lda), mask_overlap(2*n_max), stat = istat)
-    allocate(perm_temp(2*n_max,2*n_max))
-
+    call mallocate(2*n_max,2*n_max,overlap)
+    call mallocate(n_max,overlap_diff)
+    call mallocate(2*n_max,2*n_max,perm_mat)
+    call mallocate(2*n_max,2*n_max,perm_temp)
+    call mallocate(lda,n_max,evec_temp)
+    call mallocate(lda,eig_temp)
+    call mallocate(2*n_max,mask_overlap)
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -125,7 +136,6 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
     left        = .false.
     consecutive = .false.
     do_davidson = .true.
-!
 !
 !   extract from the input which eigenvectors shall be computed in which way
 !     1 = only right eigenpairs
@@ -627,8 +637,9 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !
 !         check if energies are same
 !
-          if (maxval(eig_r - eig) .gt. tol) then
-            print *, "eigenvalues in the consecutive computation of right and left eigenpairs do not match." 
+          if (maxval(eig_r(:n_targ) - eig(:n_targ)) .gt. tol) then
+            print *, "Debug: eigenvalues in the consecutive computation of", &
+                     "right and left eigenpairs do not match. Stopping" 
             stop
           end if
 !
@@ -658,8 +669,32 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !      
 !   deallocate memory
 !
-    deallocate(work, tau, space_r, space_l, aspace_r, aspace_l, residuals_r, residuals_l, done, r_norm_r, r_norm_l)
-    deallocate(a_red, e_red_re, e_red_im, evec_red_r, evec_red_l, copy_r, copy_l)
+    call mfree(work)
+    call mfree(tau)
+    call mfree(space_r)
+    call mfree(space_l)
+    call mfree(aspace_l)
+    call mfree(aspace_r)
+    call mfree(residuals_l)
+    call mfree(residuals_r)
+    call mfree(r_norm_l)
+    call mfree(r_norm_r)
+    call mfree(done)
+    call mfree(a_red)
+    call mfree(e_red_re)
+    call mfree(e_red_im)
+    call mfree(evec_red_l)
+    call mfree(evec_red_r)
+    call mfree(copy_l)
+    call mfree(copy_r)
+    call mfree(copy_eig)
+    call mfree(overlap)
+    call mfree(overlap_diff)
+    call mfree(perm_mat)
+    call mfree(perm_temp)
+    call mfree(evec_temp)
+    call mfree(eig_temp)
+    call mfree(mask_overlap)
 !
 1100 format(t3,'  timings for non-symmetric Davidson (cpu/wall) : ',/, &
             t3,'  matrix-vector multiplications   : ',2f12.4,/, &

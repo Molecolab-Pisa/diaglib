@@ -402,6 +402,13 @@ module dgl_global_utils
     maxmem = maxcor
     peakmem = maxcor
 !
+! Reset timings
+!
+    t_tot       = zero
+    t_diag      = zero
+    t_ortho     = zero
+    t_mv        = zero
+!
   end subroutine dgl_init
 !
   subroutine dgl_error(string)
