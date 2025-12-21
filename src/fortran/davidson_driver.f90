@@ -85,7 +85,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     integer               :: it, i_eig
     real(dp)              :: sqrtn, xx(1)
 !
-!   array to control convergence and orthogonalization
+!   array to control convergence
 !
     logical,  allocatable :: done(:)
 !
@@ -130,6 +130,9 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !   compute the actual size of the expansion space
 !
     lda = dav_iter*n_max
+!
+!   compute the number of large vectors that will be allocated 
+!   to later exstimate required memory in dgl_init 
 !
     if(generalized) then
       n_arrs = lda*3 + n_max*2

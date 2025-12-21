@@ -1,66 +1,116 @@
-subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,shift,&
-                            matvec,matvec_l,precnd,eig,evec_r,evec_l,side,ok)
-    use dgl_minor_utils
-    use dgl_external_interfaces
-    logical,                        intent(in)    :: verbose_l
-    integer,                        intent(in)    :: n, n_targ, n_max, side
-    integer,                        intent(in)    :: max_iter, dav_iter
-    real(dp),                       intent(in)    :: tol, shift
-    real(dp), dimension(n_max),     intent(inout) :: eig
-    real(dp), dimension(n,n_max),   intent(inout) :: evec_r, evec_l
-    logical,                        intent(inout) :: ok
-    external                                      :: matvec, matvec_l, precnd
+subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
+              eig,evec_r,evec_l,ok,&
+              dgl_verbose,dgl_tol,dgl_max_iter,dgl_dav_iter,&
+              dgl_shift,dgl_memory,dgl_memory_unit)
+!! ### Driver for Davidson-Liu non-symmetric diagonalization
+!! Can solve solve only standard eigenvalue problems. Can eveluate both Left and Right eigenvectors.
+!! To pass any optional argument, you need to add `use [[dgl_drivers_interfaces]]`, a module included in this library.
+!!
+!! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+  use dgl_minor_utils
+  use dgl_external_interfaces
+  implicit none
+    integer,                      intent(in)    :: n
+!! Size of the matrix to be diagonalized
+    integer,                      intent(in)    :: n_targ
+!! Number of required eigenpairs.
+    integer,                      intent(in)    :: n_max
+!! Maximum size of the search space. Should be >= n_targ
+    integer,                      intent(in)    :: side
+!! Integer to decide which eigenvectors to compute and whether to compute
+!! them togheter or separately
+    real(dp), dimension(n_max),   intent(inout) :: eig
+!! Computed eigenvalues
+    real(dp), dimension(n,n_max), intent(inout) :: evec_l
+!! Computed Left eigenvectors. In input, it should contain their guess
+    real(dp), dimension(n,n_max), intent(inout) :: evec_r
+!! Computed Right eigenvectors. In input, it should contain their guess
+    logical,                      intent(inout) :: ok
+!! True if davidson converged
+    procedure(matvec_) :: matvec_r
+!! External subroutine that performs the matrix-vector multiplication for
+!! right eigenvectors
+    procedure(matvec_) :: matvec_l
+!! External subroutine that performs the matrix-vector multiplication for
+!! left eigenvectors
+    procedure(precnd_) :: precnd
+!! External subroutine that applies a preconditioner
+    logical,  optional,            intent(in)    :: dgl_verbose
+!! Verbose mode. Default = .false.
+    integer,  optional,            intent(in)    :: dgl_max_iter
+!! Maximum number of allowed iterations. Default = \(100\)
+    integer,  optional,            intent(in)    :: dgl_dav_iter
+!! Maximum number of iterations before Davidson restart. Default = \(25\)
+    integer,  optional,            intent(in)    :: dgl_memory
+!! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+    character(len=2),  optional,   intent(in)    :: dgl_memory_unit
+!! Unit of memory. Default = MBs
+    real(dp), optional,            intent(in)    :: dgl_tol
+!! Convergence threshold on residuals norms. Default = \(10^{-7}\)
+    real(dp), optional,            intent(in)    :: dgl_shift
+!! Diagonal level shifting parameter. Default = \(0.\)
 !
 !   local variables:
 !   ================
-!   
-!   actual expansion space size and total dimension
+    logical  :: verbose_l
+    integer  :: max_iter, dav_iter, memory
+    real(dp) :: tol, shift
+    character(len=2) :: memory_unit
 !
-    integer               :: lda
+!   expansion space varibles: 
+!     total dimension, current dimension
+!
+    integer               :: lda, ld_current
+!
+!   number of large arrays that will be allocated
+!
+    integer               :: n_arrs
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
     integer               :: n_act, ind, i_beg
 !
-!   current size and total dimension of the expansion space
-!
-    integer               :: m_dim, ld_current
-!
 !   number of frozen (i.e. converged) vectors
 !
     integer               :: n_frozen
 !
-    integer               :: it, i_eig
-!   
-    real(dp)              :: sqrtn, tol_rms, tol_max, tol_im
-    real(dp)              :: xx(1), yy
+!   tolerances on residuals norms, used for convergence
 !
-!   arrays to control convergence and orthoginalization
-!
-    logical, allocatable  :: done(:)
-!
-!   expansion spaces, residuals and their norms
-!
-    real(dp), allocatable :: space_r(:,:), space_l(:,:), aspace_r(:,:), aspace_l(:,:), &
-                              residuals_r(:,:), residuals_l(:,:), r_norm_r(:,:), r_norm_l(:,:)
-!
-!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
-!
-    real(dp), allocatable :: a_red(:,:), e_red_re(:), e_red_im(:), &
-                             evec_red_r(:,:), evec_red_l(:,:), copy_r(:,:), copy_l(:,:), copy_eig(:)
+    real (dp)             :: tol_rms, tol_max
 !
 !   restarting variables
 !
     logical               :: restart
 !
+!   iterators and utilities
+!
+    integer               :: it, i_eig
+    real(dp)              :: sqrtn, tol_im
+    real(dp)              :: xx(1), yy   
+    integer               :: j, k
+!
+!   arrays to control convergence
+!
+    logical, allocatable  :: done(:)
+!
+!   expansion spaces, residuals and their norms
+!
+    real(dp), allocatable :: space_r(:,:), space_l(:,:), aspace_r(:,:), aspace_l(:,:)
+    real(dp), allocatable :: residuals_r(:,:), residuals_l(:,:)
+    real(dp), allocatable :: r_norm_r(:,:), r_norm_l(:,:)
+!
+!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
+!
+    real(dp), allocatable :: a_red(:,:), e_red_re(:), e_red_im(:)
+    real(dp), allocatable :: evec_red_r(:,:), evec_red_l(:,:)
+    real(dp), allocatable :: copy_r(:,:), copy_l(:,:), copy_eig(:)
+!
 !   variables for left, right, or both eigenvectors
 !
     logical               :: left, right, consecutive, do_davidson
     real(dp)              :: eig_r(n_max)
-!
-    integer               :: j, k
 ! 
-!   variables for the sort
+!   variables for the sorting eigenpairs, since lapack does not.
 !
     integer               :: max_idx(1)
     logical               :: found_im, found_er, double_r, double_l, ortho_ok
@@ -71,17 +121,75 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
                              overlap_idx_l(n_max,2), overlap_val_l(n_max,2), overlap_self_r(n_max)
     real(dp),allocatable  :: perm_temp(:,:)
 !
+!   ================
+!   START EXECUTION
+!   ================
+!
+!  Stupidity check
+!
+    if(n_targ.gt.n_max) call dgl_error(&
+    "Number of eigenvalues request is larger that size of arrays passed")
+!
+! Parse optional arguments
+!
+    verbose_l = .false. ; if(present(dgl_verbose)) verbose_l = dgl_verbose
+    max_iter = 100      ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25       ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
+    tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp     ; if(present(dgl_shift)) shift = dgl_shift
+    memory = 80         ; if(present(dgl_memory)) memory = dgl_memory
+    memory_unit = "MB"  ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+!
+!   set some quantities
+!
+    ok          = .false.
+    right       = .false.
+    left        = .false.
+    consecutive = .false.
+    do_davidson = .true.
+!
+!   extract from the input which eigenvectors shall be computed in which way
+!     1 = only right eigenpairs
+!     2 = only left eigenpairs
+!     3 = both eigenpairs in simultaneous manner
+!     4 = both eigenpairs in consecutive manner, start with right
+!
+    if (side .eq. 1) then 
+      right = .true.
+    else if (side .eq. 2) then 
+      left  = .true.
+    else if (side .eq. 3) then
+!
+!     the simultaneous diagonalization driver is less efficient than a consecutive
+!     run for the left eigenvectors. 
+!     switch it off manually, but leave it as an advanced debug feature.
+!
+      right = .true.
+      consecutive = .true. 
+    else if (side .eq. 4) then 
+      consecutive = .true.
+      right = .true.
+    else
+      print *, "choice for side is not correct. can be 1,2,3,4."
+      stop
+    end if
+!
 !   computing actual size of the expansion space, checking that
 !   the input makes sense.
 !
-    lda     = dav_iter*n_max
+    lda = dav_iter*n_max
+!
+!   compute the number of large vectors that will be allocated 
+!   to later exstimate required memory in dgl_init 
+!
+    n_arrs = lda*4 + n_max*2
+    call dgl_init(n,n_arrs,memory,memory_unit,verbose_l)
 !
 !   start by allocating memory for the various lapack routines
 !
-    lwork   = get_mem_lapack(n,n_max) 
+    lwork = get_mem_lapack(n,n_max) 
     call mallocate(lwork,work)
     call mallocate(lda,tau)
-
 !
 !   allocate memory for for expansion space, the corresponding
 !   matrix-multiplied vectors and the residuals
@@ -129,40 +237,6 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
     tol_max = 10.0_dp * tol
     tol_im  = 1.d-12
 !
-!   set some quantities
-!
-    ok          = .false.
-    right       = .false.
-    left        = .false.
-    consecutive = .false.
-    do_davidson = .true.
-!
-!   extract from the input which eigenvectors shall be computed in which way
-!     1 = only right eigenpairs
-!     2 = only left eigenpairs
-!     3 = both eigenpairs in simultaneous manner
-!     4 = both eigenpairs in consecutive manner, start with right
-!
-    if (side .eq. 1) then 
-      right = .true.
-    else if (side .eq. 2) then 
-      left  = .true.
-    else if (side .eq. 3) then
-!
-!     the simultaneous diagonalization driver is less efficient than a consecutive
-!     run for the left eigenvectors. 
-!     switch it off manually, but leave it as an advanced debug feature.
-!
-      right = .true.
-      consecutive = .true. 
-    else if (side .eq. 4) then 
-      consecutive = .true.
-      right = .true.
-    else
-      print *, "choice for side is not correct. can be 1,2,3,4."
-      stop
-    end if
-!
 !   check weather we have a guess for the eigenvectors in evec, and
 !   weather it is orthonormal.
 !   if evec is zero, create a random guess
@@ -206,7 +280,6 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !
 !     initialize the counter for the expansion of the subspace
 !
-      m_dim = 1
       ld_current   = 0
 !
 !     initialize to false the restart
@@ -229,7 +302,7 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !       right and left expansion spaces
 !
         call get_time(t1)
-        if (right) call matvec(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
+        if (right) call matvec_r(n,n_act,space_r(1,i_beg),aspace_r(1,i_beg))
         if (left)  call matvec_l(n,n_act,space_l(1,i_beg),aspace_l(1,i_beg))
         call get_time(t2)
         t_mv = t_mv + t2 -t1
@@ -527,7 +600,6 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !         be more effective than the diagonal one, as in the original 
 !         algorithm.
 !
-          m_dim = m_dim + 1
           i_beg = i_beg + n_act
           n_act = n_max
           n_frozen = 0
@@ -596,7 +668,6 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
 !
           ld_current   = 0
           i_beg = 1
-          m_dim = 1
 !
 !         counting how many matvec we can skip at the next
 !         iteration
@@ -695,6 +766,8 @@ subroutine davidson_nosym_driver(verbose_l,n,n_targ,n_max,max_iter,tol,dav_iter,
     call mfree(evec_temp)
     call mfree(eig_temp)
     call mfree(mask_overlap)
+!
+    call dgl_check_memleak()
 !
 1100 format(t3,'  timings for non-symmetric Davidson (cpu/wall) : ',/, &
             t3,'  matrix-vector multiplications   : ',2f12.4,/, &

@@ -121,8 +121,8 @@ program test_fortran
   ok = .false.
 !
   write(6,*) ' testing non-symmetric Davidson:'
-  call davidson_nosym_driver(.true., n, n_targ, n_max, max_iter, tol, max_dav, shift, &
-                     arx, alx, dx, eig, evec, evec_l, 3, ok)
+  call davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, 3, eig, evec, evec_l, ok,&
+                              dgl_verbose = .true.)
 !
   if (ok) then
     write(6,*) ' non-symmetric Davidson converged.'
