@@ -8,6 +8,10 @@ add_library(diaglib SHARED
         davidson_nosym_driver.f90
         lobpcg_driver.f90
         )
+        
+# Put the library in the lib directory
+set_property(TARGET diaglib
+        PROPERTY LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
 
 # Linking proper BLAS
@@ -49,3 +53,5 @@ message(STATUS "Diaglib compile options are: ${_}")
 
 # Linking proper OpenMP
 target_link_libraries(diaglib PRIVATE OpenMP::OpenMP_Fortran)
+
+install(TARGETS diaglib RUNTIME DESTINATION "${CMAKE_BINARY_DIR}/install_dir")

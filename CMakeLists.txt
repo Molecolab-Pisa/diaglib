@@ -4,6 +4,9 @@ project(diaglib VERSION 1.0
         DESCRIPTION "A collection of iterative, matrix-free eigensolvers"
         LANGUAGES Fortran)
 
+#Include CPack to install the package
+include(CPack)
+
 
 # Put all the .mod files in the build/include directory
 set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -29,12 +32,15 @@ if(NOT BLA_VENDOR)
         if (NOT MKL_FOUND)
                 find_package(BLAS REQUIRED)
         endif()
+elseif(BLA_VENDOR MATCHES "Intel")
+        find_package(MKL REQUIRED)
 else()
         find_package(BLAS REQUIRED)
 endif()
 
 # Find OpenMP
 find_package(OpenMP REQUIRED)
+
 
 # Add appropriate subdirectories
 add_subdirectory(src/fortran)
