@@ -1,0 +1,27 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/DiaglibTargets.cmake")
+include(CMakeFindDependencyMacro)
+include(GNUInstallDirs)
+
+check_required_components(diaglib)
+
+# set(diaglib_VERSION 1.0)
+# set(diaglib_INCLUDE_DIRS
+#     "${PACKAGE_PREFIX_DIR}/${CMAKE_INSTALL_INCLUDEDIR}"
+#  )
+# set(diaglib_LIBRARIES
+#     diaglib::diaglib
+# )
+
+# execute_process(COMMAND date OUTPUT_VARIABLE diaglib_BUILD_TIME)
+
+# # Create imported targets if you have them
+# if(NOT TARGET diaglib::diaglib)
+#     add_library(diaglib::diaglib INTERFACE IMPORTED)
+#     set_target_properties(diaglib::diaglib PROPERTIES
+#         INTERFACE_INCLUDE_DIRECTORIES "${diaglib_INCLUDE_DIRS}"
+#         INTERFACE_LINK_LIBRARIES "${diaglib_DEPENDENCIES}"
+#         INTERFACE_COMPILE_DEFINITIONS "${diaglib_DEFINITIONS}"
+#     )
+# endif()

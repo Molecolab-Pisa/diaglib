@@ -7,12 +7,12 @@ add_library(diaglib SHARED
         davidson_driver.f90
         davidson_nosym_driver.f90
         lobpcg_driver.f90
-        )
+)
         
-# Put the library in the lib directory
-set_property(TARGET diaglib
-        PROPERTY LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
-
+target_include_directories(diaglib PUBLIC 
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 # Linking proper BLAS
 if(MKL_FOUND)
@@ -45,7 +45,6 @@ elseif(${CMAKE_Fortran_COMPILER_ID} MATCHES "Intel")
 
 endif()
 
-
 # Print out flags that will be used for diaglib compilation
 get_target_property(_ diaglib COMPILE_OPTIONS)
 message(STATUS "Diaglib compile options are: ${_}")
@@ -54,4 +53,35 @@ message(STATUS "Diaglib compile options are: ${_}")
 # Linking proper OpenMP
 target_link_libraries(diaglib PRIVATE OpenMP::OpenMP_Fortran)
 
-install(TARGETS diaglib RUNTIME DESTINATION "${CMAKE_BINARY_DIR}/install_dir")
+install(TARGETS diaglib
+    EXPORT diaglibTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES
+        dgl_global_utils.f90
+        dgl_orthogonalizations.f90
+        dgl_minor_utils.f90
+        dgl_external_interfaces.f90
+        dgl_drivers_interfaces.f90
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(EXPORT diaglibTargets
+    FILE DiaglibTargets.cmake
+    NAMESPACE diaglib::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+)
+
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+)

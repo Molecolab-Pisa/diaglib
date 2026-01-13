@@ -6,11 +6,11 @@ project(diaglib VERSION 1.0
 
 #Include CPack to install the package
 include(CPack)
+#Include this to get the standard variables for installation paths
+include(GNUInstallDirs)
+#Include this to automatically make the configuration file
+include(CMakePackageConfigHelpers)
 
-
-# Put all the .mod files in the build/include directory
-set(CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
-file(MAKE_DIRECTORY ${CMAKE_Fortran_MODULE_DIRECTORY})
 
 # If wanted force double precision integers
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
@@ -46,3 +46,13 @@ find_package(OpenMP REQUIRED)
 add_subdirectory(src/fortran)
 add_subdirectory(test/test_fortran)
 
+# uninstall target
+if(NOT TARGET uninstall)
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+    IMMEDIATE @ONLY)
+
+  add_custom_target(uninstall
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+endif()
