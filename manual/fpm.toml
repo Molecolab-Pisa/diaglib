@@ -1,6 +1,6 @@
 [extra.ford]
-project = ""
-summary = "# DiagLib: A collection of matrix-free iterative eigensolvers"
+project = "DiagLib"
+summary = "### A collection of matrix-free iterative eigensolvers"
 author = """
 I. Giannì,
 T. Nottoli,
@@ -11,6 +11,8 @@ F. Pes,
 A. Levitt,
 F. Lipparini
 """
+author_description = "MolecoTheory subgroup of MolecoLab and collaborators"
+email = "filippo.lipparini@unipi.it"
 
 src_dir = "../src"
 output_dir = "../doc"

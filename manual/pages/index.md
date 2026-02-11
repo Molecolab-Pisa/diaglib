@@ -1,6 +1,3 @@
 ---
-title: README
-
+title: User Guide
 ---
-
-\lorem

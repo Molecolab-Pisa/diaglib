@@ -1,7 +1,7 @@
 
 ![DiagLib logo](|media|/Diaglib_logo.png)
 
-**DiagLib is an opensource project hosted at [GitHub](https://github.com/Molecolab-Pisa/diaglib).**
+**[GitHub](https://github.com/Molecolab-Pisa/diaglib).**
 
 @todo 
 # Missing documentation includes:
