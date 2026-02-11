@@ -4,7 +4,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
               dgl_shift,dgl_memory,dgl_memory_unit)
 !! ### Driver for Davidson-Liu non-symmetric diagonalization
 !! Can solve solve only standard eigenvalue problems. Can eveluate both Left and Right eigenvectors.
-!! To pass any optional argument, you need to add `use [[dgl_drivers_interfaces]]`, a module included in this library.
+!! To pass any optional argument, you need to use [[dgl_drivers_interfaces]], a module included in this library.
 !!
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
   use dgl_minor_utils

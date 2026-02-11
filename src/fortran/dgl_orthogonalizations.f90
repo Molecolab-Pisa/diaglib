@@ -1,6 +1,8 @@
 module dgl_orthogonalizations
-use dgl_global_utils
-implicit none
+!* Module for all the orthogonalization procedures.
+! They may be used also as a standalone outside of DiagLib.
+    use dgl_global_utils
+    implicit none
 !
   real(dp), parameter, private    :: tol_ortho = two * epsilon(one)
 !! Convergence thresholds for orthogonalizations

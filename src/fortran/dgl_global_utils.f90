@@ -1,11 +1,14 @@
 module dgl_global_utils
+!* Most general module containing global constants, scratches and timings.
+! Also contains all the allocation and deallocation procedures.
   implicit none
+!
   integer, parameter :: dp = selected_real_kind(15)
 !! Global variable holding kind for double precision
   real(dp), parameter :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
 !! Useful Constant
   integer :: lwork, info
-!! Lapack utility  
+!! Lapack utility
   real(dp), parameter   :: num_thresh = 1.e-13_dp
 !! Numerical threshold for real numbers comparisions with 0
   real(dp), allocatable  :: work(:), tau(:)
@@ -24,13 +27,11 @@ module dgl_global_utils
   real(dp) :: dnrm2
 !! Lapack  
   external dgeqrf, dtrsm, dpotrf, dtrcon, dgemm, dnrm2
-!! Lapack  
 !
 ! intrisic functions:
 ! ===================
 !
   intrinsic :: random_number
-!! Intrinsic function  
 !
 ! allocation and deallocations routines
 !
@@ -412,6 +413,7 @@ module dgl_global_utils
   end subroutine dgl_init
 !
   subroutine dgl_error(string)
+  !! DiagLib error termination
     implicit none
     character(len=*), intent(in) :: string
 

@@ -1,9 +1,11 @@
 module dgl_external_interfaces
+!* Module contaning all the interfaces for the external procedure,
+! like matrix-vector multipltications.
     use dgl_global_utils, only: dp
     implicit none
 
     interface
-    
+    !! Interface to external procedures used in diaglib
         subroutine matvec_(n,m,x,y)
         !! Interface for the external routine performing the Matrix-Vector product
             import

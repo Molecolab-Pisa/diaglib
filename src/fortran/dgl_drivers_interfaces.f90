@@ -1,10 +1,13 @@
 module dgl_drivers_interfaces
+!* Module containing the explicit interfaces to the main drivers in DiagLib.
+! This has to be included if one is interested in using the optional arguments
+! (e.g. generalized problems).
     use dgl_global_utils, only: dp
     use dgl_external_interfaces
     implicit none
 
     interface
-
+    !! Interface for main DiagLib drivers
         subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_max_iter, dgl_tol, dgl_dav_iter, &
               dgl_shift, dgl_memory, dgl_memory_unit, metvec)
@@ -97,9 +100,9 @@ module dgl_drivers_interfaces
               eig,evec_r,evec_l,ok,&
               dgl_verbose,dgl_tol,dgl_max_iter,dgl_dav_iter,&
               dgl_shift,dgl_memory,dgl_memory_unit)
-        !! ### Driver for Davidson-Liu non-symmetric diagonalization
+        !! ### Interface for Davidson-Liu non-symmetric diagonalization
         !! Can solve solve only standard eigenvalue problems. Can eveluate both Left and Right eigenvectors.
-        !! To pass any optional argument, you need to add `use [[dgl_drivers_interfaces]]`, a module included in this library.
+        !! To pass any optional argument, you need to use [[dgl_drivers_interfaces]], a module included in this library.
         !!
         !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
               import

@@ -1,4 +1,5 @@
 module dgl_minor_utils
+!* Module containing few utilities
   use dgl_orthogonalizations
   implicit none
   contains

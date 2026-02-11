@@ -1,13 +1,10 @@
 
+![DiagLib logo](|media|/Diaglib_logo.png)
 
-## A collection of iterative, matrix-free eigensolvers
+**DiagLib is an opensource project hosted at [GitHub](https://github.com/Molecolab-Pisa/diaglib).**
 
-![DiagLib logo](./Diaglib_logo.png)
-
-DiagLib is an opensource project hosted at GitHub.
-
-@todo
-Missing documentation includes:
+@todo 
+# Missing documentation includes:
 
 - Adding examples of generic usage
 - Adding examples of usage for generalized problems

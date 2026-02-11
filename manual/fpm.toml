@@ -1,6 +1,16 @@
 [extra.ford]
-project = "DiagLib"
-author = "I. Giannì, T. Nottoli, R. Alessandro, D. Cianchino, L. Lapi, F. Lipparini"
+project = ""
+summary = "# DiagLib: A collection of matrix-free iterative eigensolvers"
+author = """
+I. Giannì,
+T. Nottoli,
+R. Alessandro,
+D. Cianchino,
+L. Lapi,
+F. Pes,
+A. Levitt,
+F. Lipparini
+"""
 
 src_dir = "../src"
 output_dir = "../doc"
@@ -12,3 +22,5 @@ exclude = "../src/fortran/diaglib.f90"
 
 graph = false
 sort = "type-alpha"
+max_frontpage_items = 4
+#display = "public protected private"
