@@ -105,6 +105,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     real(dp), allocatable :: a_red(:,:), a_copy(:,:), e_red(:)
     real(dp), allocatable :: s_red(:,:), s_copy(:,:), b_evec(:,:)
 !
+integer :: i
 !   ================
 !   START EXECUTION
 !   ================
@@ -251,6 +252,11 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !     perform this iteration's matrix-vector multiplication:
 !
       call get_time(t1)
+      !do i = 0, n_act - 1
+      !  print "(15d12.2)", space(:,i_beg+n_rst+i)
+      !enddo
+      !print *, "pause"
+      !read(*,*)
       call matvec(n,n_act,space(1,i_beg+n_rst),aspace(1,i_beg+n_rst))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
@@ -336,7 +342,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !     check whether an update is required. 
 !     if not, perform a davidson restart.
 !
-      if (ld_current .lt. lda) then
+      if (ld_current + n_act .le. lda) then
 !
 !       compute the preconditioned residuals using davidson's procedure
 !       note that this is done with a user-supplied subroutine, that can
@@ -371,8 +377,10 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
         endif
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
+!        
       else
-        if (verbose) write(6,'(t7,a,/)') 'Restarting davidson.'
+!      
+        if (verbose) write(6,'(t7,a,/)') 'Restarting davidson'
         n_act = n_max
         space = zero
 !
@@ -392,7 +400,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !       initialize indexes back to their starting values 
 !
         ld_current   = 0
-        i_beg = 1 
+        i_beg = 1
         n_rst = 0
 !
 !       counting how many matvec we can skip at the next
@@ -401,6 +409,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
         do i_eig = 1, n_targ
           if (done(i_eig)) then
             n_rst = n_rst + 1
+            n_act = n_act - 1
           else
             exit
           end if
