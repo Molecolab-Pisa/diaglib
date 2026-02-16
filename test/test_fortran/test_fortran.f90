@@ -1,19 +1,18 @@
 program test_fortran
-  use dgl_global_utils, only: dp, zero, one
-  use dgl_drivers_interfaces
+  use dgl_interface
   implicit none
 !
 ! tests the various functionalities of diaglib.
 !
   integer,  parameter :: n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20
   integer,  parameter :: lutest=100
-  real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
+  real(dgl_real), parameter :: tol = 1.0e-10_dgl_real, shift = 0.0_dgl_real
   integer,  parameter :: memory = 100
   character(len=2),parameter :: memory_unit = "MB"
 !
   integer               :: i, j
   logical               :: ok
-  real(dp), allocatable :: eig(:), evec(:,:), evec_l(:,:)
+  real(dgl_real), allocatable :: eig(:), evec(:,:), evec_l(:,:)
   procedure(), pointer :: mx_p => null()
 !
 ! open a text file for the output, to be used to compare the results with a reference.
@@ -36,16 +35,16 @@ program test_fortran
 !
 ! test davidson:
 !
-  eig  = zero
-  evec = zero
+  eig  = dgl_zero
+  evec = dgl_zero
   do i = 1, n_max
-    evec(i,i) = one
+    evec(i,i) = dgl_one
   end do
   ok = .false.
 !
   mx_p => mx
   write(6,*) ' testing Davidson:'
-  call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+  call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
                         dgl_verbose = .false.,&
                         dgl_memory = memory,&
                         dgl_memory_unit = memory_unit)
@@ -62,7 +61,7 @@ program test_fortran
 !
 !     fix the phase
 !
-  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -75,15 +74,15 @@ program test_fortran
 !
 ! test generalized davidson:
 !
-  eig  = zero
-  evec = zero
+  eig  = dgl_zero
+  evec = dgl_zero
   do i = 1, n_max
-    evec(i,i) = one
+    evec(i,i) = dgl_one
   end do
   ok = .false.
 !
   write(6,*) ' testing Generalized Davidson:'
-  call davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
+  call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
                         dgl_verbose = .false.,&
                         dgl_memory = memory,&
                         dgl_memory_unit = memory_unit)
@@ -100,7 +99,7 @@ program test_fortran
 !
 !     fix the phase
 !
-  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -114,14 +113,14 @@ program test_fortran
 ! test non-symmetric davidson:
 !
   allocate (evec_l(n,n_max))
-  evec_l = zero
+  evec_l = dgl_zero
   do i = 1, n_max
-    evec_l(i,i) = one
+    evec_l(i,i) = dgl_one
   end do
   ok = .false.
 !
   write(6,*) ' testing non-symmetric Davidson:'
-  call davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, 3, eig, evec, evec_l, ok,&
+  call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, 3, eig, evec, evec_l, ok,&
                               dgl_verbose = .true.)
 !
   if (ok) then
@@ -136,7 +135,7 @@ program test_fortran
 
     write(lutest,1032) 'Right ', (i, i = 1, n_targ)
 !     fix the phase
-    if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+    if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     do j = 1, n
       write(lutest,1022) j, (evec(j,i), i = 1, n_targ)
     end do
@@ -144,7 +143,7 @@ program test_fortran
 
     write(lutest,1032) 'Left ', (i, i = 1, n_targ)
 !     fix the phase
-    if (evec_l(1,i).lt.zero) evec_l(:,i) = - evec_l(:,i)
+    if (evec_l(1,i).lt.dgl_zero) evec_l(:,i) = - evec_l(:,i)
     do j = 1, n
       write(lutest,1022) j, (evec_l(j,i), i = 1, n_targ)
     end do
@@ -158,17 +157,17 @@ program test_fortran
 !
 ! test lobpcg:
 !
-  eig  = zero
-  evec = zero
+  eig  = dgl_zero
+  evec = dgl_zero
 !
   do i = 1, n_max
-    evec(i,i) = one
+    evec(i,i) = dgl_one
   end do
   ok = .false.
 !
   write(6,*) ' testing LOBPCG:'
 
-  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+  call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
                         dgl_verbose = .false.,&
                         dgl_memory = memory,&
                         dgl_memory_unit = memory_unit)
@@ -185,7 +184,7 @@ program test_fortran
 !
 !     fix the phase
 !
-  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -198,17 +197,17 @@ program test_fortran
 !
 ! test lobpcg:
 !
-  eig  = zero
-  evec = zero
+  eig  = dgl_zero
+  evec = dgl_zero
 !
   do i = 1, n_max
-    evec(i,i) = one
+    evec(i,i) = dgl_one
   end do
   ok = .false.
 !
   write(6,*) ' testing Generalized LOBPCG:'
 
-  call lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
+  call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
                         dgl_verbose = .false.,&
                         dgl_memory = memory,&
                         dgl_memory_unit = memory_unit)
@@ -225,7 +224,7 @@ program test_fortran
 !
 !     fix the phase
 !
-  if (evec(1,i).lt.zero) evec(:,i) = - evec(:,i)
+  if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     end do
     write(lutest,1031) (i, i = 1, n_targ)
     do j = 1, n
@@ -240,11 +239,11 @@ program test_fortran
 !!
 !  deallocate (evec)
 !  allocate (evec(2*n, n_max))
-!  eig  = zero
-!  evec = zero
+!  eig  = dgl_zero
+!  evec = dgl_zero
 !!
 !  do i = 1, n_max
-!    evec(i,i)   = one
+!    evec(i,i)   = dgl_one
 !  end do
 !  ok = .false.
 !!
@@ -277,20 +276,20 @@ program test_fortran
   subroutine ax(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer :: i, j, k
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do i = 1, n
         do j = 1, n
           if (j.eq.i) then
-            y(i,k) = y(i,k) + real(i+1,dp) * x(j,k)
+            y(i,k) = y(i,k) + real(i+1,dgl_real) * x(j,k)
           else
-            y(i,k) = y(i,k) + x(j,k) / real(i+j,dp)
+            y(i,k) = y(i,k) + x(j,k) / real(i+j,dgl_real)
           end if
         end do
       end do
@@ -302,12 +301,12 @@ program test_fortran
   subroutine mx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer :: i, j, k
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do i = 1, n
@@ -315,7 +314,7 @@ program test_fortran
           if (j.eq.i) then
             y(i,k) = y(i,k) + x(j,k)
           else
-            y(i,k) = y(i,k) + x(j,k) / real(i+j,dp)
+            y(i,k) = y(i,k) + x(j,k) / real(i+j,dgl_real)
           end if
         end do
       end do
@@ -327,20 +326,20 @@ program test_fortran
   subroutine dx(n,m,shift,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp),                 intent(in)    :: shift
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real),                 intent(in)    :: shift
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, k
-    real(dp) :: fac
+    real(dgl_real) :: fac
 !
-    real(dp), parameter :: eps = 1.0e-5_dp
+    real(dgl_real), parameter :: eps = 1.0e-5_dgl_real
 !
     do k = 1, m
       do i = 1, n
-        fac = shift + real(i+1,dp)
+        fac = shift + real(i+1,dgl_real)
         if (abs(fac).gt.eps) then
-          y(i,k) = x(i,k) / (shift + real(i+1,dp))
+          y(i,k) = x(i,k) / (shift + real(i+1,dgl_real))
         else
           y(i,k) = x(i,k)
         end if
@@ -351,22 +350,22 @@ program test_fortran
   subroutine arx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, j, k
-    real(dp) :: fac
+    real(dgl_real) :: fac
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do i = 1, n
         do j = 1, n
           if (j.eq.i) then
-            y(i,k) = y(i,k) + real(i+1,dp) * x(j,k)
+            y(i,k) = y(i,k) + real(i+1,dgl_real) * x(j,k)
           else
-            fac = real(i,dp) / real(j,dp)
-            y(i,k) = y(i,k) + fac * x(j,k) / real(i+j,dp)
+            fac = real(i,dgl_real) / real(j,dgl_real)
+            y(i,k) = y(i,k) + fac * x(j,k) / real(i+j,dgl_real)
           end if
         end do
       end do
@@ -378,22 +377,22 @@ program test_fortran
   subroutine alx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, j, k
-    real(dp) :: fac
+    real(dgl_real) :: fac
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do i = 1, n
         do j = 1, n
           if (j.eq.i) then
-            y(i,k) = y(i,k) + real(i+1,dp) * x(j,k)
+            y(i,k) = y(i,k) + real(i+1,dgl_real) * x(j,k)
           else
-            fac = real(j,dp) / real(i,dp)
-            y(i,k) = y(i,k) + fac * x(j,k) / real(i+j,dp)
+            fac = real(j,dgl_real) / real(i,dgl_real)
+            y(i,k) = y(i,k) + fac * x(j,k) / real(i+j,dgl_real)
           end if
         end do
       end do
@@ -405,8 +404,8 @@ program test_fortran
   subroutine sx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
 !   just the identity matrix.
 !
@@ -418,20 +417,20 @@ program test_fortran
   subroutine apbx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, j, k
 !
 !   (a + b)_ij = (5 + i) \delta_ij + (1 - \delta_ij) / (i+j)
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do j = 1, n
         do i = 1, n
           if (i.eq.j) then
-            y(i,k) = y(i,k) + real(5+i,dp) * x(i,k)
+            y(i,k) = y(i,k) + real(5+i,dgl_real) * x(i,k)
           else
             y(i,k) = y(i,k) + x(j,k) / real(i+j)
           end if
@@ -444,22 +443,22 @@ program test_fortran
   subroutine ambx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, j, k
 !
 !   (a + b)_ij = (2 + i) \delta_ij + (0.2 - \delta_ij) / (i+j)
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do j = 1, n
         do i = 1, n
           if (i.eq.j) then
-            y(i,k) = y(i,k) + real(2+i,dp) * x(i,k)
+            y(i,k) = y(i,k) + real(2+i,dgl_real) * x(i,k)
           else
-            y(i,k) = y(i,k) + 0.20_dp * x(j,k) / real(i+j)
+            y(i,k) = y(i,k) + 0.20_dgl_real * x(j,k) / real(i+j)
           end if
         end do
       end do
@@ -470,14 +469,14 @@ program test_fortran
   subroutine spdx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, j, k
 !
 !   \sigma = 1, \delta_ij = +- 0.05 
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do j = 1, n
@@ -485,9 +484,9 @@ program test_fortran
           if (i.eq.j) then
             y(i,k) = y(i,k) + x(i,k)
           else if (i.gt.j) then
-            y(i,k) = y(i,k) + 0.05_dp * x(j,k) 
+            y(i,k) = y(i,k) + 0.05_dgl_real * x(j,k) 
           else
-            y(i,k) = y(i,k) - 0.05_dp * x(j,k) 
+            y(i,k) = y(i,k) - 0.05_dgl_real * x(j,k) 
           end if
         end do
       end do
@@ -498,14 +497,14 @@ program test_fortran
   subroutine smdx(n,m,x,y)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp), dimension(n,m), intent(in)    :: x
-    real(dp), dimension(n,m), intent(inout) :: y
+    real(dgl_real), dimension(n,m), intent(in)    :: x
+    real(dgl_real), dimension(n,m), intent(inout) :: y
 !
     integer  :: i, j, k
 !
 !   (a + b)_ij = (2 + i) \delta_ij + (0.2 - \delta_ij) / (i+j)
 !
-    y = 0.0_dp
+    y = 0.0_dgl_real
 !
     do k = 1, m
       do j = 1, n
@@ -513,9 +512,9 @@ program test_fortran
           if (i.eq.j) then
             y(i,k) = y(i,k) + x(i,k)
           else if (i.gt.j) then
-            y(i,k) = y(i,k) - 0.05_dp * x(j,k) 
+            y(i,k) = y(i,k) - 0.05_dgl_real * x(j,k) 
           else
-            y(i,k) = y(i,k) + 0.05_dp * x(j,k) 
+            y(i,k) = y(i,k) + 0.05_dgl_real * x(j,k) 
           end if
         end do
       end do
@@ -526,19 +525,19 @@ program test_fortran
   subroutine lrprc(n,m,fac,xp,xm,yp,ym)
     implicit none
     integer,                  intent(in)    :: n, m
-    real(dp),                 intent(in)    :: fac
-    real(dp), dimension(n,m), intent(in)    :: xp, xm
-    real(dp), dimension(n,m), intent(inout) :: yp, ym
+    real(dgl_real),                 intent(in)    :: fac
+    real(dgl_real), dimension(n,m), intent(in)    :: xp, xm
+    real(dgl_real), dimension(n,m), intent(inout) :: yp, ym
 !
     integer  :: i, k
-    real(dp) :: val
+    real(dgl_real) :: val
 !
 !   yp = xp
 !   ym = xm
     do k = 1, m
       do i = 1, n
-        val = fac * fac * (real(i+7)**2 - 1.0_dp)
-        val = 1.0_dp / val
+        val = fac * fac * (real(i+7)**2 - 1.0_dgl_real)
+        val = 1.0_dgl_real / val
         yp(i,k) = val * (fac * real(i+7) * xp(i,k) + xm(i,k))
         ym(i,k) = val * (fac * real(i+7) * xm(i,k) + xp(i,k))
       end do

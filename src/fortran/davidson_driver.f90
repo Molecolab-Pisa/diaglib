@@ -1,3 +1,11 @@
+module mod_davidson_driver
+  use dgl_minor_utils
+  use dgl_external_interfaces
+
+implicit none
+
+contains
+
 subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
               dgl_shift, dgl_memory,dgl_memory_unit, metvec)
@@ -7,8 +15,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !! Moreover, you need to use the [[dgl_drivers_interfaces]] module included in this library.
 !!
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
-  use dgl_minor_utils
-  use dgl_external_interfaces
   implicit none
     integer,                      intent(in)    :: n
 !! Size of the matrix to be diagonalized
@@ -447,3 +453,5 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
             t5,'----------------------------------------')
 !
 end subroutine davidson_driver
+
+end module mod_davidson_driver

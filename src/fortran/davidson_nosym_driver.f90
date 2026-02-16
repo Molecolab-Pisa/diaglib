@@ -1,3 +1,11 @@
+module mod_davidson_nosym_driver
+  use dgl_minor_utils
+  use dgl_external_interfaces
+
+implicit none
+
+contains
+
 subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
               eig,evec_r,evec_l,ok,&
               dgl_verbose,dgl_tol,dgl_max_iter,dgl_dav_iter,&
@@ -7,8 +15,6 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !! To pass any optional argument, you need to use [[dgl_drivers_interfaces]], a module included in this library.
 !!
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
-  use dgl_minor_utils
-  use dgl_external_interfaces
   implicit none
     integer,                      intent(in)    :: n
 !! Size of the matrix to be diagonalized
@@ -789,7 +795,10 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
             t7,'# converged vectors: ',i4,/,&
             t5,'----------------------------------------')
 !
-    contains
+
+
+!
+  end subroutine davidson_nosym_driver
 
   subroutine sort_eigenpairs(m,wr,wl,vr,vl,n_want,ldv,ignore,thresh,mask_in)
 !
@@ -890,6 +899,5 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     vl(:,j)   = v
 !
   end subroutine swap_eigenpairs
-!
-  end subroutine davidson_nosym_driver
 
+end module mod_davidson_nosym_driver

@@ -1,3 +1,11 @@
+module mod_lobpcg_driver
+  use dgl_minor_utils
+  use dgl_external_interfaces
+
+implicit none
+
+contains
+
 subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_max_iter, dgl_tol, &
               dgl_shift, dgl_memory,dgl_memory_unit, metvec)
@@ -7,8 +15,6 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !! Moreover, you need to use the [[dgl_drivers_interfaces]] module included in this library.
 !!
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
-  use dgl_minor_utils
-  use dgl_external_interfaces
   implicit none
     integer,                      intent(in)    :: n
 !! Size of the matrix to be diagonalized
@@ -448,7 +454,8 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
                 t3,'                                 ',24('='),/,  &
                 t3,'  total:                         ',2f12.4)
 !    
-  contains
+
+  end subroutine lobpcg_driver
 !
   subroutine get_coeffs(lda,ld_current,n_max,n_act,a_red,u_x,u_p)
     implicit none
@@ -498,5 +505,5 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
   end subroutine get_coeffs
 
-  end subroutine lobpcg_driver
+end module mod_lobpcg_driver
 

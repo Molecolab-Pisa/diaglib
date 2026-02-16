@@ -3,10 +3,10 @@ add_library(diaglib SHARED
         dgl_orthogonalizations.f90
         dgl_minor_utils.f90
         dgl_external_interfaces.f90
-        dgl_drivers_interfaces.f90
         davidson_driver.f90
         davidson_nosym_driver.f90
         lobpcg_driver.f90
+        dgl_interface.f90
 )
         
 target_include_directories(diaglib PUBLIC 
