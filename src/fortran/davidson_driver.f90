@@ -77,11 +77,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
     real (dp)             :: tol_rms, tol_max
 !
-!   variables for the restart
-!
-    integer               :: n_rst
-    logical               :: restart
-!
 !   type of problem (standard or generalized)
 !    
     logical               :: generalized
@@ -105,7 +100,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     real(dp), allocatable :: a_red(:,:), a_copy(:,:), e_red(:)
     real(dp), allocatable :: s_red(:,:), s_copy(:,:), b_evec(:,:)
 !
-integer :: i
 !   ================
 !   START EXECUTION
 !   ================
@@ -139,7 +133,7 @@ integer :: i
     lda = dav_iter*n_max
 !
 !   compute the number of large vectors that will be allocated 
-!   to later exstimate required memory in dgl_init 
+!   to estimate required memory in dgl_init 
 !
     if(generalized) then
       n_arrs = lda*3 + n_max*2
@@ -228,10 +222,6 @@ integer :: i
 !
     ld_current   = 0
 !
-!   initialize to false the restart
-!
-    restart = .false.
-!
 !   main loop:
 !
     1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
@@ -242,7 +232,6 @@ integer :: i
 !
     if (verbose) write(6,1030) tol
 !
-    n_rst   = 0
     do it = 1, max_iter
 !
 !     update the size of the expansion space.
@@ -252,29 +241,17 @@ integer :: i
 !     perform this iteration's matrix-vector multiplication:
 !
       call get_time(t1)
-      !do i = 0, n_act - 1
-      !  print "(15d12.2)", space(:,i_beg+n_rst+i)
-      !enddo
-      !print *, "pause"
-      !read(*,*)
-      call matvec(n,n_act,space(1,i_beg+n_rst),aspace(1,i_beg+n_rst))
+      call matvec(n,n_act,space(1,i_beg),aspace(1,i_beg))
       call get_time(t2)
       t_mv = t_mv + t2 - t1
 !
 !     update the reduced matrix 
 !
-      call dgemm('t','n',ld_current,n_act,n,one,space,n,aspace(1,i_beg+n_rst),n,zero,a_red(1,i_beg+n_rst),lda)
+      call dgemm('t','n',ld_current,n_act,n,one,space,n,aspace(1,i_beg),n,zero,a_red(1,i_beg),lda)
 !
 !     explicitly putting the first block of 
 !     converged eigenvalues in the reduced matrix
 !
-      if (restart) then
-        do i_eig = 1, n_rst
-          a_red(i_eig,i_eig) = e_red(i_eig)
-        end do
-        restart = .false.
-        n_rst   = 0
-      end if
       a_copy = a_red
 !
 !     diagonalize the reduced matrix
@@ -334,62 +311,35 @@ integer :: i
         write(6,*) 
       end if
 !
+!     exit if everything is converged
+!
       if (all(done(1:n_targ))) then
         ok = .true.
         exit
       end if
 !
-!     check whether an update is required. 
+!     check whether an update is required.
 !     if not, perform a davidson restart.
 !
-      if (ld_current + n_act .le. lda) then
+      if (ld_current + n_act .gt. lda) then
 !
-!       compute the preconditioned residuals using davidson's procedure
-!       note that this is done with a user-supplied subroutine, that can
-!       be generalized to experiment with fancy preconditioners that may
-!       be more effective than the diagonal one, as in the original 
-!       algorithm.
-!
-        i_beg = i_beg + n_act
-        n_act = n_max
-        n_frozen = 0
-        do i_eig = 1, n_targ
-          if (done(i_eig)) then
-            n_act = n_act - 1
-            n_frozen = n_frozen + 1
-          else
-            exit
-          end if
-        end do
-        ind   = n_max - n_act + 1
-        call precnd(n,n_act,-eig(ind),residuals(1,ind),space(1,i_beg))
-!
-!       orthogonalize the new vectors to the existing ones and then
-!       orthonormalize them.
-!
-        call get_time(t1)
-        if (generalized) then
-          call b_ortho_vs_x(n,ld_current,n_act,space,bspace,space(1,i_beg))
-          call metvec(n,n_act,space(1,i_beg),bspace(1,i_beg))
-          call b_ortho(n,n_act,space(1,i_beg),bspace(1,i_beg))
-        else
-            call ortho_vs_x(n,ld_current,n_act,space,space(1,i_beg),xx,xx)
-        endif
-        call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
-!        
-      else
-!      
         if (verbose) write(6,'(t7,a,/)') 'Restarting davidson'
-        n_act = n_max
-        space = zero
 !
 !       put current eigenvectors into the first position of the 
 !       expansion space
 !
+        space(:,n_max+1:) = zero
         call dcopy(n_max*n,evec,1,space,1)
-        aspace = zero
+!
+        call dgemm('n','n',n,n_max,ld_current,one,aspace,n,a_copy,lda,zero,evec,n)
+        aspace(:,n_max+1:) = zero
+        call dcopy(n_max*n,evec,1,aspace,1)        
+!
         a_red  = zero
+        do i_eig = 1, n_max
+          a_red(i_eig,i_eig) = e_red(i_eig)
+        enddo
+! 
         if (generalized) then
           call dcopy(n_max*n,b_evec,1,bspace,1)
           call b_ortho(n,n_max,space,bspace)
@@ -399,23 +349,52 @@ integer :: i
 !
 !       initialize indexes back to their starting values 
 !
-        ld_current   = 0
-        i_beg = 1
-        n_rst = 0
+        ld_current = n_max
+        i_beg = n_max + 1
 !
-!       counting how many matvec we can skip at the next
-!       iteration
+      else
+!      
+        i_beg = i_beg + n_act
 !
-        do i_eig = 1, n_targ
-          if (done(i_eig)) then
-            n_rst = n_rst + 1
-            n_act = n_act - 1
-          else
-            exit
-          end if
-        end do
-        restart = .true.
-      end if
+      endif
+!
+!   Update number of searched vectors based on converged
+!   ones: Locking
+!
+      n_act = n_max
+      n_frozen = 0
+      do i_eig = 1, n_targ
+        if (done(i_eig)) then
+          n_act = n_act - 1
+          n_frozen = n_frozen + 1
+        else
+          exit
+        end if
+      end do
+!
+!     compute the preconditioned residuals using davidson's procedure
+!     note that this is done with a user-supplied subroutine, that can
+!     be generalized to experiment with fancy preconditioners that may
+!     be more effective than the diagonal one, as in the original 
+!     algorithm.
+!
+      ind = n_max - n_act + 1
+      call precnd(n,n_act,-eig(ind),residuals(1,ind),space(1,i_beg))
+!
+!     orthogonalize the new vectors to the existing ones and then
+!     orthonormalize them.
+!
+      call get_time(t1)
+      if (generalized) then
+        call b_ortho_vs_x(n,ld_current,n_act,space,bspace,space(1,i_beg))
+        call metvec(n,n_act,space(1,i_beg),bspace(1,i_beg))
+        call b_ortho(n,n_act,space(1,i_beg),bspace(1,i_beg))
+      else
+          call ortho_vs_x(n,ld_current,n_act,space,space(1,i_beg),xx,xx)
+      endif
+      call get_time(t2)
+      t_ortho = t_ortho + t2 - t1
+!
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
 !
     end do
