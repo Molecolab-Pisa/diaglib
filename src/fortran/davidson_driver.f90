@@ -341,10 +341,10 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
         enddo
 ! 
         if (generalized) then
+          bspace(:,n_max+1:) = zero
+          s_red  = zero
           call dcopy(n_max*n,b_evec,1,bspace,1)
           call b_ortho(n,n_max,space,bspace)
-          bspace = zero
-          s_red  = zero
         endif
 !
 !       initialize indexes back to their starting values 
