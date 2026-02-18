@@ -58,7 +58,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !   local variables:
 !   ================
-    logical  :: verbose_l
+    logical  :: verbose
     integer  :: max_iter, dav_iter, memory
     real(dp) :: tol, shift
     character(len=2) :: memory_unit
@@ -138,7 +138,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 ! Parse optional arguments
 !
-    verbose_l = .false. ; if(present(dgl_verbose)) verbose_l = dgl_verbose
+    verbose = .false.   ; if(present(dgl_verbose)) verbose = dgl_verbose
     max_iter = 100      ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
     dav_iter = 25       ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
     tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
@@ -171,13 +171,13 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !     switch it off manually, but leave it as an advanced debug feature.
 !
       right = .true.
-      consecutive = .true. 
-    else if (side .eq. 4) then 
       consecutive = .true.
+    else if (side .eq. 4) then 
       right = .true.
+      consecutive = .true.
     else
-      print *, "choice for side is not correct. can be 1,2,3,4."
-      stop
+      call dgl_error(" Choice for side is not correct. " // achar(10) // &
+      "   Has to be 1(right), 2(left), 3(both simultaneuos) or 4(both consequentially).")
     end if
 !
 !   computing actual size of the expansion space, checking that
@@ -189,7 +189,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !   to later exstimate required memory in dgl_init 
 !
     n_arrs = lda*4 + n_max*2
-    call dgl_init(n,n_arrs,memory,memory_unit,verbose_l)
+    call dgl_init(n,n_arrs,memory,memory_unit,verbose)
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -269,9 +269,9 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
       copy_l      = zero
       r_norm_r    = zero
       r_norm_l    = zero
-      residuals_r         = zero
-      residuals_l         = zero
-      done        = .false.
+      residuals_r = zero
+      residuals_l = zero
+      done = .false.
 !
       call get_time(t_tot1)
 !
@@ -294,7 +294,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !     print header
 !
-      if (verbose_l) write(6,1030) tol, right, left
+      if (verbose) write(6,1030) tol, left, right
 ! 
 !     main loop
 !     
@@ -334,20 +334,22 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       check if diagonalization terminated with info = 0
 !
         if (info.ne.0) then
-          print *, "diagonalization of reduced space failed."
-          stop
+          call dgl_error("diagonalization of reduced space failed.")
         end if
 !
 !       sort lowest eigenpairs in increasing order in range 2*n_max to ensure that all n_max 
 !       sought eigenpairs are in the range 2*n_max
 !
         if (it.gt.1 .and. .not. restart) then
+!
           call sort_eigenpairs(ld_current,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max+n_act,lda,.true.,tol_im)
 !
         else if (it.eq.1 .or. restart) then
+!
           call sort_eigenpairs(ld_current,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
 !
         end if
+!
 !       double check for complex contributions in the n_max sought eigenvalues
 !
         found_im = .false.
@@ -355,7 +357,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
           if (e_red_im(j).gt.tol_im) found_im = .true.
         end do
 !
-        if (found_im.and.verbose_l) then
+        if (found_im.and.verbose) then
           print *
           print *, "complex contribution in sought eigenvalues"
           print *
@@ -366,9 +368,9 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       diagonal. if not, use the indices of the largest elements to construct a permutation
 !       matrix to resort the eigenpairs according to the overlap.
 !  
-        if (it.ne.1 .and. .not. restart) then  
+        if (it.ne.1 .and. .not. restart) then
 !
-!         compute overlap for the right eigenvectors and extract the indice and value of the largest
+!         compute overlap for the right eigenvectors and extract the index and value of the largest
 !         and second largest overlap
 !
           call dgemm('t','n',2*n_max,2*n_max,ld_current,one,copy_r,lda,evec_red_r,lda,zero,overlap,2*n_max)
@@ -406,7 +408,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
             overlap_self_l(j) = overlap(j,j)
             overlap_val_l(j,1) = overlap(max_idx(1),j)
             mask_overlap(max_idx) = .false.
-!           
+!
 !           identify if a swapping is necessary
 !
             if (max_idx(1).ne.j) then
@@ -583,7 +585,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !       print some information
 !
-        if (verbose_l) then
+        if (verbose) then
           do i_eig = 1, n_targ
             write(6,1040) it, i_eig, eig(i_eig) - shift, r_norm_l(:,i_eig), r_norm_r(:,i_eig), done(i_eig)
           end do
@@ -598,7 +600,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       check weather an update is required.
 !       if not, perform a davidson restart
 !
-        if (ld_current .lt. lda) then 
+        if (ld_current + n_act .lt. lda) then 
 !
 !         compute the preconditioned residuals using davidson's procedure
 !         note that this is done with a user-supplied subroutine, that can
@@ -641,7 +643,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !         normalize columns 
 !
         else 
-          if (verbose_l) write(6,'(t7,a)') 'Restarting davidson.'
+          if (verbose) write(6,'(t7,a)') 'Restarting Davidson'
           n_act   = n_max
           space_r = zero
           space_l = zero
@@ -656,9 +658,9 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
           call get_time(t1)
           if (right .and. left) then
             call svd_biortho(n,n_act,space_r,space_l)
-          else if (right) then 
+          else if (right) then
             call ortho_cd(n,n_act,space_r,yy,ok) 
-          else if (left) then 
+          else if (left) then
             call ortho_cd(n,n_act,space_l,yy,ok) 
           end if
           call get_time(t2)
@@ -687,7 +689,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
           end do
           restart = .true.
         end if
-        if (verbose_l) write(6,1050) n_targ, n_act, n_frozen
+        if (verbose) write(6,1050) n_targ, n_act, n_frozen
       end do
 ! 
 !     end of davidson, print results
@@ -697,7 +699,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !     if required, print timings
 !
-      if (verbose_l) then
+      if (verbose) then
         print * 
         write(6,1100) t_mv, t_diag, t_ortho, t_tot
         print * 
@@ -782,9 +784,9 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
             t3,'                                   ',24('='),/,  &
             t3,'  total                           : ',2f12.4)
 !
-1030 format(t5,'Non-symmetric Davidson iterations (tol=',d10.2,', right =',l2,', left =',l2,'):',/, &
+1030 format(t5,'Non-symmetric Davidson iterations (tol=',d10.2,', left =',l2,', right =',l2,'):',/, &
             t5,'------------------------------------------------------------------------------------------------',/, &
-            t7,'  iter  root              eigenvalue','         rms(right)              rms(left)     max ok',/, &
+            t7,'  iter  root              eigenvalue','         rms(left)              rms(right)     max ok',/, &
             t5,'------------------------------------------------------------------------------------------------')
 !
 1040 format(t9,i4,2x,i4,f24.12,2d12.4,2d12.4,l3)
