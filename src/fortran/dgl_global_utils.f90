@@ -398,7 +398,7 @@ module dgl_global_utils
     if (verbose) write(*,"(t3,a,f10.3,a3,/)") "DiagLib esitmated memory usage is", memory_preview, memory_preview_unit
 !
     call bytes_to_nums(mem,mem_unit,numbers)
-    if (numbers .lt. numbers_preview) write(*,"(t3,a)") "-- DiagLib Warning: provided memory is probably not sufficient"
+    if (numbers .lt. numbers_preview) call dgl_warning("-- DiagLib Warning: provided memory is probably not sufficient")
     maxcor = numbers
     maxmem = maxcor
     peakmem = maxcor
@@ -417,8 +417,16 @@ module dgl_global_utils
     implicit none
     character(len=*), intent(in) :: string
 
-    write(*,"(t3,a)") string
-    stop "DiagLib isseued stop signal"
+    write(*,"(t3,a)") "-- DiagLib Error: " // string
+    stop "** DiagLib isseued stop signal **"
+  end subroutine
+!
+  subroutine dgl_warning(string)
+  !! DiagLib error termination
+    implicit none
+    character(len=*), intent(in) :: string
+
+    write(*,"(t3,a)") "-- DiagLib Warning: " // string
   end subroutine
 !
   integer function get_mem_lapack(n,n_max)

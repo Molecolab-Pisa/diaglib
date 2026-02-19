@@ -51,7 +51,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   local variables:
 !   ================
-    logical  :: verbose_l
+    logical  :: bool
     integer  :: max_iter, dav_iter, memory
     real(dp) :: tol, shift
     character(len=2) :: memory_unit
@@ -104,7 +104,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !   START EXECUTION
 !   ================
 !
-!  Stupidity check
+!   Stupidity checks
 !
     if(n_targ.gt.n_max) call dgl_error(&
     "Number of eigenvalues request is larger that size of arrays passed")
@@ -114,23 +114,28 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     generalized = present(metvec)
     if (generalized) then
       if (.not.associated(metvec)) then
-        stop "DiagLib: Non associated pointer to metric-vector product routine"
+        call dgl_error("DiagLib: Non associated pointer to metric-vector product routine")
       endif
     endif
 !
-! Parse optional arguments
+!   Parse optional arguments
 !
-    verbose_l = .false. ; if(present(dgl_verbose)) verbose_l = dgl_verbose
-    max_iter = 100      ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    dav_iter = 25       ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
-    tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
-    shift = 0.e0_dp     ; if(present(dgl_shift)) shift = dgl_shift
-    memory = 80         ; if(present(dgl_memory)) memory = dgl_memory
-    memory_unit = "MB"  ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+    bool = .false.     ; if(present(dgl_verbose)) bool = dgl_verbose
+    max_iter = 100     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
+    tol = 1.e-7_dp     ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp    ; if(present(dgl_shift)) shift = dgl_shift
+    memory = 80        ; if(present(dgl_memory)) memory = dgl_memory
+    memory_unit = "MB" ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
 !   compute the actual size of the expansion space
 !
     lda = dav_iter*n_max
+    if (lda .ge. n) then
+      if (bool) call dgl_warning("Expansion space is larger than the dimension of the problem. " //&
+                       "Reducing size to avoid Rouché-Capelli failure" )
+      lda = n - 1
+    endif
 !
 !   compute the number of large vectors that will be allocated 
 !   to estimate required memory in dgl_init 
@@ -140,7 +145,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     else
       n_arrs = lda*2 + n_max
     endif
-    call dgl_init(n,n_arrs,memory,memory_unit,verbose_l)
+    call dgl_init(n,n_arrs,memory,memory_unit,bool)
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -321,7 +326,11 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !     check whether an update is required.
 !     if not, perform a davidson restart.
 !
-      if (ld_current + n_act .gt. lda) then
+      if (ld_current + n_act .le. lda) then
+!      
+        i_beg = i_beg + n_act
+!
+      else
 !
         if (verbose) write(6,'(t7,a,/)') 'Restarting davidson'
 !
@@ -351,10 +360,6 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
         ld_current = n_max
         i_beg = n_max + 1
-!
-      else
-!      
-        i_beg = i_beg + n_act
 !
       endif
 !
