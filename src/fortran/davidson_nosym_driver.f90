@@ -58,7 +58,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !   local variables:
 !   ================
-    logical  :: verbose
+    logical  :: bool
     integer  :: max_iter, dav_iter, memory
     real(dp) :: tol, shift
     character(len=2) :: memory_unit
@@ -119,7 +119,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !   variables for the sorting eigenpairs, since lapack does not.
 !
     integer               :: max_idx(1)
-    logical               :: found_im, found_er, double_r, double_l, ortho_ok
+    logical               :: found_im, found_er, double_r, double_l
     logical, allocatable  :: mask_overlap(:)
 !
     real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), overlap_diff(:)
@@ -138,13 +138,13 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 ! Parse optional arguments
 !
-    verbose = .false.   ; if(present(dgl_verbose)) verbose = dgl_verbose
-    max_iter = 100      ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    dav_iter = 25       ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
-    tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
-    shift = 0.e0_dp     ; if(present(dgl_shift)) shift = dgl_shift
-    memory = 80         ; if(present(dgl_memory)) memory = dgl_memory
-    memory_unit = "MB"  ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+    bool = .false.     ; if(present(dgl_verbose)) bool = dgl_verbose
+    max_iter = 100     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
+    tol = 1.e-7_dp     ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp    ; if(present(dgl_shift)) shift = dgl_shift
+    memory = 80        ; if(present(dgl_memory)) memory = dgl_memory
+    memory_unit = "MB" ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
 !   set some quantities
 !
@@ -176,7 +176,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
       right = .true.
       consecutive = .true.
     else
-      call dgl_error(" Choice for side is not correct. " // achar(10) // &
+      call dgl_error("Choice for side is not correct. " // achar(10) // &
       "   Has to be 1(right), 2(left), 3(both simultaneuos) or 4(both consequentially).")
     end if
 !
@@ -184,12 +184,17 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !   the input makes sense.
 !
     lda = dav_iter*n_max
+    if (lda .ge. n) then
+      if (bool) call dgl_warning("Expansion space is larger than the dimension of the problem. " //&
+                       "Reducing size to avoid Rouché-Capelli failure" )
+      lda = n - 1
+    endif
 !
 !   compute the number of large vectors that will be allocated 
 !   to later exstimate required memory in dgl_init 
 !
     n_arrs = lda*4 + n_max*2
-    call dgl_init(n,n_arrs,memory,memory_unit,verbose)
+    call dgl_init(n,n_arrs,memory,memory_unit,bool)
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -340,14 +345,10 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       sort lowest eigenpairs in increasing order in range 2*n_max to ensure that all n_max 
 !       sought eigenpairs are in the range 2*n_max
 !
-        if (it.gt.1 .and. .not. restart) then
-!
-          call sort_eigenpairs(ld_current,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max+n_act,lda,.true.,tol_im)
-!
-        else if (it.eq.1 .or. restart) then
-!
+        if (it.eq.1) then
           call sort_eigenpairs(ld_current,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max,lda,.true.,tol_im)
-!
+        else
+          call sort_eigenpairs(ld_current,e_red_re,e_red_im,evec_red_r,evec_red_l,n_max+n_act,lda,.true.,tol_im)
         end if
 !
 !       double check for complex contributions in the n_max sought eigenvalues
@@ -359,7 +360,9 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
         if (found_im.and.verbose) then
           print *
-          print *, "complex contribution in sought eigenvalues"
+          call dgl_warning("==========================================")
+          call dgl_warning("Complex contribution in sought eigenvalues")
+          call dgl_warning("==========================================")
           print *
         end if
 !
@@ -368,7 +371,8 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       diagonal. if not, use the indices of the largest elements to construct a permutation
 !       matrix to resort the eigenpairs according to the overlap.
 !  
-        if (it.ne.1 .and. .not. restart) then
+        !if (it.ne.1 .and. .not. restart) then
+        if (it.ne.1) then
 !
 !         compute overlap for the right eigenvectors and extract the index and value of the largest
 !         and second largest overlap
@@ -600,53 +604,14 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       check weather an update is required.
 !       if not, perform a davidson restart
 !
-        if (ld_current + n_act .lt. lda) then 
-!
-!         compute the preconditioned residuals using davidson's procedure
-!         note that this is done with a user-supplied subroutine, that can
-!         be generalized to experiment with fancy preconditioners that may
-!         be more effective than the diagonal one, as in the original 
-!         algorithm.
+        if (ld_current + n_act .le. lda) then
 !
           i_beg = i_beg + n_act
-          n_act = n_max
-          n_frozen = 0
-          do i_eig = 1, n_targ
-            if (done(i_eig)) then
-              n_act = n_act - 1
-              n_frozen = n_frozen + 1
-            else
-              exit
-            end if
-          end do
-          ind   = n_max - n_act + 1
-          if (right) call precnd(n,n_act,-eig(ind),residuals_r(1,ind),space_r(1,i_beg))
-          if (left)  call precnd(n,n_act,-eig(ind),residuals_l(1,ind),space_l(1,i_beg))
-!
-!         orthogonalize the new vectors to the existing ones of the respective other
-!         space and orthogonalize set of new vectors among each other
-!
-!         Gram-Schmit orthogonalization of residual to the respective subspace 
-!
-          call get_time(t1)
-          if (right .and. left) then
-            call biortho_vs_x(n,ld_current,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
-          else if (right) then
-            call ortho_vs_x(n,ld_current,n_act,space_r,space_r(1,i_beg),xx,xx)
-          else if (left) then
-            call ortho_vs_x(n,ld_current,n_act,space_l,space_l(1,i_beg),xx,xx)
-          end if
-          call get_time(t2)
-!
-          t_ortho = t_ortho + t2 - t1
-!
-!         normalize columns 
-!
+!        
         else 
+!
           if (verbose) write(6,'(t7,a)') 'Restarting Davidson'
           n_act   = n_max
-          space_r = zero
-          space_l = zero
 !
 !         put current eigenvectors into the first position of tne
 !         expansion space
@@ -654,42 +619,68 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
           if (right) call dcopy(n_max*n,evec_r,1,space_r,1)
           if (left)  call dcopy(n_max*n,evec_l,1,space_l,1)
 !
-          ortho_ok = .false.
-          call get_time(t1)
-          if (right .and. left) then
-            call svd_biortho(n,n_act,space_r,space_l)
-          else if (right) then
-            call ortho_cd(n,n_act,space_r,yy,ok) 
-          else if (left) then
-            call ortho_cd(n,n_act,space_l,yy,ok) 
-          end if
-          call get_time(t2)
-          t_ortho = t_ortho + t2 - t1
+          if (right) call dgemm('n','n',n,n_max,ld_current,one,aspace_r,n,evec_red_r,lda,zero,evec_r,n)
+          if (left)  call dgemm('n','n',n,n_max,ld_current,one,aspace_l,n,evec_red_l,lda,zero,evec_l,n)
 !
-          aspace_r  = zero
-          aspace_l  = zero
-          a_red     = zero
-          e_red_re  = zero
-          e_red_im  = zero
+          if (right) call dcopy(n_max*n,evec_r,1,aspace_r,1)
+          if (left)  call dcopy(n_max*n,evec_l,1,aspace_l,1)
+!
+          if (right) call ortho(n,n_max,space_r,aspace_r)
+          if (left) call ortho(n,n_max,space_l,aspace_l)
+!
+          !a_red = zero
+          !do i_eig = 1, n_max
+          !  a_red = e_red_re(i_eig)
+          !enddo
 !
 !         initialize indexes back to their starting values
 !
-          ld_current   = 0
-          i_beg = 1
+          ld_current = n_max
+          i_beg = n_max + 1
 !
-!         counting how many matvec we can skip at the next
-!         iteration
-!
-          do i_eig = 1, n_targ
-            if (done(i_eig)) then
-              n_frozen = n_frozen +1
-            else
-              exit
-            end if
-          end do
           restart = .true.
+!
         end if
+!
+!       compute the preconditioned residuals using davidson's procedure
+!       note that this is done with a user-supplied subroutine, that can
+!       be generalized to experiment with fancy preconditioners that may
+!       be more effective than the diagonal one, as in the original 
+!       algorithm.
+!
+        n_act = n_max
+        n_frozen = 0
+        do i_eig = 1, n_targ
+          if (done(i_eig)) then
+            n_act = n_act - 1
+            n_frozen = n_frozen + 1
+          else
+            exit
+          end if
+        end do
+        ind   = n_max - n_act + 1
+        if (right) call precnd(n,n_act,-eig(ind),residuals_r(1,ind),space_r(1,i_beg))
+        if (left)  call precnd(n,n_act,-eig(ind),residuals_l(1,ind),space_l(1,i_beg))
+!
+!       orthogonalize the new vectors to the existing ones of the respective other
+!       space and orthogonalize set of new vectors among each other
+!
+!       Gram-Schmit orthogonalization of residual to the respective subspace 
+!
+        call get_time(t1)
+        if (right .and. left) then
+          call biortho_vs_x(n,ld_current,n_act,space_l,space_r,space_l(1,i_beg),space_r(1,i_beg))
+        else if (right) then
+          call ortho_vs_x(n,ld_current,n_act,space_r,space_r(1,i_beg),xx,xx)
+        else if (left) then
+          call ortho_vs_x(n,ld_current,n_act,space_l,space_l(1,i_beg),xx,xx)
+        end if
+        call get_time(t2)
+!
+        t_ortho = t_ortho + t2 - t1
+!
         if (verbose) write(6,1050) n_targ, n_act, n_frozen
+!
       end do
 ! 
 !     end of davidson, print results
@@ -717,9 +708,11 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !         check if energies are same
 !
           if (maxval(eig_r(:n_targ) - eig(:n_targ)) .gt. tol) then
-            print *, "Debug: eigenvalues in the consecutive computation of", &
-                     "right and left eigenpairs do not match. Stopping" 
-            stop
+            print "(*(d10.2))", eig_r(:n_targ)
+            print "(*(d10.2))", eig(:n_targ)
+            print "(*(d10.2))", eig_r(:n_targ) - eig(:n_targ)
+            call dgl_error("Eigenvalues in the consecutive computation of " //&
+                     "right and left eigenpairs do not match." )
           end if
 !
         else

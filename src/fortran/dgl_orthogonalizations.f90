@@ -23,14 +23,14 @@ module dgl_orthogonalizations
 !! performing the matrix vector multiplication.
     implicit none
 !
-    integer,                     intent(in)    :: n
+    integer, intent(in)    :: n
 !! Lenght of the input vectors    
-    integer,                     intent(in)    :: m
+    integer, intent(in)    :: m
 !! Number of input vectors    
-    real(dp),  dimension(n,m),   intent(inout) :: u
+    real(dp), dimension(n,m), intent(inout) :: u
 !! Vectors to orthogonalize    
-    real(dp),  dimension(n,m),   intent(inout) :: w
-!! ????    
+    real(dp), dimension(n,m), optional, intent(inout) :: w
+!! Second set of vectors to which we may apply the same transformation
 !
 !   local scratch
 !   =============
@@ -42,6 +42,8 @@ module dgl_orthogonalizations
     call dgeqrf(n,m,u,n,tau,work,lwork,info)
 !
     call dtrsm('r','u','n','n',n,m,one,u,n,v,n)
+!
+    if (present(w)) call dtrsm('r','u','n','n',n,m,one,u,n,w,n)
 !
     u = v
 !
@@ -626,7 +628,7 @@ module dgl_orthogonalizations
 !   start with an initial orthogonalization to improve conditioning.
 !
     if (.not. useqr) call ortho_cd(n,k,u,growth,ok)
-    if (.not. ok .or. useqr) call ortho(n,k,u,xx)
+    if (.not. ok .or. useqr) call ortho(n,k,u)
 !
 !   iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -641,7 +643,7 @@ module dgl_orthogonalizations
 !     now, orthonormalize u.
 !
       if (.not. useqr) call ortho_cd(n,k,u,growth,ok)
-      if (.not. ok .or. useqr) call ortho(n,k,u,xx)
+      if (.not. ok .or. useqr) call ortho(n,k,u)
 !
 !     compute the overlap between the orthonormalized u and x and decide
 !     whether the orthogonalization procedure converged.
