@@ -126,6 +126,10 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     real(dp),allocatable  :: perm_temp(:,:)
     !integer               :: overlap_idx(n_max,2)
 !
+!   Scratch vector to avoid
+!
+    real(dp), allocatable :: scratch(:,:)
+!
 !   ================
 !   START EXECUTION
 !   ================
@@ -177,7 +181,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !   compute the number of large vectors that will be allocated 
 !   to later exstimate required memory in dgl_init 
 !
-    n_arrs = lda*4 + n_max*2
+    n_arrs = lda*2 + n_max
     call dgl_init(n,n_arrs,memory,memory_unit,bool)
 !
 !   start by allocating memory for the various lapack routines
@@ -219,6 +223,8 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     call mallocate(lda,n_max,evec_temp)
     call mallocate(lda,eig_temp)
     call mallocate(2*n_max,mask_overlap)
+!
+    call mallocate(n_max,lda,scratch)
 !
 !   set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -291,10 +297,16 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
         select case (current_side)
         case ("R")
           call dgemm('t','n',ld_current,n_act,n,one,space,n,aspace(:,i_beg),n,zero,a_red(1,i_beg),lda)
-          if (it.gt.1) call dgemm('t','n',n_act,i_beg-1,n,one,space(:,i_beg),n,aspace,n,zero,a_red(i_beg:,1:),lda-i_beg+1)
+          if (it.gt.1) then
+            call dgemm('t','n',n_act,i_beg-1,n,one,space(:,i_beg),n,aspace,n,zero,scratch,n_max)
+            a_red(i_beg:ld_current,1:i_beg-1) = scratch(:n_act,:i_beg-1)
+          endif
         case ("L")
           call dgemm('t','n',ld_current,n_act,n,one,aspace,n,space(:,i_beg),n,zero,a_red(1,i_beg),lda)
-          if (it.gt.1) call dgemm('t','n',n_act,i_beg-1,n,one,aspace(:,i_beg),n,space,n,zero,a_red(i_beg:,1:),lda-i_beg+1)
+          if (it.gt.1) then
+            call dgemm('t','n',n_act,i_beg-1,n,one,aspace(:,i_beg),n,space,n,zero,scratch,n_max)
+            a_red(i_beg:ld_current,1:i_beg-1) = scratch(:n_act,:i_beg-1)
+          endif
         end select
 !
         a_copy = a_red
@@ -722,6 +734,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     call mfree(evec_temp)
     call mfree(eig_temp)
     call mfree(mask_overlap)
+    call mfree(scratch)
 !
     call dgl_check_memleak()
 !
