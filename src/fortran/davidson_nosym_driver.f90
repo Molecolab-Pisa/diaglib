@@ -107,7 +107,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
 !
-    real(dp), allocatable :: a_red(:,:), e_red_re(:), e_red_im(:)
+    real(dp), allocatable :: a_red(:,:), a_copy(:,:), e_red_re(:), e_red_im(:)
     real(dp), allocatable :: evec_red_r(:,:), evec_red_l(:,:)
     real(dp), allocatable :: copy_r(:,:), copy_l(:,:), copy_eig(:)
 !
@@ -222,6 +222,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !   imaginary parts, and its left & right eigenvectors 
 !
     call mallocate(lda,lda,a_red)
+    call mallocate(lda,lda,a_copy)
     call mallocate(2*lda,e_red_re)
     call mallocate(2*lda,e_red_im)
     call mallocate(lda,lda,evec_red_l)
@@ -268,6 +269,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
       aspace_r    = zero
       aspace_l    = zero
       a_red       = zero
+      a_copy      = zero
       e_red_re    = zero
       e_red_im    = zero
       copy_r      = zero
@@ -320,18 +322,20 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !       get the reduced matrix
 !
-        if (left .and. right) then 
-          call dgemm('t','n',ld_current,ld_current,n,one,space_l,n,aspace_r,n,zero,a_red,lda)
-        else if (right) then
-          call dgemm('t','n',ld_current,ld_current,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
+        if (right) then
+          call dgemm('t','n',ld_current,n_act,n,one,space_r,n,aspace_r(:,i_beg),n,zero,a_red(1,i_beg),lda)
+          if (it.gt.1) call dgemm('t','n',n_act,i_beg-1,n,one,space_r(:,i_beg),n,aspace_r,n,zero,a_red(i_beg:,1:),lda-i_beg+1)
         else if (left) then
-          call dgemm('t','n',ld_current,ld_current,n,one,aspace_l,n,space_l,n,zero,a_red,lda)
-        end if
+          call dgemm('t','n',ld_current,n_act,n,one,aspace_l,n,space_l(:,i_beg),n,zero,a_red(1,i_beg),lda)
+          if (it.gt.1) call dgemm('t','n',n_act,i_beg-1,n,one,aspace_l(:,i_beg),n,space_l,n,zero,a_red(i_beg:,1:),lda-i_beg+1)
+        endif
+!
+        a_copy = a_red
 !
 !       diagonalize the reduced matrix
 !
         call get_time(t1)
-        call dgeev('v','v',ld_current,a_red,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
+        call dgeev('v','v',ld_current,a_copy,lda,e_red_re,e_red_im,evec_red_l,lda,evec_red_r,lda,work,lwork,info)
         call get_time(t2)
 !
         t_diag = t_diag + t2 - t1
@@ -628,10 +632,9 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
           if (right) call ortho(n,n_max,space_r,aspace_r)
           if (left) call ortho(n,n_max,space_l,aspace_l)
 !
-          !a_red = zero
-          !do i_eig = 1, n_max
-          !  a_red = e_red_re(i_eig)
-          !enddo
+          a_red = zero
+          if (right) call dgemm('t','n',n_max,n_max,n,one,space_r,n,aspace_r,n,zero,a_red,lda)
+          if (left)  call dgemm('t','n',n_max,n_max,n,one,aspace_l,n,space_l,n,zero,a_red,lda)
 !
 !         initialize indexes back to their starting values
 !
@@ -753,6 +756,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     call mfree(r_norm_r)
     call mfree(done)
     call mfree(a_red)
+    call mfree(a_copy)
     call mfree(e_red_re)
     call mfree(e_red_im)
     call mfree(evec_red_l)
