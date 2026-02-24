@@ -12,9 +12,9 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !! ### Driver for Davidson-Liu symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
-!! Moreover, you need to use the [[dgl_drivers_interfaces]] module included in this library.
-!!
-!! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+!! @note
+!! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+!! @endnote
   implicit none
     integer,                      intent(in)    :: n
 !! Size of the matrix to be diagonalized
@@ -41,7 +41,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     integer,  optional,            intent(in)    :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
     character(len=2),  optional,   intent(in)    :: dgl_memory_unit
-!! Unit of memory. Default = MBs
+!! Unit of memory. Default = MB
     real(dp), optional,            intent(in)    :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
     real(dp), optional,            intent(in)    :: dgl_shift

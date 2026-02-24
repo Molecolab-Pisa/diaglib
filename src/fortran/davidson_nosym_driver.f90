@@ -10,11 +10,18 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
               eig, evec_1, ok, evec_2, &
               dgl_verbose,dgl_tol,dgl_max_iter,dgl_dav_iter,&
               dgl_shift,dgl_memory,dgl_memory_unit)
-!! ### Driver for Davidson-Liu non-symmetric diagonalization
-!! Can solve solve only standard eigenvalue problems. Can eveluate both Left and Right eigenvectors.
-!! To pass any optional argument, you need to use [[dgl_drivers_interfaces]], a module included in this library.
+!! # Driver for Davidson-Liu non-symmetric diagonalization
+!! Non-symmetric davidson diagonalization is commonly encountered in EOM-CC theory.
+!! This driver can eveluate both Left and Right eigenvectors.
+!! Only standard eigenvalue problems.
+!! @note
+!! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+!! @endnote
 !!
-!! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+!! @todo
+!! Currently there is a non tested procedure that checks for the possible exchange of eigenvectors
+!! throught the iterations. It has to be tested and probably cleaned a little bit.
+!! @endtodo
   implicit none
     integer,                                intent(in)    :: n
 !! Size of the matrix to be diagonalized
@@ -24,7 +31,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !! Maximum size of the search space. Should be >= n_targ
     character(len=2),                       intent(in)    :: side
 !! String to decide which eigenvectors to compute and whether to compute
-!! both. Possible values are R, L, LR
+!! both. Possible values are "R ", "L " or "LR"
     real(dp), dimension(n_max),             intent(inout) :: eig
 !! Computed eigenvalues
     real(dp), dimension(n,n_max),           intent(inout) :: evec_1
@@ -52,7 +59,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     integer,  optional,                      intent(in)    :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
     character(len=2),  optional,             intent(in)    :: dgl_memory_unit
-!! Unit of memory. Default = MBs
+!! Unit of memory. Default = MB
     real(dp), optional,                      intent(in)    :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
     real(dp), optional,                      intent(in)    :: dgl_shift
@@ -107,7 +114,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
     real(dp), allocatable :: a_red(:,:), a_copy(:,:), e_red_re(:), e_red_im(:)
     real(dp), allocatable :: evec_red(:,:)
-    real(dp), allocatable :: copy_evec(:,:), copy_eig(:)
+    real(dp), allocatable :: copy_evec(:,:)
 !
 !   variables for left, right, or both eigenvectors
 !
@@ -117,14 +124,14 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 ! 
 !   variables for the sorting eigenpairs, since lapack does not.
 !
-    !integer               :: max_idx(1)
-    logical               :: found_im!, found_er, double_r, double_l
+    integer               :: max_idx(1)
+    logical               :: found_im, found_er, double
     logical, allocatable  :: mask_overlap(:)
 !
     real(dp),allocatable  :: overlap(:,:), perm_mat(:,:), evec_temp(:,:), eig_temp(:), overlap_diff(:)
-    !real(dp)              :: overlap_val(n_max,2), overlap_self(n_max)
+    real(dp)              :: overlap_val(n_max,2), overlap_self(n_max)
     real(dp),allocatable  :: perm_temp(:,:)
-    !integer               :: overlap_idx(n_max,2)
+    integer               :: overlap_idx(n_max,2), k
 !
 !   Scratch vector to avoid
 !
@@ -142,7 +149,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     "Number of eigenvalues requested is larger that size of arrays passed")
 !
 !   Parse optional arguments
-!
+!! zio pera
     bool = .false.     ; if(present(dgl_verbose)) bool = dgl_verbose
     max_iter = 100     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
     dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
@@ -151,21 +158,29 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     memory = 80        ; if(present(dgl_memory)) memory = dgl_memory
     memory_unit = "MB" ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
-    davidson_runs = 1 ; if (present(evec_2)) davidson_runs = 2
-!
 !   Check option for problem to solve
 !
     select case (side)
     case ("R ")
       current_side = "R"
+      davidson_runs = 1
+      if (present(evec_2)) then
+        call dgl_warning("Present non required second array of vectors")
+      endif
     case ("L ")
       current_side = "L"
+      davidson_runs = 1
+      if (present(evec_2)) then
+        call dgl_warning("Present non required second array of vectors")
+      endif
     case ("LR")
       current_side = "R"
-      if (.not.present(evec_2)) call dgl_error("Missing required "//&
-      "array for storing left eigenvectors")
+      davidson_runs = 2
+      if (.not.present(evec_2)) then
+        call dgl_error("Missing required array for storing left eigenvectors")
+      endif
     case default
-      call dgl_error("Invalid value for side, options are: 'L', 'R' or 'LR'")
+      call dgl_error("Invalid value for side, options are: 'L ', 'R ' or 'LR'")
     end select
 !
 !   computing actual size of the expansion space, checking that
@@ -211,7 +226,6 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     call mallocate(2*lda,e_red_im)
     call mallocate(lda,lda,evec_red)
     call mallocate(lda,lda,copy_evec)
-    call mallocate(2*lda,copy_eig)
 !
 !   allocate space for orthogonalization routines
 !   and mask array for sorting routine
@@ -355,171 +369,113 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !       diagonal. if not, use the indices of the largest elements to construct a permutation
 !       matrix to resort the eigenpairs according to the overlap.
 !  
-!        !if (it.ne.1 .and. .not. restart) then
-!        if (it.ne.1) then
-!!
-!!         compute overlap for the right eigenvectors and extract the index and value of the largest
-!!         and second largest overlap
-!!
-!          call dgemm('t','n',2*n_max,2*n_max,ld_current,one,copy_r,lda,evec_red_r,lda,zero,overlap,2*n_max)
-!!
-!          found_er = .false.
-!          do j = 1, n_max
-!            mask_overlap = .true.
-!            max_idx = maxloc(abs(overlap(:,j)))
-!            overlap_idx_r(j,1)  = real(max_idx(1), kind=dp)
-!            overlap_self_r(j) = overlap(j,j)
-!            overlap_val_r(j,1) = overlap(max_idx(1),j)
-!            mask_overlap(max_idx) = .false.
-!!           
-!!           identify if a swapping is necessary
-!!
-!            if (max_idx(1).ne.j) then
-!                found_er = .true.
-!            end if
-!!
-!!           extract index and value of second larges overlap
-!!
-!            max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
-!            overlap_idx_r(j,2)  = real(max_idx(1), kind=dp)
-!            overlap_val_r(j,2) = overlap(max_idx(1),j)
-!          end do
-!!
-!!         compute overlap for the left eigenvectors
-!!
-!          call dgemm('t','n',2*n_max,2*n_max,ld_current,one,copy_l,lda,evec_red_l,lda,zero,overlap,2*n_max)
-!!
-!          do j = 1, n_max
-!            mask_overlap = .true.
-!            max_idx = maxloc(abs(overlap(:,j)))
-!            overlap_idx_l(j,1)  = real(max_idx(1), kind=dp)
-!            overlap_self_l(j) = overlap(j,j)
-!            overlap_val_l(j,1) = overlap(max_idx(1),j)
-!            mask_overlap(max_idx) = .false.
-!!
-!!           identify if a swapping is necessary
-!!
-!            if (max_idx(1).ne.j) then
-!              found_er = .true.
-!            end if
-!!
-!!           extract index and value of second largest overlap
-!!
-!            max_idx = maxloc(abs(overlap(:,j)), mask =mask_overlap)
-!            overlap_idx_l(j,2)  = real(max_idx(1), kind=dp)
-!            overlap_val_l(j,2) = overlap(max_idx(1),j)
-!          end do
-!!
-!!         check if no indices were assigned twice as maximum overlap
-!!
-!          double_r = .false.
-!          double_l = .false.
-!          do j=1, n_max
-!            do k=1, n_max
-!              if (k .ne. j .and. abs(overlap_idx_r(j,1) - overlap_idx_r(k,1)) .lt. num_thresh) then 
-!                double_r = .true.
-!              end if
-!            end do
-!          end do
-!          do j=1, n_max
-!            do k=1, n_max
-!              if (k .ne. j .and. abs(overlap_idx_l(j,1) - overlap_idx_l(k,1)) .lt. num_thresh) then 
-!                double_l = .true.
-!              end if
-!            end do
-!          end do
-!!
-!!         try easy fix, by just taking the permutation idices of the other eigenvector side
-!!
-!          if (double_r .and. .not. double_l) then
-!            overlap_idx_r(:,1) = overlap_idx_l(:,1)
-!          else if (double_l .and. .not. double_r) then
-!            overlap_idx_l(:,1) = overlap_idx_r(:,1)
-!          else if (double_r .and. double_l) then
-!!
-!!           check which second largest overlap is larger and take this indice as max_overlap.
-!!           try for right side only, if no result, dont swap anything and try to continue 
-!!           without swapping any eigenvectors
-!!
-!            do j=1, n_max
-!              do k=1, n_max
-!                if (k .ne. j .and. abs(overlap_idx_r(j,1) - overlap_idx_r(k,1)) .lt. num_thresh) then 
-!                  if (overlap_val_r(j,2) .gt. overlap_val_r(k,2)) then
-!                    overlap_idx_r(j,1) = overlap_idx_r(j,2)
-!                  else
-!                    overlap_idx_r(k,1) = overlap_idx_r(k,2)
-!                  end if
-!                end if
-!              end do
-!            end do
-!!
-!!           check again if they are the same indices in the max_overlap for the right side.
-!!           if no, then take these indices for the right and left side. if yes, try without 
-!!           swapping
-!!
-!            double_r = .false.
-!            do j=1, n_max
-!              do k=1, n_max
-!                if (k .ne. j .and. abs(overlap_idx_r(j,1) - overlap_idx_r(k,1)) .lt. num_thresh) then 
-!                  double_r = .true.
-!                end if
-!              end do
-!            end do
-!            if (double_r) then
-!              do j=1, n_max
-!                overlap_idx_r(j,1) = real(j, kind=dp)
-!                overlap_idx_l(j,1) = real(j, kind=dp)
-!              end do
-!            else
-!              overlap_idx_l(:,1) = overlap_idx_r(:,1)
-!            end if  
-!          end if
-!!
-!!         check if maximum indices from right and left eigenvectors are the same
-!!
-!          overlap_diff = overlap_idx_r(:,1) - overlap_idx_l(:,1)
-!          if (dnrm2(n_max,overlap_diff,1 ) .gt. num_thresh) then
-!            if (sum(overlap_val_r(:,1)) .gt. sum(overlap_val_l(:,1))) then
-!              overlap_idx_l(:,1) = overlap_idx_r(:,1)
-!            else
-!              overlap_idx_r(:,1) = overlap_idx_l(:,1)
-!            end if
-!          end if
-!!
-!          if (found_er) then
-!!
-!!             now permute eigenvectors according to the maxiumum overlap.
-!!             get permutation matrix first
-!!
-!              perm_mat = zero 
-!              do j=1, n_max
-!                perm_mat(int(overlap_idx_r(j,1)),j) = one
-!              end do
-!              perm_temp = transpose(perm_mat)
-!!
-!!             now permute left & right eigenvectors and imaginary & real eigenvalues 
-!!             note: the use of 't' instead of computing the transpose explicitly obtained in
-!!                   a different result
-!!
-!              call dgemm('n','n',ld_current,n_max,2*n_max,one,evec_red_r,lda,perm_mat,2*n_max,zero,evec_temp,lda)
-!              call dcopy(ld_current*n_max,evec_temp,1,evec_red_r,1)
-!!
-!              call dgemm('n','n',ld_current,n_max,2*n_max,one,evec_red_l,lda,perm_mat,2*n_max,zero,evec_temp,lda)
-!              call dcopy(ld_current*n_max,evec_temp,1,evec_red_l,1)
-!!
-!              call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_re,1,zero,eig_temp,1)
-!              call dcopy(n_max,eig_temp,1,e_red_re,1)
-!!
-!              call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_im,1,zero,eig_temp,1)
-!              call dcopy(n_max,eig_temp,1,e_red_im,1)
-!!
-!          end if
-!        end if
+        if (it.gt.1) then
+!
+!         compute overlap for the right eigenvectors and extract the index and value of the largest
+!         and second largest overlap
+!
+          call dgemm('t','n',2*n_max,2*n_max,ld_current,one,copy_evec,lda,evec_red,lda,zero,overlap,2*n_max)
+!
+          found_er = .false.
+          do j = 1, n_max
+            mask_overlap = .true.
+            max_idx = maxloc(abs(overlap(:,j)))
+            overlap_idx(j,1)  = max_idx(1)
+            overlap_self(j) = overlap(j,j)
+            overlap_val(j,1) = overlap(max_idx(1),j)
+            mask_overlap(max_idx) = .false.
+!           
+!           identify if a swapping is necessary
+!
+            if (max_idx(1).ne.j) found_er = .true.
+!
+!           extract index and value of second larges overlap
+!
+            max_idx = maxloc(abs(overlap(:,j)), mask = mask_overlap)
+            overlap_idx(j,2)  = max_idx(1)
+            overlap_val(j,2) = overlap(max_idx(1),j)
+          end do
+!
+!         check if no indices were assigned twice as maximum overlap
+!
+          double = .false.
+          do j=1, n_max
+            do k=1, n_max
+              if (k .ne. j .and. abs(overlap_idx(j,1) - overlap_idx(k,1)) .lt. num_thresh) then 
+                double = .true.
+              end if
+            end do
+          end do
+!
+!         try easy fix, by just taking the permutation indexes of the other eigenvector side
+!
+          if (double) then
+!
+!           check which second largest overlap is larger and take this indice as max_overlap.
+!           try for right side only, if no result, dont swap anything and try to continue 
+!           without swapping any eigenvectors
+!
+            do j=1, n_max
+              do k=1, n_max
+                if (k .ne. j .and. abs(overlap_idx(j,1) - overlap_idx(k,1)) .lt. num_thresh) then 
+                  if (overlap_val(j,2) .gt. overlap_val(k,2)) then
+                    overlap_idx(j,1) = overlap_idx(j,2)
+                  else
+                    overlap_idx(k,1) = overlap_idx(k,2)
+                  end if
+                end if
+              end do
+            end do
+!
+!           check again if they are the same indices in the max_overlap for the right side.
+!           if no, then take these indices for the right and left side. if yes, try without 
+!           swapping
+!
+            double = .false.
+            do j=1, n_max
+              do k=1, n_max
+                if (k .ne. j .and. abs(overlap_idx(j,1) - overlap_idx(k,1)) .lt. num_thresh) then 
+                  double = .true.
+                end if
+              end do
+            end do
+            if (double) then
+              do j=1, n_max
+                overlap_idx(j,1) = j
+              end do
+            end if  
+          end if
+!
+          if (found_er) then
+!
+!             now permute eigenvectors according to the maxiumum overlap.
+!             get permutation matrix first
+!
+            perm_mat = zero 
+            do j = 1, n_max
+              perm_mat(overlap_idx(j,1),j) = one
+            end do
+            perm_temp = transpose(perm_mat)
+!
+!           now permute left & right eigenvectors and imaginary & real eigenvalues 
+!           note: the use of 't' instead of computing the transpose explicitly obtained in
+!                 a different result
+!
+            call dgemm('n','n',ld_current,n_max,2*n_max,one,evec_red,lda,perm_mat,2*n_max,zero,evec_temp,lda)
+            call dcopy(ld_current*n_max,evec_temp,1,evec_red,1)
+!
+            call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_re,1,zero,eig_temp,1)
+            call dcopy(n_max,eig_temp,1,e_red_re,1)
+!
+            call dgemv('n',n_max,2*n_max,one,perm_temp,2*n_max,e_red_im,1,zero,eig_temp,1)
+            call dcopy(n_max,eig_temp,1,e_red_im,1)
+!
+          end if
+        end if
 !
 !       copy and save the new eigenvectors for the next iteration
 !
         copy_evec = evec_red
-        copy_eig  = e_red_re
 !
 !       extract the eigenvalues and compute the ritz approximation to the 
 !       eigenvectors
@@ -726,7 +682,6 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     call mfree(e_red_im)
     call mfree(evec_red)
     call mfree(copy_evec)
-    call mfree(copy_eig)
     call mfree(overlap)
     call mfree(overlap_diff)
     call mfree(perm_mat)

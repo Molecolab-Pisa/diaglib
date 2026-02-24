@@ -12,9 +12,9 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !! ### Driver for LOBPCG symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
-!! Moreover, you need to use the [[dgl_drivers_interfaces]] module included in this library.
-!!
-!! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+!! @note
+!! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+!! @endnote
   implicit none
     integer,                      intent(in)    :: n
 !! Size of the matrix to be diagonalized
@@ -39,7 +39,7 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     integer,  optional,            intent(in)    :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
     character(len=2),  optional,   intent(in)    :: dgl_memory_unit
-!! Unit of memory. Default = MBs
+!! Unit of memory. Default = MB
     real(dp), optional,            intent(in)    :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
     real(dp), optional,            intent(in)    :: dgl_shift
@@ -49,7 +49,7 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   local variables:
 !   ================
-    logical  :: verbose_l
+    logical  :: bool
     integer  :: max_iter, memory
     real(dp) :: tol, shift
     character(len=2) :: memory_unit
@@ -119,12 +119,12 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 ! Parse optional arguments
 !
-    verbose_l = .false. ; if(present(dgl_verbose)) verbose_l = dgl_verbose
-    max_iter = 50       ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    tol = 1.e-7_dp      ; if(present(dgl_tol)) tol = dgl_tol
-    shift = 0.e0_dp     ; if(present(dgl_shift)) shift = dgl_shift
-    memory= 80          ; if(present(dgl_memory)) memory = dgl_memory !80MBs
-    memory_unit = "MB"  ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+    bool = .false.     ; if(present(dgl_verbose)) bool = dgl_verbose
+    max_iter = 50      ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    tol = 1.e-7_dp     ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp    ; if(present(dgl_shift)) shift = dgl_shift
+    memory= 80         ; if(present(dgl_memory)) memory = dgl_memory !80MBs
+    memory_unit = "MB" ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
 !   set size of the expansion space
 !
@@ -135,7 +135,7 @@ subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
     else
       n_arrs = lda*2 + n_max*3
     endif
-    call dgl_init(n,n_arrs,memory,memory_unit,verbose_l)
+    call dgl_init(n,n_arrs,memory,memory_unit,bool)
 !
 !   start by allocating memory for the various lapack routines
 !
