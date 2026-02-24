@@ -9,7 +9,7 @@ contains
 subroutine lobpcg_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_max_iter, dgl_tol, &
               dgl_shift, dgl_memory,dgl_memory_unit, metvec)
-!! ### Driver for LOBPCG symmetric diagonalization
+!! # Driver for LOBPCG symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
 !! @note

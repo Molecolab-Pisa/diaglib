@@ -9,7 +9,7 @@ contains
 subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
               dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
               dgl_shift, dgl_memory,dgl_memory_unit, metvec)
-!! ### Driver for Davidson-Liu symmetric diagonalization
+!! # Driver for Davidson-Liu symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
 !! @note
@@ -63,7 +63,7 @@ subroutine davidson_driver(n,n_targ,n_max,matvec,precnd,eig,evec,ok, &
 !
 !   number of large arrays that will be allocated
 !
-   integer               :: n_arrs
+    integer               :: n_arrs
 !
 !   number of active vectors at a given iteration, and indices to access them
 !
