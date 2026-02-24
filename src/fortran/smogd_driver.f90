@@ -163,7 +163,7 @@
 !
 !   current size and total dimension of the expansion space
 !
-    integer               :: m_dim, ld_current
+    integer               :: ld_current
 !
 !   number of large arrays that will be allocated
 !
@@ -192,11 +192,8 @@
 !
 !   subspace matrix and eigenvalues.
 !
-    real(dp), allocatable :: s_red(:,:), s_copy(:,:), e_red(:)
-    real(dp), allocatable :: smat(:,:)
-!
-    logical :: restart
-    integer :: n_rst
+    real(dp), allocatable :: s_copy(:,:), s_red_2(:,:), e_red(:)
+    real(dp), allocatable :: s_red(:,:)
 !
 !   ================
 !   START EXECUTION
@@ -206,6 +203,8 @@
 !
     if(n_targ.gt.n_max) call dgl_error(&
     "Number of eigenvalues request is larger that size of arrays passed")
+    if(mod(n2,2).ne.0) call dgl_error(&
+    "Size of the total problem is not even, something is really wrong with your input")
 !
 !   Parse optional arguments
 !
@@ -262,9 +261,9 @@
 !
 !   allocate memory for the reduced matrix and its eigenvalues:
 !
-    call mallocate(lda,lda,s_red)
     call mallocate(lda,lda,s_copy)
-    call mallocate(lda,lda,smat)
+    call mallocate(lda,lda,s_red_2)
+    call mallocate(lda,lda,s_red)
     call mallocate(lda2,e_red)
 !
 !   allocate memory for the plus and minus eigenvector components:
@@ -313,22 +312,16 @@
     call ambmul(n,n_max,vm,lvm)
     call b_ortho(n,n_max,vm,lvm)
 !
+!   initialize the counters
+!
     n_act = n_max
     ind   = 1
     i_beg = 1
-!
-!   initialize the counter for the expansion of the subspace
-!
-    m_dim = 1
-    ld_current   = 0
-!
-!   initialize to false the restart
-!
-    restart = .false.
+    ld_current = 0
 !
 !   main loop:
 !
-    1030 format(t5,'Davidson-Liu iterations (tol=',d10.2,'):',/, &
+    1030 format(t5,'SMO-GD iterations (tol=',d10.2,'):',/, &
                 t5,'------------------------------------------------------------------',/, &
                 t7,'  iter  root              eigenvalue','         rms         max ok',/, &
                 t5,'------------------------------------------------------------------')
@@ -336,7 +329,6 @@
 !
     if (verbose) write(6,1030) tol
 !
-    n_rst   = 0
     do it = 1, max_iter
 !
 !     update the size of the expansion space.
@@ -353,18 +345,17 @@
 !
 !     update the reduced matrix 
 !
-      call dgemm('t','n',ld_current,ld_current,n,one,vm,n,bvm,n,zero,smat,lda)
+      call dgemm('t','n',ld_current,ld_current,n,one,vm,n,bvm,n,zero,s_red,lda)
 !
 !     save s, and assemble s^t s:
 !
-      s_red  = smat
-      s_copy = zero
-      call dgemm('t','n',ld_current,ld_current,ld_current,one,s_red,lda,s_red,lda,zero,s_copy,lda)
+      s_copy  = s_red
+      call dgemm('t','n',ld_current,ld_current,ld_current,one,s_copy,lda,s_copy,lda,zero,s_red_2,lda)
 !
 !     diagonalize s^t s
 !
       call get_time(t1)
-      call dsyev('v','u',ld_current,s_copy,lda,e_red,work,lwork,info)
+      call dsyev('v','u',ld_current,s_red_2,lda,e_red,work,lwork,info)
       call get_time(t2)
       t_diag = t_diag + t2 - t1
 !
@@ -373,12 +364,12 @@
 !
       do i_eig = 1, n_max
         eig(i_eig)      = sqrt(e_red(ld_current - i_eig + 1))
-        up(1:ld_current,i_eig) = s_copy(1:ld_current,ld_current - i_eig + 1)
+        up(1:ld_current,i_eig) = s_red_2(1:ld_current,ld_current - i_eig + 1)
       end do
 !
 !     compute the u_- eigenvectors:
 !
-      call dgemm('n','n',ld_current,n_max,ld_current,one,s_red,lda,up,lda,zero,um,lda)
+      call dgemm('n','n',ld_current,n_max,ld_current,one,s_copy,lda,up,lda,zero,um,lda)
       do i_eig = 1, n_max
         um(1:ld_current,i_eig) = um(1:ld_current,i_eig)/eig(i_eig)
       end do
@@ -401,7 +392,7 @@
       call dgemm('n','n',n,n_max,ld_current,one,bvm,n,up,lda,zero,rm,n)
       call dgemm('n','n',n,n_max,ld_current,one,lvp,n,up,lda,zero,bp,n)
       call dgemm('n','n',n,n_max,ld_current,one,lvm,n,um,lda,zero,bm,n)
-      
+!      
       do i_eig = 1, n_targ
 !
 !       if the eigenvalue is already converged, skip it.
@@ -448,79 +439,73 @@
 !     check whether an update is required. 
 !     if not, perform a davidson restart.
 !
-      if (m_dim .lt. dav_iter) then
+      if (ld_current + n_act .le. lda) then
 !
+        i_beg = i_beg + n_act
+!        
+      else
+!
+        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
+!        
+!       put current eigenvectors into the first position of the 
+!       expansion space
+!
+        vp(:,n_max+1:) = zero
+        vm(:,n_max+1:) = zero
+        do i_eig = 1, n_max
+          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
+          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
+        end do
+!
+        lvp(:,n_max+1:) = zero
+        lvm(:,n_max+1:) = zero
+        lvp(:,:n_max) = bp
+        lvm(:,:n_max) = bm
+!
+        call dgemm('n','n',n,n_max,ld_current,one,bvp,n,um,lda,zero,bp,n)
+        call dgemm('n','n',n,n_max,ld_current,one,bvm,n,up,lda,zero,bm,n)
+        bvp(:,n_max+1:) = zero
+        bvm(:,n_max+1:) = zero
+        bvp(:,:n_max) = bp
+        bvm(:,:n_max) = bm
+!
+!       initialize indexes back to their starting values 
+!
+        ld_current = n_max
+        i_beg = n_max + 1
+!
+      end if
 !       compute the preconditioned residuals using davidson's procedure
 !       note that this is done with a user-supplied subroutine, that can
 !       be generalized to experiment with fancy preconditioners that may
 !       be more effective than the diagonal one, as in the original 
 !       algorithm.
 !
-        m_dim = m_dim + 1
-        i_beg = i_beg + n_act
-        n_act = n_max
-        n_frozen = 0
-        do i_eig = 1, n_targ
-          if (done(i_eig)) then
-            n_act = n_act - 1
-            n_frozen = n_frozen + 1
-          else
-            exit
-          end if
-        end do
-        ind   = n_max - n_act + 1
-        call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
+      n_act = n_max
+      n_frozen = 0
+      do i_eig = 1, n_targ
+        if (done(i_eig)) then
+          n_act = n_act - 1
+          n_frozen = n_frozen + 1
+        else
+          exit
+        end if
+      end do
+      ind   = n_max - n_act + 1
+      call lrprec(n,n_act,eig(ind),rp(1,ind),rm(1,ind),vp(1,i_beg),vm(1,i_beg))
 !
-!       orthogonalize the new vectors to the existing ones and then
-!       orthonormalize them.
+!     orthogonalize the new vectors to the existing ones and then
+!     orthonormalize them.
 !
-        call get_time(t1)
-        call b_ortho_vs_x(n,ld_current,n_act,vp,lvp,vp(1,i_beg))
-        call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
-        call b_ortho(n,n_act,vp(1,i_beg),lvp(1,i_beg))
-        call b_ortho_vs_x(n,ld_current,n_act,vm,lvm,vm(1,i_beg))
-        call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
-        call b_ortho(n,n_act,vm(1,i_beg),lvm(1,i_beg))
-        call get_time(t2)
-        t_ortho = t_ortho + t2 - t1
-      else
-!
-        if (verbose) write(6,'(t7,a)') 'Restarting davidson.'
-        restart = .true.
-!
-!       initialize indexes back to their starting values 
-!
-        ld_current   = 0
-        i_beg = 1
-        m_dim = 1
-        n_rst = 0
-!        
-        n_act = n_max 
-        vp = zero
-        vm = zero
-!
-!       put current eigenvectors into the first position of the 
-!       expansion space
-!
-        do i_eig = 1, n_max
-          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
-          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
-        end do
-!
-        lvp   = zero
-        lvm   = zero
-!
-        call apbmul(n,n_max,vp,lvp)
-        call b_ortho(n,n_max,vp,lvp)
-        call ambmul(n,n_max,vm,lvm)
-        call b_ortho(n,n_max,vm,lvm)
-!
-        bvp   = zero
-        bvm   = zero
-        s_red = zero
-        smat  = zero
-!        
-      end if
+      call get_time(t1)
+      call b_ortho_vs_x(n,ld_current,n_act,vp,lvp,vp(1,i_beg))
+      call apbmul(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+      call b_ortho(n,n_act,vp(1,i_beg),lvp(1,i_beg))
+      call b_ortho_vs_x(n,ld_current,n_act,vm,lvm,vm(1,i_beg))
+      call ambmul(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+      call b_ortho(n,n_act,vm(1,i_beg),lvm(1,i_beg))
+      call get_time(t2)
+      t_ortho = t_ortho + t2 - t1
 !      
       if (verbose) write(6,1050) n_targ, n_act, n_frozen
 !      
@@ -544,9 +529,9 @@
     call mfree(rr)
     call mfree(r_norm)
     call mfree(done)
-    call mfree(s_red)
     call mfree(s_copy)
-    call mfree(smat)
+    call mfree(s_red_2)
+    call mfree(s_red)
     call mfree(e_red)
     call mfree(up)
     call mfree(um)

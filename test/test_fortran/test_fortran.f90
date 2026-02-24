@@ -256,8 +256,11 @@ program test_fortran
   write(6,*) ' testing SMOGD:'
   call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, &
                         eig, evec, ok, &
-                        dgl_verbose = .true.,&
-                        dgl_memory = memory,&
+                        dgl_dav_iter = 5, &
+                        dgl_tol = 1.e-12_dgl_real, &
+                        dgl_max_iter = 20, &
+                        dgl_verbose = .true., &
+                        dgl_memory = memory, &
                         dgl_memory_unit = memory_unit)
   if (ok) then
     write(6,*) ' SMOGD converged.'
