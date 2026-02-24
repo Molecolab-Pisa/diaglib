@@ -6,6 +6,7 @@ add_library(diaglib SHARED
         davidson_driver.f90
         davidson_nosym_driver.f90
         lobpcg_driver.f90
+        smogd_driver.f90
         dgl_interface.f90
 )
         

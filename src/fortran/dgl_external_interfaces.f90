@@ -50,6 +50,39 @@ module dgl_external_interfaces
             !! Output vectors
         end subroutine metvec_
 
+        subroutine smogd_matvec(n,m,x,y)
+        !! Interface for the external routine performing the Matrix-Vector products for SMO-GD
+            import
+            implicit none
+            integer,                  intent(in)    :: n
+            !! Lenght of the vectors to multiply
+            integer,                  intent(in)    :: m
+            !! Number of vectors to multiply
+            real(dp), dimension(n,m), intent(in)    :: x
+            !! Input vectors
+            real(dp), dimension(n,m), intent(inout) :: y
+            !! Output vectors
+        end subroutine smogd_matvec
+
+        subroutine smogd_precnd(n,m,fac,xp,xm,yp,ym)
+            import
+            implicit none
+            integer,                  intent(in)    :: n
+            !! Lenght of the vectors to multiply
+            integer,                  intent(in)    :: m
+            !! Number of vectors to multiply
+            real(dp),                 intent(in)    :: fac
+            !! ???
+            real(dp), dimension(n,m), intent(in)    :: xp
+            !! Input vectors plus vectors
+            real(dp), dimension(n,m), intent(in)    :: xm
+            !! Input vectors minus vectors
+            real(dp), dimension(n,m), intent(inout) :: yp
+            !! Output vectors plus vectors
+            real(dp), dimension(n,m), intent(inout) :: ym
+            !! Output vectors minus vectors
+        end subroutine smogd_precnd
+
     end interface
 
 end module

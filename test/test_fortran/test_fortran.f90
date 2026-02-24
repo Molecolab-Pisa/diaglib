@@ -97,7 +97,7 @@ program test_fortran
     end do
     do i = 1, n_targ
 !
-!     fix the phase
+! fix the phase
 !
   if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     end do
@@ -113,15 +113,17 @@ program test_fortran
 ! test non-symmetric davidson:
 !
   allocate (evec_l(n,n_max))
-  evec_l = dgl_zero
+  evec = dgl_zero
   do i = 1, n_max
-    evec_l(i,i) = dgl_one
+    evec(i,i) = dgl_one
   end do
   ok = .false.
 !
   write(6,*) ' testing non-symmetric Davidson:'
-  call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, 3, eig, evec, evec_l, ok,&
-                              dgl_verbose = .true.)
+  call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "LR", eig, evec, ok, evec_2 = evec_l, &
+                              dgl_verbose = .false.,&
+                              dgl_memory = memory, &
+                              dgl_memory_unit = memory_unit)
 !
   if (ok) then
     write(6,*) ' non-symmetric Davidson converged.'
@@ -134,7 +136,9 @@ program test_fortran
     end do
 
     write(lutest,1032) 'Right ', (i, i = 1, n_targ)
-!     fix the phase
+!
+!   fix the phase
+!
     if (evec(1,i).lt.dgl_zero) evec(:,i) = - evec(:,i)
     do j = 1, n
       write(lutest,1022) j, (evec(j,i), i = 1, n_targ)
@@ -142,7 +146,9 @@ program test_fortran
     write(lutest,*)
 
     write(lutest,1032) 'Left ', (i, i = 1, n_targ)
+!
 !     fix the phase
+!
     if (evec_l(1,i).lt.dgl_zero) evec_l(:,i) = - evec_l(:,i)
     do j = 1, n
       write(lutest,1022) j, (evec_l(j,i), i = 1, n_targ)
@@ -234,34 +240,37 @@ program test_fortran
   else
     write(6,*) ' Generalized LOBPCG failed to converge.'
   end if
-!!
-!! test smogd:
-!!
-!  deallocate (evec)
-!  allocate (evec(2*n, n_max))
-!  eig  = dgl_zero
-!  evec = dgl_zero
-!!
-!  do i = 1, n_max
-!    evec(i,i)   = dgl_one
-!  end do
-!  ok = .false.
-!!
-!  write(6,*) ' testing SMOGD:'
-!  call smogd_driver(.false., n, 2*n, n_targ, n_max, max_iter, tol, max_dav, &
-!                    apbx, ambx, spdx, smdx, lrprc, eig, evec, ok)
-!  if (ok) then
-!    write(6,*) ' SMOGD converged.'
-!    write(lutest,1000) 'SMOGD'
-!    write(lutest,*)
-!    write(lutest,1010)
-!    do i = 1, n_targ
-!      write(lutest,1020) i, eig(i)
-!    end do
-!    write(lutest,*)
-!  else
-!    write(6,*) ' SMOGD failed to converge.'
-!  end if
+!
+! test smogd:
+!
+  deallocate (evec)
+  allocate (evec(2*n, n_max))
+  eig  = dgl_zero
+  evec = dgl_zero
+!
+  do i = 1, n_max
+    evec(i,i)   = dgl_one
+  end do
+  ok = .false.
+!
+  write(6,*) ' testing SMOGD:'
+  call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, &
+                        eig, evec, ok, &
+                        dgl_verbose = .true.,&
+                        dgl_memory = memory,&
+                        dgl_memory_unit = memory_unit)
+  if (ok) then
+    write(6,*) ' SMOGD converged.'
+    write(lutest,1000) 'SMOGD'
+    write(lutest,*)
+    write(lutest,1010)
+    do i = 1, n_targ
+      write(lutest,1020) i, eig(i)
+    end do
+    write(lutest,*)
+  else
+    write(6,*) ' SMOGD failed to converge.'
+  end if
 !
 ! close the output file:
 !
