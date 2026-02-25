@@ -195,6 +195,10 @@
     real(dp), allocatable :: s_copy(:,:), s_red_2(:,:), e_red(:)
     real(dp), allocatable :: s_red(:,:)
 !
+!   Scratch vector to avoid recomputation of reduced matrix
+!
+    real(dp), allocatable :: scratch(:,:)
+!
 !   ================
 !   START EXECUTION
 !   ================
@@ -275,6 +279,8 @@
     call mallocate(n,n_max,bp)
     call mallocate(n,n_max,bm)
 !
+    call mallocate(n_max,lda,scratch)
+!
 !   set the tolerances and compute a useful constant to compute rms norms:
 !
     sqrtn   = sqrt(real(n,dp))
@@ -345,8 +351,11 @@
 !
 !     update the reduced matrix 
 !
-      call dgemm('t','n',ld_current,ld_current,n,one,vm,n,bvm,n,zero,s_red,lda)
-!      call dgemm('t','n',n_act,n_act,n,one,vm(:,i_beg),n,bvm(:,i_beg),n,zero,s_red(1,i_beg),lda)
+      call dgemm('t','n',ld_current,n_act,n,one,vm,n,bvm(:,i_beg),n,zero,s_red(1,i_beg),lda)
+      if (it.gt.1) then
+        call dgemm('t','n',n_act,i_beg-1,n,one,vm(:,i_beg),n,bvm,n,zero,scratch,n_max)
+        s_red(i_beg:ld_current,1:i_beg-1) = scratch(:n_act,:i_beg-1)
+      endif
 !
 !     save s, and assemble s^t s:
 !
@@ -462,6 +471,11 @@
         bvp(:,:n_max) = bp
         bvm(:,:n_max) = bm
 !
+        s_red = zero
+        do i_eig = 1, n_max
+          s_red(i_eig,i_eig) = eig(i_eig)
+        enddo
+!
 !       initialize indexes back to their starting values 
 !
         ld_current = n_max
@@ -533,6 +547,7 @@
     call mfree(eigm)
     call mfree(bp)
     call mfree(bm)
+    call mfree(scratch)
 !
     call dgl_check_memleak()
 !

@@ -133,7 +133,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
     real(dp),allocatable  :: perm_temp(:,:)
     integer               :: overlap_idx(n_max,2), k
 !
-!   Scratch vector to avoid
+!   Scratch vector to avoid recomputation of reduced matrix
 !
     real(dp), allocatable :: scratch(:,:)
 !
