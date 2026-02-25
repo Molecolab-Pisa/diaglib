@@ -346,6 +346,7 @@
 !     update the reduced matrix 
 !
       call dgemm('t','n',ld_current,ld_current,n,one,vm,n,bvm,n,zero,s_red,lda)
+!      call dgemm('t','n',n_act,n_act,n,one,vm(:,i_beg),n,bvm(:,i_beg),n,zero,s_red(1,i_beg),lda)
 !
 !     save s, and assemble s^t s:
 !
@@ -381,10 +382,8 @@
 !
 !     assemble the current approximation to the eigenvectors
 !
-      do i_eig = 1, n_max
-        evec(1:n,i_eig)    = eigp(:,i_eig) + eigm(:,i_eig)
-        evec(n+1:n2,i_eig) = eigp(:,i_eig) - eigm(:,i_eig)
-      end do
+      evec(1:n,:)    = eigp + eigm
+      evec(n+1:n2,:) = eigp - eigm
 !
 !     compute the residuals, and their rms and sup norms:
 !
@@ -450,22 +449,16 @@
 !       put current eigenvectors into the first position of the 
 !       expansion space
 !
-        vp(:,n_max+1:) = zero
-        vm(:,n_max+1:) = zero
-        do i_eig = 1, n_max
-          vp(:,i_eig) = evec(1:n,i_eig) + evec(n+1:n2,i_eig)
-          vm(:,i_eig) = evec(1:n,i_eig) - evec(n+1:n2,i_eig)
-        end do
+        vp(:,:n_max) = eigp
+        vm(:,:n_max) = eigm
 !
-        lvp(:,n_max+1:) = zero
-        lvm(:,n_max+1:) = zero
         lvp(:,:n_max) = bp
         lvm(:,:n_max) = bm
+        call b_ortho(n,n_max,vp,lvp)
+        call b_ortho(n,n_max,vm,lvm)
 !
         call dgemm('n','n',n,n_max,ld_current,one,bvp,n,um,lda,zero,bp,n)
         call dgemm('n','n',n,n_max,ld_current,one,bvm,n,up,lda,zero,bm,n)
-        bvp(:,n_max+1:) = zero
-        bvm(:,n_max+1:) = zero
         bvp(:,:n_max) = bp
         bvm(:,:n_max) = bm
 !
@@ -475,6 +468,7 @@
         i_beg = n_max + 1
 !
       end if
+!
 !       compute the preconditioned residuals using davidson's procedure
 !       note that this is done with a user-supplied subroutine, that can
 !       be generalized to experiment with fancy preconditioners that may
