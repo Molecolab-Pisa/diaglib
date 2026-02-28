@@ -1,6 +1,6 @@
 module dgl_global_utils
-!* Most general module containing global constants, scratches and timings.
-! Also contains all the allocation and deallocation procedures.
+!* Most general module containing global constants, work array for Lapack and timings.
+! Also contains all the allocation and deallocation procedures for memroy management.
   implicit none
 !
   integer, parameter :: dp = selected_real_kind(15)
@@ -8,13 +8,13 @@ module dgl_global_utils
   real(dp), parameter :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
 !! Useful Constant
   integer :: lwork, info
-!! Lapack utility
-  real(dp), parameter   :: num_thresh = 1.e-13_dp
+!! Dimension for Lapack work arrays
+  real(dp), allocatable :: work(:), tau(:)
+!! Lapack work arrays
+  real(dp), parameter :: num_thresh = 1.e-13_dp
 !! Numerical threshold for real numbers comparisions with 0
-  real(dp), allocatable  :: work(:), tau(:)
-!! Lapack utility
-  real(dp)               :: t1(2), t2(2), t_diag(2), t_ortho(2), &
-                            t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
+  real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), &
+              t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
 !! Timings
   integer, protected :: maxmem, maxcor, peakmem
 !! Variables to keep track of memory

@@ -1,12 +1,14 @@
   module mod_smogd_driver
+  use dgl_global_utils
+  use dgl_orthogonalizations, only : b_ortho, b_ortho_vs_x
   use dgl_minor_utils
-  use dgl_external_interfaces
-
+  use dgl_external_interfaces, only: smogd_matvec, smogd_precnd
+!
   implicit none
-
-  contains
-
-  subroutine smogd_driver(n2,n_targ,n_max,apbmul,ambmul, &
+!
+contains
+!
+subroutine smogd_driver(n2,n_targ,n_max,apbmul,ambmul, &
                 spdmul,smdmul,lrprec,eig,evec,ok, &
                 dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
                 dgl_memory,dgl_memory_unit)
@@ -144,7 +146,7 @@
 !
 !   local variables:
 !   ================
-    logical  :: bool
+    logical  :: verbose_in
     integer  :: max_iter, dav_iter, memory
     real(dp) :: tol
     character(len=2) :: memory_unit
@@ -212,12 +214,12 @@
 !
 !   Parse optional arguments
 !
-    bool = .false.     ; if(present(dgl_verbose)) bool = dgl_verbose
-    max_iter = 100     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
-    tol = 1.e-7_dp     ; if(present(dgl_tol)) tol = dgl_tol
-    memory = 80        ; if(present(dgl_memory)) memory = dgl_memory
-    memory_unit = "MB" ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+    verbose_in = .false. ; if(present(dgl_verbose)) verbose_in = dgl_verbose
+    max_iter = 100       ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25        ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
+    tol = 1.e-7_dp       ; if(present(dgl_tol)) tol = dgl_tol
+    memory = 80          ; if(present(dgl_memory)) memory = dgl_memory
+    memory_unit = "MB"   ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
 !
 !   compute the actual size of the expansion space, checking that
@@ -228,7 +230,7 @@
     lda  = dav_iter*n_max
     lda2 = 2 * lda
     if (lda .ge. n) then
-      if (bool) call dgl_warning("Expansion space is larger than the dimension of the problem. " //&
+      if (verbose_in) call dgl_warning("Expansion space is larger than the dimension of the problem. " //&
                        "Reducing size to avoid Rouché-Capelli failure" )
       lda = n - 1
     endif
@@ -237,7 +239,7 @@
 !   to later exstimate required memory in dgl_init 
 !
     n_arrs = lda*6 + n_max*7
-    call dgl_init(n,n_arrs,memory,memory_unit,bool)
+    call dgl_init(n,n_arrs,memory,memory_unit,verbose_in)
 !
 !   start by allocating memory for the various lapack routines
 !
@@ -551,12 +553,12 @@
 !
     call dgl_check_memleak()
 !
-    1000 format(t3,'timings for caslr_eff (cpu/wall):   ',/, &
-                t3,'  matrix-vector multiplications: ',2f12.4,/, &
-                t3,'  diagonalization:               ',2f12.4,/, &
-                t3,'  orthogonalization:             ',2f12.4,/, &
-                t3,'                                 ',24('='),/,  &
-                t3,'  total:                         ',2f12.4)
+1000 format(t3,'timings for SMO-GD (cpu/wall):   ',/, &
+            t3,'  matrix-vector multiplications: ',2f12.4,/, &
+            t3,'  diagonalization:               ',2f12.4,/, &
+            t3,'  orthogonalization:             ',2f12.4,/, &
+            t3,'                                 ',24('='),/,  &
+            t3,'  total:                         ',2f12.4)
 !
 1050 format(t5,'----------------------------------------',/,&
             t7,'# target vectors:    ',i4,/,&

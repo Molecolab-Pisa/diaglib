@@ -1,11 +1,13 @@
 module mod_davidson_nosym_driver
+  use dgl_global_utils
+  use dgl_orthogonalizations, only : ortho, ortho_vs_x
   use dgl_minor_utils
-  use dgl_external_interfaces
-
-implicit none
-
+  use dgl_external_interfaces, only: matvec_, metvec_, precnd_
+!
+  implicit none
+!
 contains
-
+!
 subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
               eig, evec_1, ok, evec_2, &
               dgl_verbose,dgl_tol,dgl_max_iter,dgl_dav_iter,&
@@ -67,7 +69,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !   local variables:
 !   ================
-    logical  :: bool
+    logical  :: verbose_in
     integer  :: max_iter, dav_iter, memory
     real(dp) :: tol, shift
     character(len=2) :: memory_unit
@@ -150,13 +152,13 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
 !   Parse optional arguments
 !! zio pera
-    bool = .false.     ; if(present(dgl_verbose)) bool = dgl_verbose
-    max_iter = 100     ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
-    dav_iter = 25      ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
-    tol = 1.e-7_dp     ; if(present(dgl_tol)) tol = dgl_tol
-    shift = 0.e0_dp    ; if(present(dgl_shift)) shift = dgl_shift
-    memory = 80        ; if(present(dgl_memory)) memory = dgl_memory
-    memory_unit = "MB" ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+    verbose_in = .false. ; if(present(dgl_verbose)) verbose_in = dgl_verbose
+    max_iter = 100       ; if(present(dgl_max_iter)) max_iter = dgl_max_iter
+    dav_iter = 25        ; if(present(dgl_dav_iter)) dav_iter = dgl_dav_iter
+    tol = 1.e-7_dp       ; if(present(dgl_tol)) tol = dgl_tol
+    shift = 0.e0_dp      ; if(present(dgl_shift)) shift = dgl_shift
+    memory = 80          ; if(present(dgl_memory)) memory = dgl_memory
+    memory_unit = "MB"   ; if(present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
 !   Check option for problem to solve
 !
@@ -188,7 +190,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !
     lda = dav_iter*n_max
     if (lda .ge. n) then
-      if (bool) call dgl_warning("Expansion space is larger than the dimension of the problem. " //&
+      if (verbose_in) call dgl_warning("Expansion space is larger than the dimension of the problem. " //&
                        "Reducing size to avoid Rouché-Capelli failure" )
       lda = n - 1
     endif
@@ -197,7 +199,7 @@ subroutine davidson_nosym_driver(n,n_targ,n_max,matvec_r,matvec_l,precnd,side, &
 !   to later exstimate required memory in dgl_init 
 !
     n_arrs = lda*2 + n_max
-    call dgl_init(n,n_arrs,memory,memory_unit,bool)
+    call dgl_init(n,n_arrs,memory,memory_unit,verbose_in)
 !
 !   start by allocating memory for the various lapack routines
 !
