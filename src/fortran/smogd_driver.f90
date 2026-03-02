@@ -14,26 +14,26 @@ contains
                             dgl_memory, dgl_memory_unit)
 !!# Driver for the efficient solution to the Linear-Response CASSCF problem
 !! \begin{equation}
-!!    \begin{bmatrix} \begin{pmatrix}
-!!        A & B \\
-!!        B & A
-!!    \end{pmatrix}
-!!    -
-!!    \omega
-!!    \begin{pmatrix}
-!!        S & D \\
-!!        -D & -S
-!!    \end{pmatrix} \end{bmatrix}
-!!    \begin{pmatrix}
-!!        Y \\
-!!        Z
-!!    \end{pmatrix}
-!!    =
-!!    \begin{pmatrix}
-!!        0 \\
-!!        0
-!!    \end{pmatrix},
-!!    \label{eq:respeq}
+!! \begin{bmatrix} \begin{pmatrix}
+!! A & B \\
+!! B & A
+!! \end{pmatrix}
+!! -
+!! \omega
+!! \begin{pmatrix}
+!! S & D \\
+!! -D & -S
+!! \end{pmatrix} \end{bmatrix}
+!! \begin{pmatrix}
+!! Y \\
+!! Z
+!! \end{pmatrix}
+!! =
+!! \begin{pmatrix}
+!! 0 \\
+!! 0
+!! \end{pmatrix},
+!! \label{eq:respeq}
 !! \end{equation}
 !!
 !! Where A, B, S are symmetric matrices and D is antysimmetric.
@@ -54,28 +54,28 @@ contains
 !! therefore solves the associate problem:
 !!
 !!\begin{equation}
-!!    \begin{bmatrix}
-!!    \begin{pmatrix}
-!!        S & D \\
-!!        -D & -S
-!!    \end{pmatrix}
-!!    -
-!!    \frac{1}{\omega}
-!!    \begin{pmatrix}
-!!        A & B \\
-!!        B & A
-!!    \end{pmatrix}
-!!    \end{bmatrix}
-!!    \begin{pmatrix}
-!!        Y \\
-!!        Z
-!!    \end{pmatrix}
-!!    =
-!!    \begin{pmatrix}
-!!        0 \\
-!!        0
-!!    \end{pmatrix},
-!!    \label{eq:respeq_smogd}
+!! \begin{bmatrix}
+!! \begin{pmatrix}
+!! S & D \\
+!! -D & -S
+!! \end{pmatrix}
+!! -
+!! \frac{1}{\omega}
+!! \begin{pmatrix}
+!! A & B \\
+!! B & A
+!! \end{pmatrix}
+!! \end{bmatrix}
+!! \begin{pmatrix}
+!! Y \\
+!! Z
+!! \end{pmatrix}
+!! =
+!! \begin{pmatrix}
+!! 0 \\
+!! 0
+!! \end{pmatrix},
+!! \label{eq:respeq_smogd}
 !!\end{equation}
 !!
 !! using the casida matrix, which is symmetric and positive definite, as
@@ -84,23 +84,23 @@ contains
 !! results in a Rayleigh-Ritz procedure that requires the solution of a
 !! symmetric standard eigenvalue problem
 !!
-!!\begin{equation}
-!!    \begin{pmatrix}
-!!        0 & s^T \\
-!!        s & 0
-!!    \end{pmatrix}
-!!    \begin{pmatrix}
-!!        u^+ \\
-!!        u^-
-!!    \end{pmatrix}
-!!    =
-!!    \frac{1}{\omega}
-!!    \begin{pmatrix}
-!!        u^+ \\
-!!        u^-
-!!    \end{pmatrix},
-!!    \label{eq:krylov}
-!!\end{equation}
+!! \begin{equation}
+!! \begin{pmatrix}
+!! 0 & s^T \\
+!! s & 0
+!! \end{pmatrix}
+!! \begin{pmatrix}
+!! u^+ \\
+!! u^-
+!! \end{pmatrix}
+!! =
+!! \frac{1}{\omega}
+!! \begin{pmatrix}
+!! u^+ \\
+!! u^-
+!! \end{pmatrix},
+!! \label{eq:krylov}
+!! \end{equation}
 !!
 !! which can be reduced to a half-sized eigenvalue problem
 !!
@@ -144,34 +144,34 @@ contains
         real(dp), optional, intent(in) :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
 !
-!   local variables:
-!   ================
+! local variables:
+! ================
         logical :: verbose_in
         integer :: max_iter, dav_iter, memory
         real(dp) :: tol
         character(len=2) :: memory_unit
 !
-!   dimension of the halved problem, the one we are actually solving
+! dimension of the halved problem, the one we are actually solving
 !
         integer :: n
 !
-!   actual expansion space size and total dimension
+! actual expansion space size and total dimension
 !
         integer :: lda, lda2
 !
-!   number of active vectors at a given iteration, and indices to access them
+! number of active vectors at a given iteration, and indices to access them
 !
         integer :: n_act, ind, i_beg
 !
-!   current size and total dimension of the expansion space
+! current size and total dimension of the expansion space
 !
         integer :: ld_current
 !
-!   number of large arrays that will be allocated
+! number of large arrays that will be allocated
 !
         integer :: n_arrs
 !
-!   number of frozen (i.e. converged) vectors
+! number of frozen (i.e. converged) vectors
 !
         integer :: n_frozen
 !
@@ -179,40 +179,40 @@ contains
 !
         real(dp) :: sqrtn, tol_rms, tol_max
 !
-!   arrays to control convergence and orthogonalization
+! arrays to control convergence and orthogonalization
 !
         logical, allocatable :: done(:)
 !
-!   expansion spaces, residuals and their norms.
+! expansion spaces, residuals and their norms.
 !
         real(dp), allocatable :: vp(:, :), vm(:, :), lvp(:, :), lvm(:, :), bvp(:, :), bvm(:, :)
         real(dp), allocatable :: rp(:, :), rm(:, :), rr(:, :), r_norm(:, :)
 !
-!   eigenvectors of the reduced problem and components of the ritz vectors:
+! eigenvectors of the reduced problem and components of the ritz vectors:
 !
         real(dp), allocatable :: up(:, :), um(:, :), eigp(:, :), eigm(:, :), bp(:, :), bm(:, :)
 !
-!   subspace matrix and eigenvalues.
+! subspace matrix and eigenvalues.
 !
         real(dp), allocatable :: s_copy(:, :), s_red_2(:, :), e_red(:)
         real(dp), allocatable :: s_red(:, :)
 !
-!   Scratch vector to avoid recomputation of reduced matrix
+! Scratch vector to avoid recomputation of reduced matrix
 !
         real(dp), allocatable :: scratch(:, :)
 !
-!   ================
-!   START EXECUTION
-!   ================
+! ================
+! START EXECUTION
+! ================
 !
-!   Stupidity checks
+! Stupidity checks
 !
         if (n_targ .gt. n_max) call dgl_error( &
             "Number of eigenvalues request is larger that size of arrays passed")
         if (mod(n2, 2) .ne. 0) call dgl_error( &
             "Size of the total problem is not even, something is really wrong with your input")
 !
-!   Parse optional arguments
+! Parse optional arguments
 !
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
         max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
@@ -222,9 +222,9 @@ contains
         memory_unit = "MB"; if (present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
 !
-!   compute the actual size of the expansion space, checking that
-!   the input makes sense.
-!   no expansion space smaller than dav_iter = 10 is deemed acceptable.
+! compute the actual size of the expansion space, checking that
+! the input makes sense.
+! no expansion space smaller than dav_iter = 10 is deemed acceptable.
 !
         n = n2/2
         lda = dav_iter*n_max
@@ -235,20 +235,20 @@ contains
             lda = n - 1
         end if
 !
-!   compute the number of large vectors that will be allocated
-!   to later exstimate required memory in dgl_init
+! compute the number of large vectors that will be allocated
+! to later exstimate required memory in dgl_init
 !
         n_arrs = lda*6 + n_max*7
         call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
 !
-!   start by allocating memory for the various lapack routines
+! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(n, n_max)
         call mallocate(lwork, work)
         call mallocate(n_max, tau)
 !
-!   allocate memory for the expansion space, the corresponding
-!   matrix-multiplied vectors and the residual:
+! allocate memory for the expansion space, the corresponding
+! matrix-multiplied vectors and the residual:
 !
         call mallocate(n, lda, vp)
         call mallocate(n, lda, vm)
@@ -260,19 +260,19 @@ contains
         call mallocate(n, n_max, rm)
         call mallocate(n, n_max, rr)
 !
-!   allocate memory for convergence check
+! allocate memory for convergence check
 !
         call mallocate(n_max, done)
         call mallocate(2, n_max, r_norm)
 !
-!   allocate memory for the reduced matrix and its eigenvalues:
+! allocate memory for the reduced matrix and its eigenvalues:
 !
         call mallocate(lda, lda, s_copy)
         call mallocate(lda, lda, s_red_2)
         call mallocate(lda, lda, s_red)
         call mallocate(lda2, e_red)
 !
-!   allocate memory for the plus and minus eigenvector components:
+! allocate memory for the plus and minus eigenvector components:
 !
         call mallocate(lda, n_max, up)
         call mallocate(lda, n_max, um)
@@ -283,13 +283,13 @@ contains
 !
         call mallocate(n_max, lda, scratch)
 !
-!   set the tolerances and compute a useful constant to compute rms norms:
+! set the tolerances and compute a useful constant to compute rms norms:
 !
         sqrtn = sqrt(real(n, dp))
         tol_rms = tol
         tol_max = 10.0_dp*tol
 !
-!   clean out various quantities
+! clean out various quantities
 !
         t_diag = zero
         t_ortho = zero
@@ -306,28 +306,28 @@ contains
 !
         call get_time(t_tot)
 !
-!   move the guess into the expansion space.
+! move the guess into the expansion space.
 !
         do i_eig = 1, n_max
             vp(:, i_eig) = evec(1:n, i_eig) + evec(n + 1:n2, i_eig)
             vm(:, i_eig) = evec(1:n, i_eig) - evec(n + 1:n2, i_eig)
         end do
 !
-!   orthogonalize the expansion space to the metric.
+! orthogonalize the expansion space to the metric.
 !
         call apbmul(n, n_max, vp, lvp)
         call b_ortho(n, n_max, vp, lvp)
         call ambmul(n, n_max, vm, lvm)
         call b_ortho(n, n_max, vm, lvm)
 !
-!   initialize the counters
+! initialize the counters
 !
         n_act = n_max
         ind = 1
         i_beg = 1
         ld_current = 0
 !
-!   main loop:
+! main loop:
 !
 1030    format(t5, 'SMO-GD iterations (tol=', d10.2, '):', /, &
                t5, '------------------------------------------------------------------', /, &
@@ -339,11 +339,11 @@ contains
 !
         do it = 1, max_iter
 !
-!     update the size of the expansion space.
+! update the size of the expansion space.
 !
             ld_current = ld_current + n_act
 !
-!     perform this iteration's matrix-vector multiplications:
+! perform this iteration's matrix-vector multiplications:
 !
             call get_time(t1)
             call spdmul(n, n_act, vp(1, i_beg), bvm(1, i_beg))
@@ -351,7 +351,7 @@ contains
             call get_time(t2)
             t_mv = t_mv + t2 - t1
 !
-!     update the reduced matrix
+! update the reduced matrix
 !
             call dgemm('t', 'n', ld_current, n_act, n, one, vm, n, bvm(:, i_beg), n, zero, s_red(1, i_beg), lda)
             if (it .gt. 1) then
@@ -359,44 +359,44 @@ contains
                 s_red(i_beg:ld_current, 1:i_beg - 1) = scratch(:n_act, :i_beg - 1)
             end if
 !
-!     save s, and assemble s^t s:
+! save s, and assemble s^t s:
 !
             s_copy = s_red
             call dgemm('t', 'n', ld_current, ld_current, ld_current, one, s_copy, lda, s_copy, lda, zero, s_red_2, lda)
 !
-!     diagonalize s^t s
+! diagonalize s^t s
 !
             call get_time(t1)
             call dsyev('v', 'u', ld_current, s_red_2, lda, e_red, work, lwork, info)
             call get_time(t2)
             t_diag = t_diag + t2 - t1
 !
-!     extract the eigenvalues and compute the ritz approximation to the
-!     eigenvectors
+! extract the eigenvalues and compute the ritz approximation to the
+! eigenvectors
 !
             do i_eig = 1, n_max
                 eig(i_eig) = sqrt(e_red(ld_current - i_eig + 1))
                 up(1:ld_current, i_eig) = s_red_2(1:ld_current, ld_current - i_eig + 1)
             end do
 !
-!     compute the u_- eigenvectors:
+! compute the u_- eigenvectors:
 !
             call dgemm('n', 'n', ld_current, n_max, ld_current, one, s_copy, lda, up, lda, zero, um, lda)
             do i_eig = 1, n_max
                 um(1:ld_current, i_eig) = um(1:ld_current, i_eig)/eig(i_eig)
             end do
 !
-!     asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
+! asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, vp, n, up, lda, zero, eigp, n)
             call dgemm('n', 'n', n, n_max, ld_current, one, vm, n, um, lda, zero, eigm, n)
 !
-!     assemble the current approximation to the eigenvectors
+! assemble the current approximation to the eigenvectors
 !
             evec(1:n, :) = eigp + eigm
             evec(n + 1:n2, :) = eigp - eigm
 !
-!     compute the residuals, and their rms and sup norms:
+! compute the residuals, and their rms and sup norms:
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, bvp, n, um, lda, zero, rp, n)
             call dgemm('n', 'n', n, n_max, ld_current, one, bvm, n, up, lda, zero, rm, n)
@@ -405,7 +405,7 @@ contains
 !
             do i_eig = 1, n_targ
 !
-!       if the eigenvalue is already converged, skip it.
+! if the eigenvalue is already converged, skip it.
 !
                 if (done(i_eig)) cycle
 !
@@ -415,8 +415,8 @@ contains
                 r_norm(2, i_eig) = (maxval(abs(rp(:, i_eig))) + maxval(abs(rm(:, i_eig))))/(sqrt(two)*eig(i_eig))
             end do
 !
-!     check convergence. lock the first contiguous converged eigenvalues
-!     by setting the logical array "done" to true.
+! check convergence. lock the first contiguous converged eigenvalues
+! by setting the logical array "done" to true.
 !
             do i_eig = 1, n_targ
                 if (done(i_eig)) cycle
@@ -429,7 +429,7 @@ contains
                 end if
             end do
 !
-!     print some information:
+! print some information:
 !
             if (verbose) then
                 do i_eig = 1, n_targ
@@ -446,8 +446,8 @@ contains
                 exit
             end if
 !
-!     check whether an update is required.
-!     if not, perform a davidson restart.
+! check whether an update is required.
+! if not, perform a davidson restart.
 !
             if (ld_current + n_act .le. lda) then
 !
@@ -457,8 +457,8 @@ contains
 !
                 if (verbose) write (6, '(t7,a)') 'Restarting davidson.'
 !
-!       put current eigenvectors into the first position of the
-!       expansion space
+! put current eigenvectors into the first position of the
+! expansion space
 !
                 vp(:, :n_max) = eigp
                 vm(:, :n_max) = eigm
@@ -478,18 +478,18 @@ contains
                     s_red(i_eig, i_eig) = eig(i_eig)
                 end do
 !
-!       initialize indexes back to their starting values
+! initialize indexes back to their starting values
 !
                 ld_current = n_max
                 i_beg = n_max + 1
 !
             end if
 !
-!       compute the preconditioned residuals using davidson's procedure
-!       note that this is done with a user-supplied subroutine, that can
-!       be generalized to experiment with fancy preconditioners that may
-!       be more effective than the diagonal one, as in the original
-!       algorithm.
+! compute the preconditioned residuals using davidson's procedure
+! note that this is done with a user-supplied subroutine, that can
+! be generalized to experiment with fancy preconditioners that may
+! be more effective than the diagonal one, as in the original
+! algorithm.
 !
             n_act = n_max
             n_frozen = 0
@@ -504,8 +504,8 @@ contains
             ind = n_max - n_act + 1
             call lrprec(n, n_act, eig(ind), rp(1, ind), rm(1, ind), vp(1, i_beg), vm(1, i_beg))
 !
-!     orthogonalize the new vectors to the existing ones and then
-!     orthonormalize them.
+! orthogonalize the new vectors to the existing ones and then
+! orthonormalize them.
 !
             call get_time(t1)
             call b_ortho_vs_x(n, ld_current, n_act, vp, lvp, vp(1, i_beg))

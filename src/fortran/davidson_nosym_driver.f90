@@ -67,64 +67,64 @@ contains
         real(dp), optional, intent(in) :: dgl_shift
 !! Diagonal level shifting parameter. Default = \(0.\)
 !
-!   local variables:
-!   ================
+! local variables:
+! ================
         logical :: verbose_in
         integer :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
 !
-!   expansion space varibles:
-!     total dimension, current dimension
+! expansion space varibles:
+! total dimension, current dimension
 !
         integer :: lda, ld_current
 !
-!   number of large arrays that will be allocated
+! number of large arrays that will be allocated
 !
         integer :: n_arrs
 !
-!   number of active vectors at a given iteration, and indices to access them
+! number of active vectors at a given iteration, and indices to access them
 !
         integer :: n_act, ind, i_beg
 !
-!   number of frozen (i.e. converged) vectors
+! number of frozen (i.e. converged) vectors
 !
         integer :: n_frozen
 !
-!   tolerances on residuals norms, used for convergence
+! tolerances on residuals norms, used for convergence
 !
         real(dp) :: tol_rms, tol_max
 !
-!   iterators and utilities
+! iterators and utilities
 !
         integer :: it, i_eig
         real(dp) :: sqrtn, tol_im
         real(dp) :: xx(1), yy
         integer :: j
 !
-!   arrays to control convergence
+! arrays to control convergence
 !
         logical, allocatable :: done(:)
 !
-!   expansion spaces, residuals and their norms
+! expansion spaces, residuals and their norms
 !
         real(dp), allocatable :: space(:, :), aspace(:, :)
         real(dp), allocatable :: residuals(:, :)
         real(dp), allocatable :: r_norm(:, :)
 !
-!   subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
+! subspace matrix, eigenvalues and real and imaginary parts of the eigenvalues
 !
         real(dp), allocatable :: a_red(:, :), a_copy(:, :), e_red_re(:), e_red_im(:)
         real(dp), allocatable :: evec_red(:, :)
         real(dp), allocatable :: copy_evec(:, :)
 !
-!   variables for left, right, or both eigenvectors
+! variables for left, right, or both eigenvectors
 !
         character(len=1) :: current_side
         integer :: davidson_runs, current_run
         real(dp) :: eig_r(n_max)
 !
-!   variables for the sorting eigenpairs, since lapack does not.
+! variables for the sorting eigenpairs, since lapack does not.
 !
         integer :: max_idx(1)
         logical :: found_im, found_er, double
@@ -135,22 +135,22 @@ contains
         real(dp), allocatable :: perm_temp(:, :)
         integer :: overlap_idx(n_max, 2), k
 !
-!   Scratch vector to avoid recomputation of reduced matrix
+! Scratch vector to avoid recomputation of reduced matrix
 !
         real(dp), allocatable :: scratch(:, :)
 !
-!   ================
-!   START EXECUTION
-!   ================
+! ================
+! START EXECUTION
+! ================
 !
-!   Stupidity checks:
+! Stupidity checks:
 !
-!   Check dimension VS. number of eigs requested
+! Check dimension VS. number of eigs requested
 !
         if (n_targ .gt. n_max) call dgl_error( &
             "Number of eigenvalues requested is larger that size of arrays passed")
 !
-!   Parse optional arguments
+! Parse optional arguments
 !! zio pera
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
         max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
@@ -160,7 +160,7 @@ contains
         memory = 80; if (present(dgl_memory)) memory = dgl_memory
         memory_unit = "MB"; if (present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
-!   Check option for problem to solve
+! Check option for problem to solve
 !
         select case (side)
         case ("R ")
@@ -185,8 +185,8 @@ contains
             call dgl_error("Invalid value for side, options are: 'L ', 'R ' or 'LR'")
         end select
 !
-!   computing actual size of the expansion space, checking that
-!   the input makes sense.
+! computing actual size of the expansion space, checking that
+! the input makes sense.
 !
         lda = dav_iter*n_max
         if (lda .ge. n) then
@@ -195,32 +195,32 @@ contains
             lda = n - 1
         end if
 !
-!   compute the number of large vectors that will be allocated
-!   to later exstimate required memory in dgl_init
+! compute the number of large vectors that will be allocated
+! to later exstimate required memory in dgl_init
 !
         n_arrs = lda*2 + n_max
         call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
 !
-!   start by allocating memory for the various lapack routines
+! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(n, n_max)
         call mallocate(lwork, work)
         call mallocate(lda, tau)
 !
-!   allocate memory for for expansion space, the corresponding
-!   matrix-multiplied vectors and the residuals
+! allocate memory for for expansion space, the corresponding
+! matrix-multiplied vectors and the residuals
 !
         call mallocate(n, lda, space)
         call mallocate(n, lda, aspace)
         call mallocate(n, n_max, residuals)
 !
-!   allocate memory for convergency check
+! allocate memory for convergency check
 !
         call mallocate(n_max, done)
         call mallocate(2, n_max, r_norm)
 !
-!   allocate memory for the reduced matrix, its eigenvalues with real &
-!   imaginary parts, and its left & right eigenvectors
+! allocate memory for the reduced matrix, its eigenvalues with real &
+! imaginary parts, and its left & right eigenvectors
 !
         call mallocate(lda, lda, a_red)
         call mallocate(lda, lda, a_copy)
@@ -229,8 +229,8 @@ contains
         call mallocate(lda, lda, evec_red)
         call mallocate(lda, lda, copy_evec)
 !
-!   allocate space for orthogonalization routines
-!   and mask array for sorting routine
+! allocate space for orthogonalization routines
+! and mask array for sorting routine
 !
         call mallocate(2*n_max, 2*n_max, overlap)
         call mallocate(n_max, overlap_diff)
@@ -242,28 +242,28 @@ contains
 !
         call mallocate(n_max, lda, scratch)
 !
-!   set the tolerance and compute a useful constant to compute rms norms:
+! set the tolerance and compute a useful constant to compute rms norms:
 !
         sqrtn = sqrt(real(n, dp))
         tol_rms = tol
         tol_max = 10.0_dp*tol
         tol_im = 1.d-12
 !
-!   check weather we have a guess for the eigenvectors in evec, and
-!   weather it is orthonormal.
-!   if evec is zero, create a random guess
+! check weather we have a guess for the eigenvectors in evec, and
+! weather it is orthonormal.
+! if evec is zero, create a random guess
 !
         call check_guess(n, n_max, evec_1)
 !
-!   Move guess into the expansion spaces
+! Move guess into the expansion spaces
 !
         call dcopy(n*n_max, evec_1, 1, space, 1)
 !
-!   Start Davidson
+! Start Davidson
 !
         do current_run = 1, davidson_runs
 !
-!     clean out various quantities
+! clean out various quantities
 !
             call get_time(t_tot1)
 !
@@ -273,30 +273,30 @@ contains
             t_mv = zero
             done = .false.
 !
-!     Re-initialize indexes
+! Re-initialize indexes
 !
             n_act = n_max
             i_beg = 1
             ind = 1
 !
-!     initialize the counter for the expansion of the subspace
+! initialize the counter for the expansion of the subspace
 !
             ld_current = 0
 !
-!     print header
+! print header
 !
             if (verbose) write (6, 1030) current_side, tol, current_side
 !
-!     main loop
+! main loop
 !
             do it = 1, max_iter
 !
-!       update the size of the expansion space.
+! update the size of the expansion space.
 !
                 ld_current = ld_current + n_act
 !
-!       perform this iteration's matrix-vector multiplications for both
-!       right and left expansion spaces
+! perform this iteration's matrix-vector multiplications for both
+! right and left expansion spaces
 !
                 call get_time(t1)
                 select case (current_side)
@@ -308,7 +308,7 @@ contains
                 call get_time(t2)
                 t_mv = t_mv + t2 - t1
 !
-!       get the reduced matrix
+! get the reduced matrix
 !
                 select case (current_side)
                 case ("R")
@@ -327,7 +327,7 @@ contains
 !
                 a_copy = a_red
 !
-!       diagonalize the reduced matrix
+! diagonalize the reduced matrix
 !
                 call get_time(t1)
                 select case (current_side)
@@ -344,8 +344,8 @@ contains
                     call dgl_error("diagonalization of reduced space failed.")
                 end if
 !
-!       sort lowest eigenpairs in increasing order in range 2*n_max to ensure that all n_max
-!       sought eigenpairs are in the range 2*n_max
+! sort lowest eigenpairs in increasing order in range 2*n_max to ensure that all n_max
+! sought eigenpairs are in the range 2*n_max
 !
                 if (it .eq. 1) then
                     call sort_eigenpairs(ld_current, e_red_re, e_red_im, evec_red, n_max, lda, .true., tol_im)
@@ -353,7 +353,7 @@ contains
                     call sort_eigenpairs(ld_current, e_red_re, e_red_im, evec_red, n_max + n_act, lda, .true., tol_im)
                 end if
 !
-!       double check for complex contributions in the n_max sought eigenvalues
+! double check for complex contributions in the n_max sought eigenvalues
 !
                 found_im = .false.
                 do j = 1, n_max
@@ -368,15 +368,15 @@ contains
                     print *
                 end if
 !
-!       compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
-!       to ensure correct sorting by checking if largest absolute value of column is on the
-!       diagonal. if not, use the indices of the largest elements to construct a permutation
-!       matrix to resort the eigenpairs according to the overlap.
+! compute overlap of old and new eigenvectors in the dimension of the old eigenvectors
+! to ensure correct sorting by checking if largest absolute value of column is on the
+! diagonal. if not, use the indices of the largest elements to construct a permutation
+! matrix to resort the eigenpairs according to the overlap.
 !
                 if (it .gt. 1) then
 !
-!         compute overlap for the right eigenvectors and extract the index and value of the largest
-!         and second largest overlap
+! compute overlap for the right eigenvectors and extract the index and value of the largest
+! and second largest overlap
 !
                     call dgemm('t', 'n', 2*n_max, 2*n_max, ld_current, one, copy_evec, lda, evec_red, lda, zero, overlap, 2*n_max)
 !
@@ -389,18 +389,18 @@ contains
                         overlap_val(j, 1) = overlap(max_idx(1), j)
                         mask_overlap(max_idx) = .false.
 !
-!           identify if a swapping is necessary
+! identify if a swapping is necessary
 !
                         if (max_idx(1) .ne. j) found_er = .true.
 !
-!           extract index and value of second larges overlap
+! extract index and value of second larges overlap
 !
                         max_idx = maxloc(abs(overlap(:, j)), mask=mask_overlap)
                         overlap_idx(j, 2) = max_idx(1)
                         overlap_val(j, 2) = overlap(max_idx(1), j)
                     end do
 !
-!         check if no indices were assigned twice as maximum overlap
+! check if no indices were assigned twice as maximum overlap
 !
                     double = .false.
                     do j = 1, n_max
@@ -411,13 +411,13 @@ contains
                         end do
                     end do
 !
-!         try easy fix, by just taking the permutation indexes of the other eigenvector side
+! try easy fix, by just taking the permutation indexes of the other eigenvector side
 !
                     if (double) then
 !
-!           check which second largest overlap is larger and take this indice as max_overlap.
-!           try for right side only, if no result, dont swap anything and try to continue
-!           without swapping any eigenvectors
+! check which second largest overlap is larger and take this indice as max_overlap.
+! try for right side only, if no result, dont swap anything and try to continue
+! without swapping any eigenvectors
 !
                         do j = 1, n_max
                             do k = 1, n_max
@@ -431,9 +431,9 @@ contains
                             end do
                         end do
 !
-!           check again if they are the same indices in the max_overlap for the right side.
-!           if no, then take these indices for the right and left side. if yes, try without
-!           swapping
+! check again if they are the same indices in the max_overlap for the right side.
+! if no, then take these indices for the right and left side. if yes, try without
+! swapping
 !
                         double = .false.
                         do j = 1, n_max
@@ -452,8 +452,8 @@ contains
 !
                     if (found_er) then
 !
-!             now permute eigenvectors according to the maxiumum overlap.
-!             get permutation matrix first
+! now permute eigenvectors according to the maxiumum overlap.
+! get permutation matrix first
 !
                         perm_mat = zero
                         do j = 1, n_max
@@ -461,9 +461,9 @@ contains
                         end do
                         perm_temp = transpose(perm_mat)
 !
-!           now permute left & right eigenvectors and imaginary & real eigenvalues
-!           note: the use of 't' instead of computing the transpose explicitly obtained in
-!                 a different result
+! now permute left & right eigenvectors and imaginary & real eigenvalues
+! note: the use of 't' instead of computing the transpose explicitly obtained in
+! a different result
 !
                         call dgemm('n', 'n', ld_current, n_max, 2*n_max, one, evec_red, lda, perm_mat, 2*n_max, &
                                    zero, evec_temp, lda)
@@ -478,12 +478,12 @@ contains
                     end if
                 end if
 !
-!       copy and save the new eigenvectors for the next iteration
+! copy and save the new eigenvectors for the next iteration
 !
                 copy_evec = evec_red
 !
-!       extract the eigenvalues and compute the ritz approximation to the
-!       eigenvectors
+! extract the eigenvalues and compute the ritz approximation to the
+! eigenvectors
 !
                 eig = e_red_re(1:n_max)
 !
@@ -494,13 +494,13 @@ contains
                     call dgemm('n', 'n', n, n_max, ld_current, one, space, n, evec_red, lda, zero, evec_2, n)
                 end select
 !
-!       compute the residuals, and their rms and sup norms
+! compute the residuals, and their rms and sup norms
 !
                 call dgemm('n', 'n', n, n_max, ld_current, one, aspace, n, evec_red, lda, zero, residuals, n)
 !
                 do i_eig = 1, n_targ
 !
-!         if the eigenvalue is already converged, skip it.
+! if the eigenvalue is already converged, skip it.
 !
                     if (done(i_eig)) cycle
 !
@@ -515,8 +515,8 @@ contains
 !
                 end do
 !
-!       check convergence. lock the first contiguous converged eigenvalues
-!       by setting the logical array "done" to true
+! check convergence. lock the first contiguous converged eigenvalues
+! by setting the logical array "done" to true
 !
                 do i_eig = 1, n_targ
                     if (done(i_eig)) cycle
@@ -529,7 +529,7 @@ contains
                     end if
                 end do
 !
-!       print some information
+! print some information
 !
                 if (verbose) then
                     do i_eig = 1, n_targ
@@ -543,8 +543,8 @@ contains
                     exit
                 end if
 !
-!       check weather an update is required.
-!       if not, perform a davidson restart
+! check weather an update is required.
+! if not, perform a davidson restart
 !
                 if (ld_current + n_act .le. lda) then
 !
@@ -555,8 +555,8 @@ contains
                     if (verbose) write (6, '(t7,a)') 'Restarting Davidson'
                     n_act = n_max
 !
-!         put current eigenvectors into the first position of tne
-!         expansion space. Same thing with their application
+! put current eigenvectors into the first position of tne
+! expansion space. Same thing with their application
 !
                     select case (current_run)
                     case (1)
@@ -569,12 +569,12 @@ contains
                         call dcopy(n_max*n, evec_2, 1, aspace, 1)
                     end select
 !
-!         orthogonalize non orthogonal eigenvectors and propagate
-!         to their application
+! orthogonalize non orthogonal eigenvectors and propagate
+! to their application
 !
                     call ortho(n, n_max, space, aspace)
 !
-!         reconstruct first block of the reduced matrix
+! reconstruct first block of the reduced matrix
 !
                     a_red = zero
                     select case (current_side)
@@ -584,18 +584,18 @@ contains
                         call dgemm('t', 'n', n_max, n_max, n, one, aspace, n, space, n, zero, a_red, lda)
                     end select
 !
-!         initialize indexes back to their starting values
+! initialize indexes back to their starting values
 !
                     ld_current = n_max
                     i_beg = n_max + 1
 !
                 end if
 !
-!       compute the preconditioned residuals using davidson's procedure
-!       note that this is done with a user-supplied subroutine, that can
-!       be generalized to experiment with fancy preconditioners that may
-!       be more effective than the diagonal one, as in the original
-!       algorithm.
+! compute the preconditioned residuals using davidson's procedure
+! note that this is done with a user-supplied subroutine, that can
+! be generalized to experiment with fancy preconditioners that may
+! be more effective than the diagonal one, as in the original
+! algorithm.
 !
                 n_act = n_max
                 n_frozen = 0
@@ -610,10 +610,10 @@ contains
                 ind = n_max - n_act + 1
                 call precnd(n, n_act, -eig(ind), residuals(1, ind), space(1, i_beg))
 !
-!       orthogonalize the new vectors to the existing ones of the respective other
-!       space and orthogonalize set of new vectors among each other
+! orthogonalize the new vectors to the existing ones of the respective other
+! space and orthogonalize set of new vectors among each other
 !
-!       Gram-Schmit orthogonalization of residual to the respective subspace
+! Gram-Schmit orthogonalization of residual to the respective subspace
 !
                 call get_time(t1)
                 call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg), xx, xx)
@@ -625,12 +625,12 @@ contains
 !
             end do
 !
-!     end of davidson, print results
+! end of davidson, print results
 !
             call get_time(t_tot2)
             t_tot = t_tot2 - t_tot1
 !
-!     if required, print timings
+! if required, print timings
 !
             if (verbose) then
                 print *
@@ -639,15 +639,15 @@ contains
                 print *
             end if
 !
-!     If only one diagonalization is required we are done,
-!     otherwise let's use our result as a guess for the left side
+! If only one diagonalization is required we are done,
+! otherwise let's use our result as a guess for the left side
 !
             if (davidson_runs .eq. 2) then
                 if (current_run .eq. 1) then
 !
                     eig_r = eig
 !
-!         use evec_1 as guess for evec_2
+! use evec_1 as guess for evec_2
 !
                     call dcopy(n*n_max, evec_1, 1, evec_2, 1)
                     call ortho_cd(n, n_max, evec_2, yy, ok)
@@ -657,7 +657,7 @@ contains
 !
                 else
 !
-!         check if energies are same
+! check if energies are same
 !
                     if (maxval(eig_r(:n_targ) - eig(:n_targ)) .gt. tol) then
                         print "(*(d10.2))", eig_r(:n_targ)
@@ -672,7 +672,7 @@ contains
             end if
         end do
 !
-!   deallocate memory
+! deallocate memory
 !
         call mfree(work)
         call mfree(tau)
@@ -723,8 +723,8 @@ contains
 
     subroutine sort_eigenpairs(m, w_re, w_im, v, n_want, ldv, ignore, thresh, mask_in)
 !
-!   sort m real & imaginary eigenvalues and right & left eigenvectors of length n
-!   in decreasing order according to the real eigenvalues in the rang.e of n_want
+! sort m real & imaginary eigenvalues and right & left eigenvectors of length n
+! in decreasing order according to the real eigenvalues in the rang.e of n_want
 !
         implicit none
         integer, intent(in) :: m, ldv, n_want
@@ -733,12 +733,12 @@ contains
         logical, intent(in) :: ignore
         logical, optional :: mask_in(m)
 !
-!   local variables
+! local variables
 !
         integer :: i, j, idx, min_idx(1), fin
         logical :: mask(m)
 !
-!   define initial mask
+! define initial mask
 !
         if (present(mask_in)) then
             mask = mask_in
@@ -748,14 +748,14 @@ contains
 !
         do i = 1, n_want
 !
-!     identify minimal value and mask first position for next iteration
+! identify minimal value and mask first position for next iteration
 !
             min_idx = minloc(w_re, mask=mask)
             idx = min_idx(1)
 !
-!     check complex contribution, if so, move it to with to the last position
-!     of the array and mask it. search again for lowest eigenvalue and
-!     continue with that.
+! check complex contribution, if so, move it to with to the last position
+! of the array and mask it. search again for lowest eigenvalue and
+! continue with that.
 !
             if (ignore .and. abs(w_im(idx)) > thresh) then
                 fin = m
@@ -770,12 +770,12 @@ contains
 !
                 mask(fin) = .false.
 !
-!       do various swaps for double value on last available position fin
+! do various swaps for double value on last available position fin
 !
                 call swap_eigenpairs(fin, idx, m, w_re, w_im, v, ldv)
 !
-!       now search again for lowest and find automatically the corresponding
-!       pair with imaginary contribution
+! now search again for lowest and find automatically the corresponding
+! pair with imaginary contribution
 !
                 min_idx = minloc(w_re, mask=mask)
                 idx = min_idx(1)
@@ -783,7 +783,7 @@ contains
 !
             mask(i) = .false.
 !
-!     do various swaps to move minimum value et alii on position i
+! do various swaps to move minimum value et alii on position i
 !
             call swap_eigenpairs(i, idx, m, w_re, w_im, v, ldv)
 !
@@ -794,8 +794,8 @@ contains
 
     subroutine swap_eigenpairs(i, j, m, w_re, w_im, v, ldv)
 !
-!   swaps m real & immaginary eigenvalues and eigenvectors of length l of the
-!   indices i and j with each other
+! swaps m real & immaginary eigenvalues and eigenvectors of length l of the
+! indices i and j with each other
 !
         implicit none
         integer, intent(in) :: m, ldv, i, j

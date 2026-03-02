@@ -32,8 +32,8 @@ contains
         real(dp), dimension(n, m), optional, intent(inout) :: w
 !! Second set of vectors to which we may apply the same transformation
 !
-!   local scratch
-!   =============
+! local scratch
+! =============
 !
         real(dp), allocatable :: v(:, :)
 !
@@ -71,8 +71,8 @@ contains
         real(dp), dimension(n, m), intent(inout) :: bu
 !! Application of an external matrix \(B\) on \(u\)
 !
-!   local variables
-!   ===============
+! local variables
+! ===============
 !
         integer :: info, i, j
         real(dp), allocatable :: metric(:, :), sigma(:), u_svd(:, :), vt_svd(:, :), &
@@ -87,8 +87,8 @@ contains
 !
         if (use_svd) then
 !
-!     debug option: use svd to b-orthonormalize, by computing
-!     b**(-1/2)
+! debug option: use svd to b-orthonormalize, by computing
+! b**(-1/2)
 !
             call mallocate(m, sigma)
             call mallocate(m, m, u_svd)
@@ -97,7 +97,7 @@ contains
 !
             call dgesvd('a', 'a', m, m, metric, m, sigma, u_svd, m, vt_svd, m, work, lwork, info)
 !
-!     compute sigma**(-1/2)
+! compute sigma**(-1/2)
 !
             do i = 1, m
                 if (sigma(i) .gt. tol_svd) then
@@ -107,7 +107,7 @@ contains
                 end if
             end do
 !
-!     compute metric ** (-1/2). first, compute sigma ** (-1/2) vt
+! compute metric ** (-1/2). first, compute sigma ** (-1/2) vt
 !
             metric = zero
             do i = 1, m
@@ -116,14 +116,14 @@ contains
                 end do
             end do
 !
-!     now, multiply for u:
+! now, multiply for u:
 !
             vt_svd = metric
             call dgemm('n', 'n', m, m, m, one, u_svd, m, vt_svd, m, zero, metric, m)
 !
-!     metric contains s ** (-1/2), and projects out directions corresponding
-!     to pathological singular values.
-!     orthogonalize u and bu:
+! metric contains s ** (-1/2), and projects out directions corresponding
+! to pathological singular values.
+! orthogonalize u and bu:
 !
             call dgemm('n', 'n', n, m, m, one, u, n, metric, m, zero, temp, n)
             u = temp
@@ -136,11 +136,11 @@ contains
             call mfree(temp)
         else
 !
-!     compute the cholesky factorization of the metric.
+! compute the cholesky factorization of the metric.
 !
             call dpotrf('l', m, metric, m, info)
 !
-!     get u * l^-T and bu * l^-T
+! get u * l^-T and bu * l^-T
 !
             call dtrsm('r', 'l', 't', 'n', n, m, one, metric, m, u, n)
             call dtrsm('r', 'l', 't', 'n', n, m, one, metric, m, bu, n)
@@ -199,8 +199,8 @@ contains
         logical, intent(inout) :: ok
 !! Status of the procedure in output
 !
-!   local variables
-!   ===============
+! local variables
+! ===============
 !
         integer :: it, it_micro
         real(dp) :: error, alpha, unorm, shift
@@ -209,13 +209,13 @@ contains
         real(dp), parameter :: tol_ortho = two*epsilon(one)
         integer, parameter :: maxit = 10
 !
-!   local scratch
-!   =============
+! local scratch
+! =============
 !
         real(dp), allocatable :: metric(:, :), msave(:, :)
 !
 !
-!   get memory for the metric.
+! get memory for the metric.
 !
         call mallocate(m, m, metric)
         call mallocate(m, m, msave)
@@ -223,7 +223,7 @@ contains
         metric = zero
         macro_done = .false.
 !
-!   assemble the metric
+! assemble the metric
 !
         it = 0
         growth = one
@@ -231,7 +231,7 @@ contains
             it = it + 1
             if (it .gt. maxit) then
 !
-!       ortho_cd failed. return with an error message
+! ortho_cd failed. return with an error message
 !
                 ok = .false.
                 write (6, 100) ' maximum number of iterations reached.'
@@ -240,11 +240,11 @@ contains
             call dgemm('t', 'n', m, m, n, one, u, n, u, n, zero, metric, m)
             msave = metric
 !
-!   compute the cholesky factorization of the metric.
+! compute the cholesky factorization of the metric.
 !
             call dpotrf('l', m, metric, m, info)
 !
-!     if dpotrf failed, try a second time, after level-shifting the diagonal of the metric.
+! if dpotrf failed, try a second time, after level-shifting the diagonal of the metric.
 !
             if (info .ne. 0) then
 !
@@ -253,14 +253,14 @@ contains
                 it_micro = 0
                 micro_done = .false.
 !
-!       add larger and larger shifts to the diagonal until dpotrf manages to factorize it.
+! add larger and larger shifts to the diagonal until dpotrf manages to factorize it.
 !
                 do while (.not. micro_done)
                     it_micro = it_micro + 1
                     if (it_micro .gt. maxit) then
 !
-!           something went very wrong. return with an error status, the orthogonalization
-!           will be carried out using a different algorithm.
+! something went very wrong. return with an error status, the orthogonalization
+! will be carried out using a different algorithm.
 !
                         ok = .false.
                         write (6, 100) ' maximum number of iterations for factorization reached.'
@@ -278,39 +278,39 @@ contains
 !
             end if
 !
-!     we assume that the error on the orthogonality is of order k(l)^2 * eps,
-!     where eps is the machine precision.
-!     the condition number k(l) is estimated by computing
+! we assume that the error on the orthogonality is of order k(l)^2 * eps,
+! where eps is the machine precision.
+! the condition number k(l) is estimated by computing
 !
-!     k(l) ||l|| ||l^-1||,
+! k(l) ||l|| ||l^-1||,
 !
-!     where the norm used is the following (see norm_estimate):
+! where the norm used is the following (see norm_estimate):
 !
-!     || A || = || D + O || <= || D ||_inf + || O ||_2
+! || A || = || D + O || <= || D ||_inf + || O ||_2
 !
-!     compute l^-1, using msave to store the inverse cholesky factor
+! compute l^-1, using msave to store the inverse cholesky factor
 !
             msave = metric
             call dtrtri('l', 'n', m, msave, m, info)
 !
-!     compute the norm of l, l^-1 and the condition number:
+! compute the norm of l, l^-1 and the condition number:
 !
             l_norm = norm_est(m, metric)
             linv_norm = norm_est(m, msave)
             rcond = l_norm*linv_norm
 !
-!     in each iteration of ortho_cd, we apply l^-t to u, which introduces
-!     a numerical error of order ||l^-1||.
-!     this error is saved in growth and used in ortho_vs_x to check how much
-!     ortho_cd spoiled the previously computed orthogonality to x.
+! in each iteration of ortho_cd, we apply l^-t to u, which introduces
+! a numerical error of order ||l^-1||.
+! this error is saved in growth and used in ortho_vs_x to check how much
+! ortho_cd spoiled the previously computed orthogonality to x.
 !
             growth = growth*linv_norm
 !
-!     orthogonalize u by applying l^(-t)
+! orthogonalize u by applying l^(-t)
 !
             call dtrmm('r', 'l', 't', 'n', n, m, one, msave, m, u, n)
 !
-!     check the error:
+! check the error:
 !
             error = epsilon(one)*rcond*rcond
             macro_done = error .lt. tol_ortho
@@ -327,11 +327,11 @@ contains
 !
     subroutine biortho_vs_x(n, m, k, xl, xr, ul, ur)
 !* Given four sets: \(x_l(n,m)\), \(x_r(n,m)\) and \(u_l(n,k)\), \(u_r(n,k)\)
-!  of vectors, where \(x_l\) and \(x_r\) are assumed to be orthogonal,
-!  orthogonalize \(u_l\) against \(x_l\) and
-!  \(u_r\) against \(x_r\).
+! of vectors, where \(x_l\) and \(x_r\) are assumed to be orthogonal,
+! orthogonalize \(u_l\) against \(x_l\) and
+! \(u_r\) against \(x_r\).
 !
-!  Furthermore, orthonormalize \(u_l\) and \(u_r\).
+! Furthermore, orthonormalize \(u_l\) and \(u_r\).
 !
         implicit none
 !
@@ -339,7 +339,7 @@ contains
         real(dp), dimension(n, m), intent(in) :: xl, xr
         real(dp), dimension(n, k), intent(inout) :: ul, ur
 !
-!   local variables:
+! local variables:
 !
         integer :: it
         real(dp) :: xu_norm(2), growth
@@ -357,14 +357,14 @@ contains
             it = it + 1
             if (it .gt. maxit) stop 'biortho_vs_x failed.'
 !
-!     biorthogonalize ul and ur to xr and xl:
+! biorthogonalize ul and ur to xr and xl:
 !
             call dgemm('t', 'n', m, k, n, one, xl, n, ur, n, zero, xu, m)
             call dgemm('n', 'n', n, k, m, -one, xr, n, xu, m, one, ur, n)
             call dgemm('t', 'n', m, k, n, one, xr, n, ul, n, zero, xu, m)
             call dgemm('n', 'n', n, k, m, -one, xl, n, xu, m, one, ul, n)
 !
-!     now, orthogonalize ur and ul.
+! now, orthogonalize ur and ul.
 !
             call ortho_cd(n, k, ul, growth, ok)
             xu_norm(1) = growth*epsilon(one)
@@ -374,8 +374,8 @@ contains
             done = xu_norm(1) .lt. tol_ortho .and. xu_norm(2) .lt. tol_ortho
         end do
 !
-!   make the left and right eigenvectors biorthogonal using the singular value
-!   decomposition
+! make the left and right eigenvectors biorthogonal using the singular value
+! decomposition
 !
         call svd_biortho(n, k, ul, ur)
 !
@@ -384,12 +384,12 @@ contains
 !
     subroutine svd_biortho(n, m, u_l, u_r)
 !*  Given two set of vectors, biorthogonalize them by computing the SVD decomposition
-!   of the overlap matrix and then solving
+! of the overlap matrix and then solving
 ! \[
-!     metric = u_l^Tu_r \\
-!     metric = U \Sigma V^T \\
-!     u_l = u_l V^T \\
-!     u_r = u_r U
+! metric = u_l^Tu_r \\
+! metric = U \Sigma V^T \\
+! u_l = u_l V^T \\
+! u_r = u_r U
 ! \]
 ! Resulting vectors obey:
 ! \[ u_l^Tu_r = \textbf{I} \]
@@ -410,7 +410,7 @@ contains
 !
         real(dp), allocatable :: over(:, :), u(:, :), s(:), vt(:, :), tmp(:, :)
 !
-!   allocate memory.
+! allocate memory.
 !
         call mallocate(m, m, over)
         call mallocate(m, s)
@@ -418,23 +418,23 @@ contains
         call mallocate(m, m, vt)
         call mallocate(n, m, tmp)
 !
-!   compute the overlap:
+! compute the overlap:
 !
         call dgemm('t', 'n', m, m, n, one, u_l, n, u_r, n, zero, over, m)
 !
-!   compute its singular value decomposition:
+! compute its singular value decomposition:
 !
         call dgesvd('a', 'a', m, m, over, m, s, u, m, vt, m, work, lwork, info)
 !
-!   compute l*u and r*v
+! compute l*u and r*v
 !
         call dgemm('n', 'n', n, m, m, one, u_l, n, u, m, zero, tmp, n)
         u_l = tmp
         call dgemm('n', 't', n, m, m, one, u_r, n, vt, m, zero, tmp, n)
         u_r = tmp
 !
-!   scale with square root of singular values
-!   here, dropping redundant vectors could be a good idea...
+! scale with square root of singular values
+! here, dropping redundant vectors could be a good idea...
 !
         do i = 1, m
             fac = one/sqrt(s(i))
@@ -451,13 +451,13 @@ contains
 !
     real(dp) function norm_est(m, a)
 !* Compute a cheap estimate of the norm of a lower triangular matrix.
-!  Let \(a = d + o\), where \(d = diag(a)\). Since:
-!  \[
-!   || a || \leq || d || + || o ||
-!  \]
-!  We compute \(|| d ||\) as \(max_i |d(i)|\) and \(|| o ||\) as its frobenius norm.
+! Let \(a = d + o\), where \(d = diag(a)\). Since:
+! \[
+! || a || \leq || d || + || o ||
+! \]
+! We compute \(|| d ||\) as \(max_i |d(i)|\) and \(|| o ||\) as its frobenius norm.
 !
-!  This is tight enough, and goes to 1 when \(a\) approaches the identity.
+! This is tight enough, and goes to 1 when \(a\) approaches the identity.
 !
         implicit none
         integer, intent(in) :: m
@@ -465,7 +465,7 @@ contains
         real(dp), dimension(m, m), intent(in) :: a
 !! Matrix to compute the norm
 !
-!   Local vars
+! Local vars
 !
         integer :: i, j
         real(dp) :: diag_norm, od_norm
@@ -490,19 +490,19 @@ contains
     subroutine ortho_vs_x(n, m, k, x, u, ax, au)
         implicit none
 !*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
-!   is assumed to be orthogonal, orthogonalize \(u\) against \(x\).
+! is assumed to be orthogonal, orthogonalize \(u\) against \(x\).
 !
-!   If required, orthogonalize au to ax using the same linear
-!   transformation, where ax and au are the results of the
-!   application of a matrix \(a\) to both \(x\) and \(u\).
+! If required, orthogonalize au to ax using the same linear
+! transformation, where ax and au are the results of the
+! application of a matrix \(a\) to both \(x\) and \(u\).
 !
-!   Furthermore, orthonormalize \(u\) and, if required, apply the
-!   same transformation to \(au\).
+! Furthermore, orthonormalize \(u\) and, if required, apply the
+! same transformation to \(au\).
 !
-!   This routine performs the \(u\) vs \(x\) orthogonalization and the
-!   subsequent orthonormalization of \(u\) iteratively, until the
-!   overlap between \(x\) and the orthogonalized \(u\) is smaller than
-!   a (tight) threshold.
+! This routine performs the \(u\) vs \(x\) orthogonalization and the
+! subsequent orthonormalization of \(u\) iteratively, until the
+! overlap between \(x\) and the orthogonalized \(u\) is smaller than
+! a (tight) threshold.
 !
         integer, intent(in) :: n
 !! Lenght of the vectors
@@ -519,8 +519,8 @@ contains
         real(dp), dimension(n, k), intent(inout) :: au
 !! Application of an external matrix on \(u\)
 !
-!   local variables:
-!   ================
+! local variables:
+! ================
 !
         logical :: done, ok
         integer :: it
@@ -530,39 +530,39 @@ contains
         integer, parameter :: maxit = 10
         logical, parameter :: useqr = .false.
 !
-!   allocate space for the overlap between x and u.
+! allocate space for the overlap between x and u.
 !
         ok = .false.
         call mallocate(m, k, xu)
         done = .false.
         it = 0
 !
-!   start with an initial orthogonalization to improve conditioning.
+! start with an initial orthogonalization to improve conditioning.
 !
         if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
         if (.not. ok .or. useqr) call ortho(n, k, u, au)
 !
-!   iteratively orthogonalize u against x, and then orthonormalize u.
+! iteratively orthogonalize u against x, and then orthonormalize u.
 !
         do while (.not. done)
             it = it + 1
 !
-!     u = u - x (x^t u)
+! u = u - x (x^t u)
 !
             call dgemm('t', 'n', m, k, n, one, x, n, u, n, zero, xu, m)
             call dgemm('n', 'n', n, k, m, -one, x, n, xu, m, one, u, n)
 !
-!     now, orthonormalize u.
+! now, orthonormalize u.
 !
             if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
             if (.not. ok .or. useqr) call ortho(n, k, u, au)
 !
-!     the orthogonalization has introduced an error that makes the new
-!     vector no longer fully orthogonal to x. assuming that u was
-!     orthogonal to x to machine precision before, we estimate the
-!     error with growth * eps, where growth is the product of the norms
-!     of all the linear transformations applied to u.
-!     if ortho_cd has failed, we just compute the overlap and its norm.
+! the orthogonalization has introduced an error that makes the new
+! vector no longer fully orthogonal to x. assuming that u was
+! orthogonal to x to machine precision before, we estimate the
+! error with growth * eps, where growth is the product of the norms
+! of all the linear transformations applied to u.
+! if ortho_cd has failed, we just compute the overlap and its norm.
 !
             if (.not. ok .or. useqr) then
                 call dgemm('t', 'n', m, k, n, one, x, n, u, n, zero, xu, m)
@@ -572,7 +572,7 @@ contains
             end if
             done = xu_norm .lt. tol_ortho
 !
-!     if things went really wrong, abort.
+! if things went really wrong, abort.
 !
             if (it .gt. maxit) stop ' catastrophic failure of ortho_vs_x'
         end do
@@ -584,13 +584,13 @@ contains
 !
     subroutine b_ortho_vs_x(n, m, k, x, bx, u)
 !*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
-!   is assumed to be orthogonal, B-orthogonalize \(u\) against \(x\).
-!   furthermore, orthonormalize \(u\).
+! is assumed to be orthogonal, B-orthogonalize \(u\) against \(x\).
+! furthermore, orthonormalize \(u\).
 !
-!   This routine performs the \(u\) vs \(x\) orthogonalization and the
-!   subsequent orthonormalization of \(u\) iteratively, until the
-!   overlap between \(x\) and the orthogonalized \(u\) is smaller than
-!   a (tight) threshold.
+! This routine performs the \(u\) vs \(x\) orthogonalization and the
+! subsequent orthonormalization of \(u\) iteratively, until the
+! overlap between \(x\) and the orthogonalized \(u\) is smaller than
+! a (tight) threshold.
 !
         implicit none
 !
@@ -607,8 +607,8 @@ contains
         real(dp), dimension(n, k), intent(inout) :: u
 !! Vectors to orthogonalize
 !
-!   local variables:
-!   ================
+! local variables:
+! ================
 !
         logical :: done, ok
         integer :: it
@@ -618,39 +618,39 @@ contains
         integer, parameter :: maxit = 10
         logical, parameter :: useqr = .false.
 !
-!   allocate space for the overlap between x and u.
+! allocate space for the overlap between x and u.
 !
         ok = .false.
         call mallocate(m, k, xu)
         done = .false.
         it = 0
 !
-!   start with an initial orthogonalization to improve conditioning.
+! start with an initial orthogonalization to improve conditioning.
 !
         if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
         if (.not. ok .or. useqr) call ortho(n, k, u)
 !
-!   iteratively orthogonalize u against x, and then orthonormalize u.
+! iteratively orthogonalize u against x, and then orthonormalize u.
 !
         do while (.not. done)
             it = it + 1
 !
-!     u = u - x (bx^t u)
+! u = u - x (bx^t u)
 !
             call dgemm('t', 'n', m, k, n, one, bx, n, u, n, zero, xu, m)
             call dgemm('n', 'n', n, k, m, -one, x, n, xu, m, one, u, n)
 !
-!     now, orthonormalize u.
+! now, orthonormalize u.
 !
             if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
             if (.not. ok .or. useqr) call ortho(n, k, u)
 !
-!     compute the overlap between the orthonormalized u and x and decide
-!     whether the orthogonalization procedure converged.
+! compute the overlap between the orthonormalized u and x and decide
+! whether the orthogonalization procedure converged.
 !
-!     note that, if we use ortho_cd, we estimate the norm of the overlap
-!     using the growth factor returned in growth.
-!     see ortho_vs_x for more information.
+! note that, if we use ortho_cd, we estimate the norm of the overlap
+! using the growth factor returned in growth.
+! see ortho_vs_x for more information.
 !
             if (.not. ok .or. useqr) then
                 call dgemm('t', 'n', m, k, n, one, bx, n, u, n, zero, xu, m)
@@ -660,7 +660,7 @@ contains
             end if
             done = xu_norm .lt. tol_ortho
 !
-!     if things went really wrong, abort.
+! if things went really wrong, abort.
 !
             if (it .gt. maxit) stop ' catastrophic failure of b_ortho_vs_x'
         end do

@@ -255,8 +255,8 @@ contains
 !
 !
     subroutine nums_to_bytes(num, b_num, b_unit)
-  !! Converter from numbers to Bytes. Actual unit depends on the
-  !! magnitude of the number and it is returned. Assumes 8 Byte numbers
+!! Converter from numbers to Bytes. Actual unit depends on the
+!! magnitude of the number and it is returned. Assumes 8 Byte numbers
         implicit none
         integer, intent(in) :: num
         real(dp), intent(inout) :: b_num
@@ -285,7 +285,7 @@ contains
     end subroutine nums_to_bytes
 !
     subroutine bytes_to_nums(bytes, bytes_unit, nums)
-  !! Converter from Bytes to numbers. Assumes 8 Byte numbers
+!! Converter from Bytes to numbers. Assumes 8 Byte numbers
         implicit none
         integer, intent(in) :: bytes
         character(len=*), intent(in) :: bytes_unit
@@ -371,9 +371,9 @@ contains
 !
     end subroutine dgl_check_memleak
 !
-!  =====================
-!  More global routines
-!  =====================
+! =====================
+! More global routines
+! =====================
 !
     subroutine dgl_init(lenght, n_arrs, mem, mem_unit, verbose_in)
 !! Global initializer for all drivers
@@ -413,7 +413,7 @@ contains
     end subroutine dgl_init
 !
     subroutine dgl_error(string)
-  !! DiagLib error termination
+!! DiagLib error termination
         implicit none
         character(len=*), intent(in) :: string
 
@@ -422,7 +422,7 @@ contains
     end subroutine
 !
     subroutine dgl_warning(string)
-  !! DiagLib error termination
+!! DiagLib error termination
         implicit none
         character(len=*), intent(in) :: string
 
@@ -441,16 +441,16 @@ contains
         integer :: lwork3
         integer, external :: ilaenv
 !
-!   maximum size of the rayleigh-ritz matrix:
+! maximum size of the rayleigh-ritz matrix:
 !
         len_rr = 3*n_max
 !
-!   maximum size of the space to orthonormalize:
+! maximum size of the space to orthonormalize:
 !
         len_qr = 6*n_max
 !
-!   use lapack query routines to compute the optimal memory required
-!   for diagonalization and QR decomposition.
+! use lapack query routines to compute the optimal memory required
+! for diagonalization and QR decomposition.
 !
         nb = ilaenv(1, 'DSYTRD', 'l', len_rr, -1, -1, -1)
         lwork1 = len_rr*nb
@@ -472,7 +472,7 @@ contains
 !$      real(dp) :: omp_get_wtime
 !$      external :: omp_get_wtime
 !
-!   get cpu and (if openmp is available) wall time.
+! get cpu and (if openmp is available) wall time.
 !
         t = zero
         call cpu_time(t(1))

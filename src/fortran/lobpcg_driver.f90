@@ -49,68 +49,68 @@ contains
         procedure(metvec_), pointer, optional :: metvec
 !! Pointer to External subroutine that applies the metric-vector multiplication
 !
-!   local variables:
-!   ================
+! local variables:
+! ================
         logical :: verbose_in
         integer :: max_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
 !
-!   expansion space varibles:
-!       total dimension, current dimension
+! expansion space varibles:
+! total dimension, current dimension
 !
         integer :: lda, ld_current
 !
-!   number of large arrays that will be allocated
+! number of large arrays that will be allocated
 !
         integer :: n_arrs
 !
-!   tolerances on residuals norms, used for convergence
+! tolerances on residuals norms, used for convergence
 !
         real(dp) :: tol_rms, tol_max
 !
-!   number of active vectors at a given iteration, and indices to access them
+! number of active vectors at a given iteration, and indices to access them
 !
         integer :: n_act
 !
-!   indexes to access specific parts of the expansion space
+! indexes to access specific parts of the expansion space
 !
         integer :: ind_x, ind_w, ind_p
 !
-!   varible to determine the type of problem
+! varible to determine the type of problem
 !
         logical :: generalized
 !
-!   iterators and utilities
+! iterators and utilities
 !
         integer :: it, i_eig
         real(dp) :: sqrtn, xx(1)
 !
-!   array to control convergence and orthogonalization
+! array to control convergence and orthogonalization
 !
         logical, allocatable :: done(:)
 !
-!   expansion spaces, residuals and their norms.
+! expansion spaces, residuals and their norms.
 !
         real(dp), allocatable :: space(:, :), aspace(:, :), residuals(:, :), r_norm(:, :)
         real(dp), allocatable :: bspace(:, :)
 !
-!   subspace matrix and eigenvalues.
+! subspace matrix and eigenvalues.
 !
         real(dp), allocatable :: a_red(:, :), e_red(:)
         real(dp), allocatable :: u_x(:, :), u_p(:, :), x_new(:, :), ax_new(:, :)
         real(dp), allocatable :: bx_new(:, :)
 !
-!   ================
-!   START EXECUTION
-!   ================
+! ================
+! START EXECUTION
+! ================
 !
-!  Stupidity check
+! Stupidity check
 !
         if (n_targ .gt. n_max) call dgl_error( &
             "Number of eigenvalues request is larger that size of arrays passed")
 !
-!   check what problem we are dealing with
+! check what problem we are dealing with
 !
         generalized = present(metvec)
         if (generalized) then
@@ -128,7 +128,7 @@ contains
         memory = 80; if (present(dgl_memory)) memory = dgl_memory !80MBs
         memory_unit = "MB"; if (present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
-!   set size of the expansion space
+! set size of the expansion space
 !
         lda = 3*n_max
 !
@@ -139,14 +139,14 @@ contains
         end if
         call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
 !
-!   start by allocating memory for the various lapack routines
+! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(n, n_max)
         call mallocate(lwork, work)
         call mallocate(2*n_max, tau)
 !
-!   allocate memory for the expansion space, the corresponding
-!   matrix-multiplied vectors and the residuals:
+! allocate memory for the expansion space, the corresponding
+! matrix-multiplied vectors and the residuals:
 !
         call mallocate(n, lda, space)
         call mallocate(n, lda, aspace)
@@ -154,23 +154,23 @@ contains
         if (generalized) call mallocate(n, lda, bspace)
 
 !
-!   allocate memory for the reduced matrix and its eigenvalues:
+! allocate memory for the reduced matrix and its eigenvalues:
 !
         call mallocate(lda, lda, a_red)
         call mallocate(lda, e_red)
 !
-!   allocate memory for temporary copies of x, ax, and bx:
+! allocate memory for temporary copies of x, ax, and bx:
 !
         call mallocate(n, n_max, x_new)
         call mallocate(n, n_max, ax_new)
         if (generalized) call mallocate(n, n_max, bx_new)
 !
-!   allocate memory for convergence check
+! allocate memory for convergence check
 !
         call mallocate(n_max, done)
         call mallocate(2, n_max, r_norm)
 !
-!   clean out:
+! clean out:
 !
         space = zero
         aspace = zero
@@ -179,20 +179,20 @@ contains
 !
         call get_time(t_tot)
 !
-!   check whether we have a guess for the eigenvectors in evec, and
-!   whether it is orthonormal.
-!   if evec is zero, create a random guess.
+! check whether we have a guess for the eigenvectors in evec, and
+! whether it is orthonormal.
+! if evec is zero, create a random guess.
 !
         call check_guess(n, n_max, evec)
 !
-!   if required, compute b*evec and b-orthogonalize the guess
+! if required, compute b*evec and b-orthogonalize the guess
 !
         if (generalized) then
             call metvec(n, n_max, evec, bx_new)
             call b_ortho(n, n_max, evec, bx_new)
         end if
 !
-!   compute the first eigenpairs by diagonalizing the reduced matrix:
+! compute the first eigenpairs by diagonalizing the reduced matrix:
 !
         call dcopy(n*n_max, evec, 1, space, 1)
         if (generalized) call dcopy(n*n_max, bx_new, 1, bspace, 1)
@@ -208,22 +208,22 @@ contains
         t_diag = t_diag + t2 - t1
         eig = e_red(1:n_max)
 !
-!   get the ritz vectors:
+! get the ritz vectors:
 !
         call dgemm('n', 'n', n, n_max, n_max, one, space, n, a_red, lda, zero, evec, n)
         call dcopy(n*n_max, evec, 1, space, 1)
         call dgemm('n', 'n', n, n_max, n_max, one, aspace, n, a_red, lda, zero, evec, n)
         call dcopy(n*n_max, evec, 1, aspace, 1)
 !
-!   if required, also get b times the ritz vector:
+! if required, also get b times the ritz vector:
 !
         if (generalized) then
             call dgemm('n', 'n', n, n_max, n_max, one, bspace, n, a_red, lda, zero, evec, n)
             call dcopy(n*n_max, evec, 1, bspace, 1)
         end if
 !
-!   do the first iteration explicitly.
-!   build the residuals:
+! do the first iteration explicitly.
+! build the residuals:
 !
         call dcopy(n*n_max, aspace, 1, residuals, 1)
         if (generalized) then
@@ -236,20 +236,20 @@ contains
             end do
         end if
 !
-!   compute the preconditioned residuals:
+! compute the preconditioned residuals:
 !
         ind_x = 1
         ind_w = ind_x + n_max
         call precnd(n, n_max, shift - eig(ind_x), residuals(1, ind_x), space(1, ind_w))
 !
-!   orthogonalize:
+! orthogonalize:
 !
         call get_time(t1)
         if (generalized) then
             call b_ortho_vs_x(n, n_max, n_max, space, bspace, space(1, ind_w))
 !
-!     after b_ortho, w is b-orthogonal to x, and orthonormal.
-!     compute the application of b to w, and b-orthonormalize it.
+! after b_ortho, w is b-orthogonal to x, and orthonormal.
+! compute the application of b to w, and b-orthonormalize it.
 !
             call metvec(n, n_max, space(1, ind_w), bspace(1, ind_w))
             call b_ortho(n, n_max, space(1, ind_w), bspace(1, ind_w))
@@ -259,8 +259,8 @@ contains
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
 !
-!   we are now ready to start the main loop.
-!   initialize a few parameters
+! we are now ready to start the main loop.
+! initialize a few parameters
 !
         tol_rms = tol
         tol_max = ten*tol
@@ -287,7 +287,7 @@ contains
 !
         do it = 1, max_iter
 !
-!     perform the matrix-vector multiplication for this iteration:
+! perform the matrix-vector multiplication for this iteration:
 !
             call get_time(t1)
             call matvec(n, n_act, space(1, ind_w), aspace(1, ind_w))
@@ -295,7 +295,7 @@ contains
             t_mv = t_mv + t2 - t1
             if (abs(shift) .gt. num_thresh) call daxpy(n*n_act, shift, space(1, ind_w), 1, aspace(1, ind_w), 1)
 !
-!     build the reduced matrix and diagonalize it:
+! build the reduced matrix and diagonalize it:
 !
             ld_current = n_max + 2*n_act
             if (it .eq. 1) ld_current = 2*n_max
@@ -306,7 +306,7 @@ contains
             call get_time(t2)
             t_diag = t_diag + t2 - t1
 !
-!     if dsyev failed, print an error message and abort (this should not happen)
+! if dsyev failed, print an error message and abort (this should not happen)
 !
             if (info .ne. 0) then
                 write (6, '(t3,a,i6)') 'dsyev failed. info = ', info
@@ -314,7 +314,7 @@ contains
             end if
             eig = e_red(1:n_max)
 !
-!     update x and ax, and, if required, bx:
+! update x and ax, and, if required, bx:
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, space, n, a_red, lda, zero, x_new, n)
             call dgemm('n', 'n', n, n_max, ld_current, one, aspace, n, a_red, lda, zero, ax_new, n)
@@ -322,12 +322,12 @@ contains
                 call dgemm('n', 'n', n, n_max, ld_current, one, bspace, n, a_red, lda, zero, bx_new, n)
             end if
 !
-!     compute the residuals and their rms and sup norms:
+! compute the residuals and their rms and sup norms:
 !
             call dcopy(n*n_max, ax_new, 1, residuals, 1)
             do i_eig = 1, n_max
 !
-!       if the eigenvalue is already converged, skip it.
+! if the eigenvalue is already converged, skip it.
 !
                 if (done(i_eig)) cycle
 !
@@ -340,7 +340,7 @@ contains
                 r_norm(2, i_eig) = maxval(abs(residuals(:, i_eig)))
             end do
 !
-!     only lock the first converged eigenvalues/vectors.
+! only lock the first converged eigenvalues/vectors.
 !
             do i_eig = 1, n_max
                 if (done(i_eig)) cycle
@@ -353,7 +353,7 @@ contains
                 end if
             end do
 !
-!     print some information and check for convergence:
+! print some information and check for convergence:
 !
             if (verbose) then
                 do i_eig = 1, n_targ
@@ -367,29 +367,29 @@ contains
                 exit
             end if
 !
-!     compute the number of active eigenvalues.
-!     converged eigenvalues and eigenvectors will be locked and kept
-!     for orthogonalization purposes.
+! compute the number of active eigenvalues.
+! converged eigenvalues and eigenvectors will be locked and kept
+! for orthogonalization purposes.
 !
             n_act = n_max - count(done)
             ind_x = n_max - n_act + 1
             ind_p = ind_x + n_act
             ind_w = ind_p + n_act
 !
-!     compute the new p and ap vectors only for the active eigenvectors.
-!     this is done by computing the expansion coefficients u_p of x_new
-!     -x in the basis of (x,p,w), and then by orthogonalizing then to
-!     the coefficients u_x of x_new.
+! compute the new p and ap vectors only for the active eigenvectors.
+! this is done by computing the expansion coefficients u_p of x_new
+! -x in the basis of (x,p,w), and then by orthogonalizing then to
+! the coefficients u_x of x_new.
 !
             call mallocate(ld_current, n_max, u_x)
             call mallocate(ld_current, n_act, u_p)
 !
             call get_coeffs(lda, ld_current, n_max, n_act, a_red, u_x, u_p)
 !
-!     p  = space  * u_p
-!     ap = aspace * u_p
-!     bp = bspace * u_p
-!     note that this is numerically safe, as u_p is orthogonal.
+! p  = space  * u_p
+! ap = aspace * u_p
+! bp = bspace * u_p
+! note that this is numerically safe, as u_p is orthogonal.
 !
             call dgemm('n', 'n', n, n_act, ld_current, one, space, n, u_p, ld_current, zero, evec, n)
             call dcopy(n_act*n, evec, 1, space(1, ind_p), 1)
@@ -404,7 +404,7 @@ contains
             call mfree(u_x)
             call mfree(u_p)
 !
-!     now, move x_new and ax_new into space and aspace.
+! now, move x_new and ax_new into space and aspace.
 !
             call dcopy(n*n_max, x_new, 1, space, 1)
             call dcopy(n*n_max, ax_new, 1, aspace, 1)
@@ -412,11 +412,11 @@ contains
                 call dcopy(n*n_max, bx_new, 1, bspace, 1)
             end if
 !
-!     compute the preconditioned residuals w:
+! compute the preconditioned residuals w:
 !
             call precnd(n, n_act, shift - eig(1), residuals(1, ind_x), space(1, ind_w))
 !
-!     orthogonalize w against x and p, and then orthonormalize it:
+! orthogonalize w against x and p, and then orthonormalize it:
 !
             call get_time(t1)
             if (generalized) then
@@ -431,7 +431,7 @@ contains
 !
         end do
 !
-!   deallocate memory and return.
+! deallocate memory and return.
 !
         call mfree(work)
         call mfree(tau)
@@ -451,7 +451,7 @@ contains
 !
         call dgl_check_memleak()
 !
-!   if required, print timings
+! if required, print timings
 !
         call get_time(t2)
         t_tot = t2 - t_tot
@@ -478,17 +478,17 @@ contains
     subroutine get_coeffs(lda, ld_current, n_max, n_act, a_red, u_x, u_p)
         implicit none
 !
-!   given the eigenvetors of the reduced matrix in a_red, extract
-!   the expansion coefficients for x_new (u_x) and assemble the
-!   ones for p_new in u_p.
+! given the eigenvetors of the reduced matrix in a_red, extract
+! the expansion coefficients for x_new (u_x) and assemble the
+! ones for p_new in u_p.
 !
-!   the coefficients u_p are computed as the difference between the
-!   coefficients for x_new and x_old, and only the columns associated
-!   with active eigenvectors are considered.
-!   u_p is then orthogonalized to u_x: this not only guarantees that
-!   the p_new vectors will be orthogonal to x_new, but also allows one
-!   to reuse the ax, aw, and ap vectors to compute ap_new, without
-!   loosing numerical precision.
+! the coefficients u_p are computed as the difference between the
+! coefficients for x_new and x_old, and only the columns associated
+! with active eigenvectors are considered.
+! u_p is then orthogonalized to u_x: this not only guarantees that
+! the p_new vectors will be orthogonal to x_new, but also allows one
+! to reuse the ax, aw, and ap vectors to compute ap_new, without
+! loosing numerical precision.
 !
         integer, intent(in) :: lda, ld_current, n_max, n_act
         real(dp), dimension(lda, lda), intent(in) :: a_red
@@ -503,21 +503,21 @@ contains
 !
         u_x(1:ld_current, 1:n_max) = a_red(1:ld_current, 1:n_max)
 !
-!   u_p = u_x for the active vectors only
+! u_p = u_x for the active vectors only
 !
         u_p = u_x(:, ind_x:n_max)
 !
-!   remove the coefficients for x from u_p
+! remove the coefficients for x from u_p
 !
         do i_eig = 1, n_act
             u_p(off_x + i_eig, i_eig) = u_p(off_x + i_eig, i_eig) - one
         end do
 !
-!   orthogonalize:
+! orthogonalize:
 !
         call ortho_vs_x(ld_current, n_max, n_act, u_x, u_p, xx, xx)
 !
-!   all done.
+! all done.
 !
         return
 !

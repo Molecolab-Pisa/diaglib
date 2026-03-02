@@ -51,67 +51,67 @@ contains
         procedure(metvec_), pointer, optional :: metvec
 !! Pointer to External subroutine that applies the metric-vector multiplication
 !
-!   local variables:
-!   ================
+! local variables:
+! ================
         logical :: verbose_in
         integer :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
 !
-!   expansion space varibles:
-!     total dimension, current dimension
+! expansion space varibles:
+! total dimension, current dimension
 !
         integer :: lda, ld_current
 !
-!   number of large arrays that will be allocated
+! number of large arrays that will be allocated
 !
         integer :: n_arrs
 !
-!   number of active vectors at a given iteration, and indices to access them
+! number of active vectors at a given iteration, and indices to access them
 !
         integer :: n_act, ind, i_beg
 !
-!   number of frozen (i.e. converged) vectors
+! number of frozen (i.e. converged) vectors
 !
         integer :: n_frozen
 !
-!   tolerances on residuals norms, used for convergence
+! tolerances on residuals norms, used for convergence
 !
         real(dp) :: tol_rms, tol_max
 !
-!   type of problem (standard or generalized)
+! type of problem (standard or generalized)
 !
         logical :: generalized
 !
-!   iterators and utilities
+! iterators and utilities
 !
         integer :: it, i_eig
         real(dp) :: sqrtn, xx(1)
 !
-!   array to control convergence
+! array to control convergence
 !
         logical, allocatable :: done(:)
 !
-!   expansion spaces, residuals and their norms.
+! expansion spaces, residuals and their norms.
 !
         real(dp), allocatable :: space(:, :), aspace(:, :), residuals(:, :), r_norm(:, :)
         real(dp), allocatable :: bspace(:, :)
 !
-!   subspace matrix and eigenvalues.
+! subspace matrix and eigenvalues.
 !
         real(dp), allocatable :: a_red(:, :), a_copy(:, :), e_red(:)
         real(dp), allocatable :: s_red(:, :), s_copy(:, :), b_evec(:, :)
 !
-!   ================
-!   START EXECUTION
-!   ================
+! ================
+! START EXECUTION
+! ================
 !
-!   Stupidity checks
+! Stupidity checks
 !
         if (n_targ .gt. n_max) call dgl_error( &
             "Number of eigenvalues request is larger that size of arrays passed")
 !
-!   check what problem we are dealing with
+! check what problem we are dealing with
 !
         generalized = present(metvec)
         if (generalized) then
@@ -120,7 +120,7 @@ contains
             end if
         end if
 !
-!   Parse optional arguments
+! Parse optional arguments
 !
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
         max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
@@ -130,7 +130,7 @@ contains
         memory = 80; if (present(dgl_memory)) memory = dgl_memory
         memory_unit = "MB"; if (present(dgl_memory_unit)) memory_unit = dgl_memory_unit
 !
-!   compute the actual size of the expansion space
+! compute the actual size of the expansion space
 !
         lda = dav_iter*n_max
         if (lda .ge. n) then
@@ -139,8 +139,8 @@ contains
             lda = n - 1
         end if
 !
-!   compute the number of large vectors that will be allocated
-!   to estimate required memory in dgl_init
+! compute the number of large vectors that will be allocated
+! to estimate required memory in dgl_init
 !
         if (generalized) then
             n_arrs = lda*3 + n_max*2
@@ -149,14 +149,14 @@ contains
         end if
         call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
 !
-!   start by allocating memory for the various lapack routines
+! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(n, n_max)
         call mallocate(lwork, work)
         call mallocate(n_max, tau)
 !
-!   allocate memory for the expansion space, the corresponding
-!   matrix-multiplied vectors and the residuals:
+! allocate memory for the expansion space, the corresponding
+! matrix-multiplied vectors and the residuals:
 !
         call mallocate(n, lda, space)
         call mallocate(n, lda, aspace)
@@ -167,12 +167,12 @@ contains
             call mallocate(n, n_max, b_evec)
         end if
 !
-!   allocate memory for convergence check
+! allocate memory for convergence check
 !
         call mallocate(n_max, done)
         call mallocate(2, n_max, r_norm)
 !
-!   allocate memory for the reduced matrix and its eigenvalues:
+! allocate memory for the reduced matrix and its eigenvalues:
 !
         call mallocate(lda, lda, a_red)
         call mallocate(lda, lda, a_copy)
@@ -182,13 +182,13 @@ contains
             call mallocate(lda, lda, s_copy)
         end if
 !
-!   set the tolerances and compute a useful constant to compute rms norms:
+! set the tolerances and compute a useful constant to compute rms norms:
 !
         sqrtn = sqrt(real(n, dp))
         tol_rms = tol
         tol_max = 10.0_dp*tol
 !
-!   clean out various quantities
+! clean out various quantities
 !
         space = zero
         aspace = zero
@@ -202,34 +202,34 @@ contains
 !
         call get_time(t_tot)
 !
-!   check whether we have a guess for the eigenvectors in evec, and
-!   whether it is orthonormal.
-!   if evec is zero, create a random guess.
+! check whether we have a guess for the eigenvectors in evec, and
+! whether it is orthonormal.
+! if evec is zero, create a random guess.
 !
         call check_guess(n, n_max, evec)
 !
-!   move the guess into the expansion space.
+! move the guess into the expansion space.
 !
         call dcopy(n*n_max, evec, 1, space, 1)
 !
-!   apply the b matrix and b-orthogonalize the guess:
+! apply the b matrix and b-orthogonalize the guess:
 !
         if (generalized) then
             call metvec(n, n_max, space, bspace)
             call b_ortho(n, n_max, space, bspace)
         end if
 !
-!   initialize the number of active vectors and the associated indices.
+! initialize the number of active vectors and the associated indices.
 !
         n_act = n_max
         ind = 1
         i_beg = 1
 !
-!   initialize the counter for the expansion of the subspace
+! initialize the counter for the expansion of the subspace
 !
         ld_current = 0
 !
-!   main loop:
+! main loop:
 !
 1010    format(t5, 'Davidson-Liu iterations (tol=', d10.2, '):')
 1020    format(t5, 'Generalized Davidson-Liu iterations (tol=', d10.2, '):')
@@ -249,48 +249,48 @@ contains
 !
         do it = 1, max_iter
 !
-!     update the size of the expansion space.
+! update the size of the expansion space.
 !
             ld_current = ld_current + n_act
 !
-!     perform this iteration's matrix-vector multiplication:
+! perform this iteration's matrix-vector multiplication:
 !
             call get_time(t1)
             call matvec(n, n_act, space(1, i_beg), aspace(1, i_beg))
             call get_time(t2)
             t_mv = t_mv + t2 - t1
 !
-!     update the reduced matrix
+! update the reduced matrix
 !
             call dgemm('t', 'n', ld_current, n_act, n, one, space, n, aspace(1, i_beg), n, zero, a_red(1, i_beg), lda)
 !
-!     explicitly putting the first block of
-!     converged eigenvalues in the reduced matrix
+! explicitly putting the first block of
+! converged eigenvalues in the reduced matrix
 !
             a_copy = a_red
 !
-!     diagonalize the reduced matrix
+! diagonalize the reduced matrix
 !
             call get_time(t1)
             call dsyev('v', 'u', ld_current, a_copy, lda, e_red, work, lwork, info)
             call get_time(t2)
             t_diag = t_diag + t2 - t1
 !
-!     extract the eigenvalues and compute the ritz approximation to the
-!     eigenvectors
+! extract the eigenvalues and compute the ritz approximation to the
+! eigenvectors
 !
             eig = e_red(1:n_max)
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, space, n, a_copy, lda, zero, evec, n)
 !
-!     compute the residuals, and their rms and sup norms:
+! compute the residuals, and their rms and sup norms:
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, aspace, n, a_copy, lda, zero, residuals, n)
             if (generalized) call dgemm('n', 'n', n, n_max, ld_current, one, bspace, n, a_copy, lda, zero, b_evec, n)
 !
             do i_eig = 1, n_targ
 !
-!       if the eigenvalue is already converged, skip it.
+! if the eigenvalue is already converged, skip it.
 !
                 if (done(i_eig)) cycle
 !
@@ -303,8 +303,8 @@ contains
                 r_norm(2, i_eig) = maxval(abs(residuals(:, i_eig)))
             end do
 !
-!     check convergence. lock the first contiguous converged eigenvalues
-!     by setting the logical array "done" to true.
+! check convergence. lock the first contiguous converged eigenvalues
+! by setting the logical array "done" to true.
 !
             do i_eig = 1, n_targ
                 if (done(i_eig)) cycle
@@ -317,7 +317,7 @@ contains
                 end if
             end do
 !
-!     print some information:
+! print some information:
 !
             if (verbose) then
                 do i_eig = 1, n_targ
@@ -326,15 +326,15 @@ contains
                 write (6, *)
             end if
 !
-!     exit if everything is converged
+! exit if everything is converged
 !
             if (all(done(1:n_targ))) then
                 ok = .true.
                 exit
             end if
 !
-!     check whether an update is required.
-!     if not, perform a davidson restart.
+! check whether an update is required.
+! if not, perform a davidson restart.
 !
             if (ld_current + n_act .le. lda) then
 !
@@ -344,8 +344,8 @@ contains
 !
                 if (verbose) write (6, '(t7,a,/)') 'Restarting davidson'
 !
-!       put current eigenvectors into the first position of the
-!       expansion space
+! put current eigenvectors into the first position of the
+! expansion space
 !
                 space(:, n_max + 1:) = zero
                 call dcopy(n_max*n, evec, 1, space, 1)
@@ -366,15 +366,15 @@ contains
                     call b_ortho(n, n_max, space, bspace)
                 end if
 !
-!       initialize indexes back to their starting values
+! initialize indexes back to their starting values
 !
                 ld_current = n_max
                 i_beg = n_max + 1
 !
             end if
 !
-!   Update number of searched vectors based on converged
-!   ones: Locking
+! Update number of searched vectors based on converged
+! ones: Locking
 !
             n_act = n_max
             n_frozen = 0
@@ -387,17 +387,17 @@ contains
                 end if
             end do
 !
-!     compute the preconditioned residuals using davidson's procedure
-!     note that this is done with a user-supplied subroutine, that can
-!     be generalized to experiment with fancy preconditioners that may
-!     be more effective than the diagonal one, as in the original
-!     algorithm.
+! compute the preconditioned residuals using davidson's procedure
+! note that this is done with a user-supplied subroutine, that can
+! be generalized to experiment with fancy preconditioners that may
+! be more effective than the diagonal one, as in the original
+! algorithm.
 !
             ind = n_max - n_act + 1
             call precnd(n, n_act, -eig(ind), residuals(1, ind), space(1, i_beg))
 !
-!     orthogonalize the new vectors to the existing ones and then
-!     orthonormalize them.
+! orthogonalize the new vectors to the existing ones and then
+! orthonormalize them.
 !
             call get_time(t1)
             if (generalized) then
@@ -414,7 +414,7 @@ contains
 !
         end do
 !
-!   deallocate memory
+! deallocate memory
 !
         call mfree(work)
         call mfree(tau)
@@ -436,7 +436,7 @@ contains
 !
         call dgl_check_memleak()
 !
-!   if required, print timings
+! if required, print timings
 !
         call get_time(t2)
         t_tot = t2 - t_tot
