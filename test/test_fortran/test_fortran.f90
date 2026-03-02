@@ -1,14 +1,11 @@
 program test_fortran
-  use dgl_interface
-  use solvers
-  implicit none
+    use dgl_interface
+    use solvers
+    implicit none
 
+    call test_davidson(500, 10, 10, verbose=.true.)
 
-call test_davidson(500, 10, 10, verbose = .true.)
-
-
-
-stop "testing new tests"
+    stop "testing new tests"
 !  allocate (eig(n_max), evec(n, n_max))
 !!
 !! test davidson:
@@ -108,7 +105,7 @@ stop "testing new tests"
 !    write(lutest,1000) 'Non-Symmetric Davidson'
 !    write(lutest,*)
 !    write(lutest,1010)
-!    
+!
 !    do i = 1, n_targ
 !      write(lutest,1020) i, eig(i)
 !    end do
