@@ -52,24 +52,18 @@ message(STATUS "Diaglib compile options are: ${_}")
         
 
 # Linking proper OpenMP
-target_link_libraries(diaglib PRIVATE OpenMP::OpenMP_Fortran)
+target_link_libraries(diaglib PUBLIC OpenMP::OpenMP_Fortran)
 
+
+# Install libray
 install(TARGETS diaglib
-    EXPORT diaglibTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        EXPORT diaglibTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-install(FILES
-        dgl_global_utils.f90
-        dgl_orthogonalizations.f90
-        dgl_minor_utils.f90
-        dgl_external_interfaces.f90
-        dgl_drivers_interfaces.f90
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
 
 install(EXPORT diaglibTargets
     FILE DiaglibTargets.cmake

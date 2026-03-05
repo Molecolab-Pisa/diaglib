@@ -1,6 +1,6 @@
-module solvers
+module direct_solvers
     use dgl_interface
-    use matvecs
+    use direct_matvecs
 
     integer :: i, j
     logical :: ok
@@ -9,14 +9,16 @@ module solvers
     integer, parameter :: memory = 100
     character(len=2), parameter :: memory_unit = "MB"
     procedure(), pointer :: mx_p => null()
+    character(len=30), parameter :: result_file = "output_fortran.txt"
 
 contains
 
     subroutine reset_output_file
         implicit none
+        logical :: exists
 
-        open(file="output_fortran.txt",unit=lutest,status="unknown",position="rewind")
-        close(lutest)
+        inquire(file=trim(result_file), exist = exists)
+        if (exists) call system("rm " // result_file)
         
     end subroutine reset_output_file
 
@@ -44,7 +46,7 @@ contains
 !
         if (ok) then
             write (6, *) ' Davidson converged.'
-            call dump_eigpairs(n, n_targ)
+            call dump_eigpairs(n, n_targ, "Davidsion")
         else
             write (6, *) ' Davidson failed to converge.'
         end if
@@ -75,7 +77,7 @@ contains
 !
         if (ok) then
             write (6, *) ' LOBPCG converged.'
-            call dump_eigpairs(n, n_targ)
+            call dump_eigpairs(n, n_targ, "LOBPCG")
         else
             write (6, *) ' LOBPCG failed to converge.'
         end if
@@ -84,20 +86,24 @@ contains
 !
     end subroutine test_lobpcg
 !    
-    subroutine test_nosym_davidson(n, n_targ, n_max, side, verbose, max_iter, dav_iter, tol, shift)
+    subroutine test_nosym_davidson(n, n_targ, n_max, side_in, verbose, max_iter, dav_iter, tol, shift)
 !!
 !! Test davidson:
 !!
         implicit none
         integer, intent(in) :: n, n_targ, n_max
         integer, intent(in), optional :: max_iter, dav_iter
-        character(len=2), intent(in) :: side
+        character(len=*), intent(in) :: side_in
         real(dgl_real), intent(in), optional :: tol, shift
         logical, intent(in), optional :: verbose
+
+        character(len=2):: side
 !
+        side = side_in
         call init_eigenpairs(n, n_max)
+        if (side.eq."LR") allocate(evec_2(n,n_max))
 !
-        write (6, *) ' testing Davidson:'
+        write (6, *) ' testing Non symmetric Davidson:'
         call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, side, eig, evec, ok, evec_2 = evec_2, &
                                  dgl_verbose=verbose, &
                                  dgl_max_iter=max_iter, &
@@ -108,13 +114,14 @@ contains
                                  dgl_memory_unit=memory_unit)
 !
         if (ok) then
-            write (6, *) ' Davidson converged.'
-            call dump_eigpairs(n, n_targ)
+            write (6, *) ' Non symmetric Davidson converged.'
+            call dump_eigpairs(n, n_targ, "Non-Symmetric Davidson")
         else
-            write (6, *) ' Davidson failed to converge.'
+            write (6, *) ' Non symmetric Davidson failed to converge.'
         end if
 !
         deallocate (eig, evec)
+        if (side.eq."LR") deallocate(evec_2)
 !
     end subroutine test_nosym_davidson
 !
@@ -128,7 +135,7 @@ contains
         real(dgl_real), intent(in), optional :: tol
         logical, intent(in), optional :: verbose
 !
-        call init_eigenpairs(n, n_max)
+        call init_eigenpairs(2*n, n_max)
 !
         write (6, *) ' testing SMOGD:'
         call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, eig, evec, ok, &
@@ -141,12 +148,12 @@ contains
 !
         if (ok) then
             write (6, *) ' SMOGD converged.'
-            call dump_eigpairs(n, n_targ)
+            call dump_eigpairs(n, n_targ, "SMOGD")
         else
             write (6, *) ' SMOGD failed to converge.'
         end if
 !
-        deallocate (eig, evec)
+        deallocate(eig, evec)
 !
     end subroutine test_smogd
 !
@@ -167,17 +174,20 @@ contains
         end do
     end subroutine init_eigenpairs
 
-    subroutine dump_eigpairs(n, n_targ)
+    subroutine dump_eigpairs(n, n_targ, solver)
 !!
 !! open a text file for the output, to be used to compare the results with a reference.
 !!
         implicit none
         integer, intent(in) :: n
         integer, intent(in) :: n_targ
+        character(len=*), intent(in) :: solver
+
         integer :: i, j
+
         open (file='output_fortran.txt', form='formatted', &
-              unit=lutest, status='old', position='append')
-        !write (lutest, 1000) 'Davidson'
+              unit=lutest, status='unknown', position='append')
+        write (lutest, 1000) solver
         write (lutest, *)
         write (lutest, 1010)
         do i = 1, n_targ
@@ -204,4 +214,4 @@ contains
 !
     end subroutine dump_eigpairs
 !
-end module solvers
+end module direct_solvers

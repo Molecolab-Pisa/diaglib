@@ -1,4 +1,4 @@
 install(FILES
-        diaglib_mods.F90
-        DESTINATION ${CMAKE_INSTALL_PREFIX}
+        diaglib_include.F90
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )

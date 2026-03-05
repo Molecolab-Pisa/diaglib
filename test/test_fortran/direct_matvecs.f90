@@ -1,4 +1,4 @@
-module matvecs
+module direct_matvecs
 use dgl_interface, only: dgl_real
   contains
 !
@@ -275,4 +275,4 @@ use dgl_interface, only: dgl_real
     return
   end subroutine lrprc
 
-end module matvecs
+end module direct_matvecs
