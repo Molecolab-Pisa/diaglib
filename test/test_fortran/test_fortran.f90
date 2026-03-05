@@ -3,7 +3,11 @@ program test_fortran
     use solvers
     implicit none
 
+    call reset_output_file()
+
     call test_davidson(500, 10, 10, verbose=.true.)
+    call test_lobpcg(500, 10, 10, verbose=.true.)
+    call test_smogd(500, 10, 10, verbose=.true.)
 
     stop "testing new tests"
 !  allocate (eig(n_max), evec(n, n_max))

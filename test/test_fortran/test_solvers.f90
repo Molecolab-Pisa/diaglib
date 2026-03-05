@@ -12,6 +12,14 @@ module solvers
 
 contains
 
+    subroutine reset_output_file
+        implicit none
+
+        open(file="output_fortran.txt",unit=lutest,status="unknown",position="rewind")
+        close(lutest)
+        
+    end subroutine reset_output_file
+
     subroutine test_davidson(n, n_targ, n_max, verbose, max_iter, dav_iter, tol, shift)
 !!
 !! Test davidson:
@@ -44,8 +52,108 @@ contains
         deallocate (eig, evec)
 !
     end subroutine test_davidson
-
+!
+    subroutine test_lobpcg(n, n_targ, n_max, verbose, max_iter, tol)
+!!
+!! Test lobpcg:
+!!
+        implicit none
+        integer, intent(in) :: n, n_targ, n_max
+        integer, intent(in), optional :: max_iter
+        real(dgl_real), intent(in), optional :: tol
+        logical, intent(in), optional :: verbose
+!
+        call init_eigenpairs(n, n_max)
+!
+        write (6, *) ' testing LOBPCG:'
+        call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+                                 dgl_verbose=verbose, &
+                                 dgl_max_iter=max_iter, &
+                                 dgl_tol=tol, &
+                                 dgl_memory=memory, &
+                                 dgl_memory_unit=memory_unit)
+!
+        if (ok) then
+            write (6, *) ' LOBPCG converged.'
+            call dump_eigpairs(n, n_targ)
+        else
+            write (6, *) ' LOBPCG failed to converge.'
+        end if
+!
+        deallocate (eig, evec)
+!
+    end subroutine test_lobpcg
+!    
+    subroutine test_nosym_davidson(n, n_targ, n_max, side, verbose, max_iter, dav_iter, tol, shift)
+!!
+!! Test davidson:
+!!
+        implicit none
+        integer, intent(in) :: n, n_targ, n_max
+        integer, intent(in), optional :: max_iter, dav_iter
+        character(len=2), intent(in) :: side
+        real(dgl_real), intent(in), optional :: tol, shift
+        logical, intent(in), optional :: verbose
+!
+        call init_eigenpairs(n, n_max)
+!
+        write (6, *) ' testing Davidson:'
+        call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, side, eig, evec, ok, evec_2 = evec_2, &
+                                 dgl_verbose=verbose, &
+                                 dgl_max_iter=max_iter, &
+                                 dgl_dav_iter=dav_iter, &
+                                 dgl_tol=tol, &
+                                 dgl_shift=shift, &
+                                 dgl_memory=memory, &
+                                 dgl_memory_unit=memory_unit)
+!
+        if (ok) then
+            write (6, *) ' Davidson converged.'
+            call dump_eigpairs(n, n_targ)
+        else
+            write (6, *) ' Davidson failed to converge.'
+        end if
+!
+        deallocate (eig, evec)
+!
+    end subroutine test_nosym_davidson
+!
+    subroutine test_smogd(n, n_targ, n_max, verbose, max_iter, dav_iter, tol)
+!!
+!! Test smogd:
+!!
+        implicit none
+        integer, intent(in) :: n, n_targ, n_max
+        integer, intent(in), optional :: max_iter, dav_iter
+        real(dgl_real), intent(in), optional :: tol
+        logical, intent(in), optional :: verbose
+!
+        call init_eigenpairs(n, n_max)
+!
+        write (6, *) ' testing SMOGD:'
+        call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, eig, evec, ok, &
+                                 dgl_verbose=verbose, &
+                                 dgl_max_iter=max_iter, &
+                                 dgl_dav_iter=dav_iter, &
+                                 dgl_tol=tol, &
+                                 dgl_memory=memory, &
+                                 dgl_memory_unit=memory_unit)
+!
+        if (ok) then
+            write (6, *) ' SMOGD converged.'
+            call dump_eigpairs(n, n_targ)
+        else
+            write (6, *) ' SMOGD failed to converge.'
+        end if
+!
+        deallocate (eig, evec)
+!
+    end subroutine test_smogd
+!
     subroutine init_eigenpairs(n, n_max)
+!!
+!! Make a simple guess
+!!   
         implicit none
         integer, intent(in) :: n
         integer, intent(in) :: n_max
@@ -67,9 +175,9 @@ contains
         integer, intent(in) :: n
         integer, intent(in) :: n_targ
         integer :: i, j
-        open (file='output_fortran.txt', form='formatted', access='sequential', &
-              unit=lutest, status='unknown')
-        write (lutest, 1000) 'Davidson'
+        open (file='output_fortran.txt', form='formatted', &
+              unit=lutest, status='old', position='append')
+        !write (lutest, 1000) 'Davidson'
         write (lutest, *)
         write (lutest, 1010)
         do i = 1, n_targ
