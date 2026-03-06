@@ -1,6 +1,7 @@
 module direct_solvers
     use dgl_interface
     use direct_matvecs
+    use utility
 
     integer :: i, j
     logical :: ok
@@ -167,10 +168,10 @@ contains
 !
         allocate (eig(n_max), evec(n, n_max))
         ok = .false.
-        eig = dgl_zero
-        evec = dgl_zero
+        eig = zero
+        evec = zero
         do i = 1, n_max
-            evec(i, i) = dgl_one
+            evec(i, i) = one
         end do
     end subroutine init_eigenpairs
 
@@ -194,7 +195,7 @@ contains
             write (lutest, 1020) i, eig(i)
         end do
         do i = 1, n_targ
-            if (evec(1, i) .lt. dgl_zero) evec(:, i) = -evec(:, i)
+            if (evec(1, i) .lt. zero) evec(:, i) = -evec(:, i)
         end do
         write (lutest, 1031) (i, i=1, n_targ)
         do j = 1, n

@@ -2,6 +2,7 @@ module utility
 implicit none
 
 integer, parameter :: dp = selected_real_kind(15)
+real(dp), parameter :: zero = 0._dp, one = 1._dp
 
     interface prtmat
         module procedure prtmat_r

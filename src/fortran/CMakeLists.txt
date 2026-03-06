@@ -64,7 +64,7 @@ install(TARGETS diaglib
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-
+# Export DiagLib as a cmake package 
 install(EXPORT diaglibTargets
     FILE DiaglibTargets.cmake
     NAMESPACE diaglib::

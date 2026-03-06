@@ -1,5 +1,6 @@
 module direct_matvecs
 use dgl_interface, only: dgl_real
+!
   contains
 !
   subroutine ax(n,m,x,y)
