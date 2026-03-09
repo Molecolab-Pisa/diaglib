@@ -19,7 +19,10 @@ contains
         logical :: exists
 
         inquire(file=trim(result_file), exist = exists)
-        if (exists) call system("rm " // result_file)
+        if (exists) then
+            open(unit=100,file=trim(result_file),status="old")
+            close(100,status="delete")
+        endif
         
     end subroutine reset_output_file
 

@@ -11,6 +11,22 @@ include(GNUInstallDirs)
 #Include this to automatically make the configuration file
 include(CMakePackageConfigHelpers)
 
+# default build type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+# set flags for build types
+if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+    set(CMAKE_Fortran_FLAGS "-std=f2003 -pedantic")
+    set(CMAKE_Fortran_FLAGS_DEBUG "-g -Wall -Wextra -fcheck=all -fbacktrace")
+    set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -march=native")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+    set(CMAKE_Fortran_FLAGS "-stand 2003")
+    set(CMAKE_Fortran_FLAGS_DEBUG "-g -warn all -check all -traceback")
+    set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -xHost")
+endif()
+
 
 # If wanted force double precision integers
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
