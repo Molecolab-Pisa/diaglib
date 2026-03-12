@@ -38,13 +38,13 @@ program test_fortran
 !
     write (6, *) ' testing Davidson:'
     call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                             dgl_verbose = verbose, &
-                             dgl_max_iter = max_iter, &
-                             dgl_dav_iter = dav_iter, &
-                             dgl_shift = shift, &
-                             dgl_tol = tol, &
-                             dgl_memory = memory, &
-                             dgl_memory_unit = memory_unit &
+                             dgl_verbose=verbose, &
+                             dgl_max_iter=max_iter, &
+                             dgl_dav_iter=dav_iter, &
+                             dgl_shift=shift, &
+                             dgl_tol=tol, &
+                             dgl_memory=memory, &
+                             dgl_memory_unit=memory_unit &
                              )
 !
     if (ok) then
@@ -60,13 +60,13 @@ program test_fortran
 !
     write (6, *) ' testing Generalized Davidson:'
     call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
-                             dgl_verbose = verbose, &
-                             dgl_max_iter = max_iter, &
-                             dgl_dav_iter = dav_iter, &
-                             dgl_shift = shift, &
-                             dgl_tol = tol, &
-                             dgl_memory = memory, &
-                             dgl_memory_unit = memory_unit &
+                             dgl_verbose=verbose, &
+                             dgl_max_iter=max_iter, &
+                             dgl_dav_iter=dav_iter, &
+                             dgl_shift=shift, &
+                             dgl_tol=tol, &
+                             dgl_memory=memory, &
+                             dgl_memory_unit=memory_unit &
                              )
 !
     if (ok) then
@@ -83,14 +83,14 @@ program test_fortran
 !
     write (6, *) ' testing non-symmetric Davidson:'
     call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "LR", eig, evec, ok, evec_2=evec_2, &
-                             dgl_verbose = verbose, &
-                             dgl_max_iter = max_iter, &
-                             dgl_dav_iter = dav_iter, &
-                             dgl_shift = shift, &
-                             dgl_tol = tol, &
-                             dgl_memory = memory, &
-                             dgl_memory_unit = memory_unit &
-                             )
+                                   dgl_verbose=verbose, &
+                                   dgl_max_iter=max_iter, &
+                                   dgl_dav_iter=dav_iter, &
+                                   dgl_shift=shift, &
+                                   dgl_tol=tol, &
+                                   dgl_memory=memory, &
+                                   dgl_memory_unit=memory_unit &
+                                   )
 !
     if (ok) then
         write (6, *) ' non-symmetric Davidson converged.'
@@ -107,13 +107,13 @@ program test_fortran
     write (6, *) ' testing LOBPCG:'
 
     call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                             dgl_verbose = verbose, &
-                             dgl_max_iter = max_iter, &
-                             dgl_shift = shift, &
-                             dgl_tol = tol, &
-                             dgl_memory = memory, &
-                             dgl_memory_unit = memory_unit &
-                             )
+                           dgl_verbose=verbose, &
+                           dgl_max_iter=max_iter, &
+                           dgl_shift=shift, &
+                           dgl_tol=tol, &
+                           dgl_memory=memory, &
+                           dgl_memory_unit=memory_unit &
+                           )
 !
     if (ok) then
         write (6, *) ' LOBPCG converged.'
@@ -129,13 +129,13 @@ program test_fortran
     write (6, *) ' testing Generalized LOBPCG:'
 
     call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
-                             dgl_verbose = verbose, &
-                             dgl_max_iter = max_iter, &
-                             dgl_shift = shift, &
-                             dgl_tol = tol, &
-                             dgl_memory = memory, &
-                             dgl_memory_unit = memory_unit &
-                             )
+                           dgl_verbose=verbose, &
+                           dgl_max_iter=max_iter, &
+                           dgl_shift=shift, &
+                           dgl_tol=tol, &
+                           dgl_memory=memory, &
+                           dgl_memory_unit=memory_unit &
+                           )
 !
     if (ok) then
         write (6, *) ' Generalized LOBPCG converged.'
@@ -153,12 +153,12 @@ program test_fortran
     write (6, *) ' testing SMOGD:'
     call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, &
                           eig, evec, ok, &
-                          dgl_verbose = verbose, &
-                          dgl_max_iter = max_iter, &
-                          dgl_dav_iter = dav_iter, &
-                          dgl_tol = tol, &
-                          dgl_memory = memory, &
-                          dgl_memory_unit = memory_unit &
+                          dgl_verbose=verbose, &
+                          dgl_max_iter=max_iter, &
+                          dgl_dav_iter=dav_iter, &
+                          dgl_tol=tol, &
+                          dgl_memory=memory, &
+                          dgl_memory_unit=memory_unit &
                           )
     if (ok) then
         write (6, *) ' SMOGD converged.'
