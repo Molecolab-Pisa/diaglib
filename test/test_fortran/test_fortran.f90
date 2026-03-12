@@ -7,7 +7,8 @@ program test_fortran
     use utility
     implicit none
     integer, parameter :: n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 10
-    real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
+    logical :: verbose = .false.
+    real(dp), parameter :: tol = 1.0e-10_dp, shift = 1.0_dp
     integer, parameter :: memory = 100
     character(len=2), parameter :: memory_unit = "MB"
     procedure(), pointer :: mx_p => null()
@@ -26,13 +27,18 @@ program test_fortran
 !
     allocate (eig(n_max), evec(n, n_max), evec_2(n, n_max))
 !
+! Associate pointer for generalized problems to metric-vector
+! product routine
+!
+    mx_p => mx
+!
 ! test davidson:
 !
     call init_eigenpairs(n, n_max, eig, evec, ok)
 !
     write (6, *) ' testing Davidson:'
     call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                             dgl_verbose = .false., &
+                             dgl_verbose = verbose, &
                              dgl_max_iter = max_iter, &
                              dgl_dav_iter = dav_iter, &
                              dgl_shift = shift, &
@@ -52,10 +58,9 @@ program test_fortran
 !
     call init_eigenpairs(n, n_max, eig, evec, ok)
 !
-    mx_p => mx
     write (6, *) ' testing Generalized Davidson:'
     call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
-                             dgl_verbose = .false., &
+                             dgl_verbose = verbose, &
                              dgl_max_iter = max_iter, &
                              dgl_dav_iter = dav_iter, &
                              dgl_shift = shift, &
@@ -78,7 +83,7 @@ program test_fortran
 !
     write (6, *) ' testing non-symmetric Davidson:'
     call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "LR", eig, evec, ok, evec_2=evec_2, &
-                             dgl_verbose = .false., &
+                             dgl_verbose = verbose, &
                              dgl_max_iter = max_iter, &
                              dgl_dav_iter = dav_iter, &
                              dgl_shift = shift, &
@@ -102,8 +107,9 @@ program test_fortran
     write (6, *) ' testing LOBPCG:'
 
     call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                             dgl_verbose = .false., &
+                             dgl_verbose = verbose, &
                              dgl_max_iter = max_iter, &
+                             dgl_shift = shift, &
                              dgl_tol = tol, &
                              dgl_memory = memory, &
                              dgl_memory_unit = memory_unit &
@@ -123,8 +129,9 @@ program test_fortran
     write (6, *) ' testing Generalized LOBPCG:'
 
     call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
-                             dgl_verbose = .false., &
+                             dgl_verbose = verbose, &
                              dgl_max_iter = max_iter, &
+                             dgl_shift = shift, &
                              dgl_tol = tol, &
                              dgl_memory = memory, &
                              dgl_memory_unit = memory_unit &
@@ -146,7 +153,7 @@ program test_fortran
     write (6, *) ' testing SMOGD:'
     call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, &
                           eig, evec, ok, &
-                          dgl_verbose = .false., &
+                          dgl_verbose = verbose, &
                           dgl_max_iter = max_iter, &
                           dgl_dav_iter = dav_iter, &
                           dgl_tol = tol, &

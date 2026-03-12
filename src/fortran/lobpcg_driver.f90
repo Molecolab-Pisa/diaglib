@@ -196,12 +196,15 @@ contains
 !
         call dcopy(n*n_max, evec, 1, space, 1)
         if (generalized) call dcopy(n*n_max, bx_new, 1, bspace, 1)
+!
         call get_time(t1)
         call matvec(n, n_max, space, aspace)
         call get_time(t2)
         t_mv = t_mv + t2 - t1
+!
         if (abs(shift) .gt. num_thresh) call daxpy(n*n_max, shift, space, 1, aspace, 1)
         call dgemm('t', 'n', n_max, n_max, n, one, space, n, aspace, n, zero, a_red, lda)
+!        
         call get_time(t1)
         call dsyev('v', 'l', n_max, a_red, lda, e_red, work, lwork, info)
         call get_time(t2)

@@ -307,6 +307,8 @@ contains
                 end select
                 call get_time(t2)
                 t_mv = t_mv + t2 - t1
+                if (abs(shift) .gt. num_thresh) call daxpy(n*n_act, shift, space(1, i_beg), 1, aspace(1, i_beg), 1)
+
 !
 ! get the reduced matrix
 !
@@ -608,7 +610,7 @@ contains
                     end if
                 end do
                 ind = n_max - n_act + 1
-                call precnd(n, n_act, -eig(ind), residuals(1, ind), space(1, i_beg))
+                call precnd(n, n_act, shift - eig(ind), residuals(1, ind), space(1, i_beg))
 !
 ! orthogonalize the new vectors to the existing ones of the respective other
 ! space and orthogonalize set of new vectors among each other

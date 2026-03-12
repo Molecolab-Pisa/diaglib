@@ -259,6 +259,7 @@ contains
             call matvec(n, n_act, space(1, i_beg), aspace(1, i_beg))
             call get_time(t2)
             t_mv = t_mv + t2 - t1
+            if (abs(shift) .gt. num_thresh) call daxpy(n*n_act, shift, space(1, i_beg), 1, aspace(1, i_beg), 1)
 !
 ! update the reduced matrix
 !
@@ -394,7 +395,7 @@ contains
 ! algorithm.
 !
             ind = n_max - n_act + 1
-            call precnd(n, n_act, -eig(ind), residuals(1, ind), space(1, i_beg))
+            call precnd(n, n_act, shift - eig(ind), residuals(1, ind), space(1, i_beg))
 !
 ! orthogonalize the new vectors to the existing ones and then
 ! orthonormalize them.
