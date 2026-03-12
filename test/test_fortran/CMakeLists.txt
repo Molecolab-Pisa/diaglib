@@ -1,8 +1,7 @@
 add_executable(test_fortran
-        main.f90
+        test_fortran.f90
         utility.f90
         direct_matvecs.f90
-        direct_tests.f90
 )
  
 # Set the name of the executable
