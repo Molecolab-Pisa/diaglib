@@ -86,7 +86,7 @@ contains
 ! iterators and utilities
 !
         integer :: it, i_eig
-        real(dp) :: sqrtn, xx(1)
+        real(dp) :: sqrtn
 !
 ! array to control convergence
 !
@@ -406,7 +406,7 @@ contains
                 call metvec(n, n_act, space(1, i_beg), bspace(1, i_beg))
                 call b_ortho(n, n_act, space(1, i_beg), bspace(1, i_beg))
             else
-                call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg), xx, xx)
+                call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg))
             end if
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1

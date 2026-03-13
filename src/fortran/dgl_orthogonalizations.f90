@@ -74,7 +74,7 @@ contains
 ! local variables
 ! ===============
 !
-        integer :: info, i, j
+        integer :: i, j
         real(dp), allocatable :: metric(:, :), sigma(:), u_svd(:, :), vt_svd(:, :), &
                                  temp(:, :)
         real(dp), parameter :: tol_svd = 1.0e-5_dp
@@ -206,7 +206,6 @@ contains
         real(dp) :: error, alpha, unorm, shift
         real(dp) :: rcond, l_norm, linv_norm
         logical :: macro_done, micro_done
-        real(dp), parameter :: tol_ortho = two*epsilon(one)
         integer, parameter :: maxit = 10
 !
 ! local scratch
@@ -487,9 +486,9 @@ contains
         return
     end function norm_est
 !
-    subroutine ortho_vs_x(n, m, k, x, u, ax, au)
+    subroutine ortho_vs_x(n, m, k, x, u)
         implicit none
-!*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
+!* Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
 ! is assumed to be orthogonal, orthogonalize \(u\) against \(x\).
 !
 ! If required, orthogonalize au to ax using the same linear
@@ -512,12 +511,8 @@ contains
 !! Number of vectors to orthogonalize again \(x\)
         real(dp), dimension(n, m), intent(in) :: x
 !! Reference vectors
-        real(dp), dimension(n, m), intent(in) :: ax
-!! Application of an external matrix on \(x\)
         real(dp), dimension(n, k), intent(inout) :: u
 !! Vectors to orthogonalize
-        real(dp), dimension(n, k), intent(inout) :: au
-!! Application of an external matrix on \(u\)
 !
 ! local variables:
 ! ================
@@ -540,7 +535,7 @@ contains
 ! start with an initial orthogonalization to improve conditioning.
 !
         if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
-        if (.not. ok .or. useqr) call ortho(n, k, u, au)
+        if (.not. ok .or. useqr) call ortho(n, k, u)
 !
 ! iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -555,7 +550,7 @@ contains
 ! now, orthonormalize u.
 !
             if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
-            if (.not. ok .or. useqr) call ortho(n, k, u, au)
+            if (.not. ok .or. useqr) call ortho(n, k, u)
 !
 ! the orthogonalization has introduced an error that makes the new
 ! vector no longer fully orthogonal to x. assuming that u was
@@ -612,7 +607,7 @@ contains
 !
         logical :: done, ok
         integer :: it
-        real(dp) :: xu_norm, growth, xx(1)
+        real(dp) :: xu_norm, growth
         real(dp), allocatable :: xu(:, :)
 !
         integer, parameter :: maxit = 10

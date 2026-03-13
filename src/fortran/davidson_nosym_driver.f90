@@ -99,7 +99,7 @@ contains
 !
         integer :: it, i_eig
         real(dp) :: sqrtn, tol_im
-        real(dp) :: xx(1), yy
+        real(dp) :: yy
         integer :: j
 !
 ! arrays to control convergence
@@ -618,7 +618,7 @@ contains
 ! Gram-Schmit orthogonalization of residual to the respective subspace
 !
                 call get_time(t1)
-                call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg), xx, xx)
+                call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg))
                 call get_time(t2)
 !
                 t_ortho = t_ortho + t2 - t1

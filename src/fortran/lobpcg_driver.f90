@@ -84,7 +84,7 @@ contains
 ! iterators and utilities
 !
         integer :: it, i_eig
-        real(dp) :: sqrtn, xx(1)
+        real(dp) :: sqrtn
 !
 ! array to control convergence and orthogonalization
 !
@@ -257,7 +257,7 @@ contains
             call metvec(n, n_max, space(1, ind_w), bspace(1, ind_w))
             call b_ortho(n, n_max, space(1, ind_w), bspace(1, ind_w))
         else
-            call ortho_vs_x(n, n_max, n_max, space, space(1, ind_w), xx, xx)
+            call ortho_vs_x(n, n_max, n_max, space, space(1, ind_w))
         end if
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
@@ -427,7 +427,7 @@ contains
                 call metvec(n, n_act, space(1, ind_w), bspace(1, ind_w))
                 call b_ortho(n, n_act, space(1, ind_w), bspace(1, ind_w))
             else
-                call ortho_vs_x(n, n_max + n_act, n_act, space, space(1, ind_w), xx, xx)
+                call ortho_vs_x(n, n_max + n_act, n_act, space, space(1, ind_w))
             end if
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
@@ -499,7 +499,6 @@ contains
         real(dp), dimension(ld_current, n_act), intent(inout) :: u_p
 !
         integer :: ind_x, off_x, i_eig
-        real(dp) :: xx(1)
 !
         off_x = n_max - n_act
         ind_x = off_x + 1
@@ -518,7 +517,7 @@ contains
 !
 ! orthogonalize:
 !
-        call ortho_vs_x(ld_current, n_max, n_act, u_x, u_p, xx, xx)
+        call ortho_vs_x(ld_current, n_max, n_act, u_x, u_p)
 !
 ! all done.
 !
