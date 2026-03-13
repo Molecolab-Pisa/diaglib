@@ -1,8 +1,6 @@
 
 ![DiagLib logo](|media|/Diaglib_logo.png)
 
-**[GitHub](https://github.com/Molecolab-Pisa/diaglib).**
-
 @todo 
 # Missing documentation includes:
 

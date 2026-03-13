@@ -1,5 +1,6 @@
 [extra.ford]
 project = "DiagLib"
+project_github = "https://github.com/Molecolab-Pisa/diaglib"
 summary = "### A collection of matrix-free iterative eigensolvers"
 author = """
 I. Giannì,
@@ -14,15 +15,16 @@ F. Lipparini
 author_description = "MolecoTheory subgroup of MolecoLab and collaborators"
 email = "filippo.lipparini@unipi.it"
 
-src_dir = "../src"
+src_dir = ["../src","../test"]
 output_dir = "../doc"
 page_dir = "./pages"
 media_dir = "."
 
 exclude_dir = "../src/c_interface"
-exclude = "../src/fortran/diaglib.f90"
 
 graph = false
 sort = "type-alpha"
 max_frontpage_items = 4
 #display = "public protected private"
+
+warn = false
