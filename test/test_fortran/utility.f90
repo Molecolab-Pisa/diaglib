@@ -6,7 +6,7 @@ module utility
     integer, parameter :: dp = selected_real_kind(15)
     real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp
 
-    integer, parameter :: n = 500, n_targ = 5, n_max = 20
+    integer, parameter :: n = 50, n_targ = 5, n_max = 5
     integer, parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
@@ -116,6 +116,41 @@ contains
         close (luref)
 
     end subroutine read_reference
+
+    subroutine sort_eigenpairs(ld, n_eig, eig, evec)
+        implicit none
+        integer, intent(in) :: ld
+        integer, intent(in) :: n_eig
+        real(dp), intent(inout) :: eig(ld)
+        real(dp), intent(inout) :: evec(ld, ld, 2)
+
+        logical, allocatable :: mask(:)
+        integer :: idx(1)
+        real(dp) :: copy
+        real(dp), allocatable :: copy_arr(:)
+
+        allocate (mask(ld), copy_arr(ld))
+        mask = .true.
+
+        do i = 1, n_eig
+            idx = minloc(eig, mask=mask)
+            copy = eig(i)
+            eig(i) = eig(idx(1))
+            eig(idx(1)) = copy
+            mask(i) = .false.
+
+            copy_arr = evec(:, i, 1)
+            evec(:, i, 1) = evec(:, idx(1), 1)
+            evec(:, idx(1), 1) = copy_arr
+
+            copy_arr = evec(:, i, 2)
+            evec(:, i, 2) = evec(:, idx(1), 2)
+            evec(:, idx(1), 2) = copy_arr
+        end do
+
+        deallocate (mask, copy_arr)
+
+    end subroutine sort_eigenpairs
 
     subroutine dump_eigpairs(unit, ld, n_eig, eig, evec, string)
 !!

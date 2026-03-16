@@ -38,7 +38,10 @@ program reference
     !non symmetric diagonalization
     call dgeev("V", "V", n, a, n, eig, eig(1, 2), evec, n, evec(1, 1, 2), n, work, lwork, info)
     call check_lapack(info)
-    !call is_sorted(eig)
+
+    if (sqrt(dot_product(eig(:, 2), eig(:, 2))) .gt. 1.e-12_dp) print *, "Immaginary eigs detected"
+    call sort_eigenpairs(n, n_targ, eig, evec)
+
     call dump_eigpairs(luref, n, n_targ, eig, evec, "Non Symmetric diagonalization, Left")
     call dump_eigpairs(luref, n, n_targ, eig, evec(1, 1, 2), "Non Symmetric diagonalization, Right")
 
