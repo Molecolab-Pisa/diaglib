@@ -10,6 +10,10 @@ program test_fortran
     real(dp), allocatable :: eig(:), evec(:, :), evec_2(:, :)
     character(len=20), parameter :: f_string = "('-- ', a, /)"
 !
+! Check if the reference exists
+!
+    call check_reference(n, n_targ)
+!
 ! open a text file for the output, to be used to compare the results with a reference.
 !
     open (file=trim(results_fname), form='formatted', access='sequential', &
@@ -45,7 +49,7 @@ program test_fortran
         ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric diagonalization")
         call dump_eigpairs(lutest, n, n_targ, eig, evec, "Davidson")
         if (.not. ok) then
-            write (*, f_string) "Davidson results do not match with reference!"
+            write (*, f_string) "Davidson results do not match with reference! Maybe rerun reference?"
             !stop
         end if
     else
@@ -72,7 +76,7 @@ program test_fortran
         ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric Generalized")
         call dump_eigpairs(lutest, n, n_targ, eig, evec, "Generalized Davidson")
         if (.not. ok) then
-            write (*, f_string) "Generalized Davidson results do not match with reference!"
+            write (*, f_string) "Generalized Davidson results do not match with reference! Maybe rerun reference?"
             !stop
         end if
 
@@ -102,14 +106,14 @@ program test_fortran
         ok = compare_eigs(n, n_targ, tol, eig, evec, "Non Symmetric diagonalization, Right")
         call dump_eigpairs(lutest, n, n_targ, eig, evec, "Non Symmetric Davidson, Right")
         if (.not. ok) then
-            write (*, f_string) "Right Non symmetric Davidson results do not match with reference!"
+            write (*, f_string) "Right Non symmetric Davidson results do not match with reference! Maybe rerun reference?"
             !stop
         end if
 
         ok = compare_eigs(n, n_targ, tol, eig, evec_2, "Non Symmetric diagonalization, Left")
         call dump_eigpairs(lutest, n, n_targ, eig, evec_2, "Non Symmetric Davidson, Left")
         if (.not. ok) then
-            write (*, f_string) "Left Non symmetric Davidson results do not match with reference!"
+            write (*, f_string) "Left Non symmetric Davidson results do not match with reference! Maybe rerun reference?"
             !stop
         end if
     else
@@ -137,7 +141,7 @@ program test_fortran
         ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric diagonalization")
         call dump_eigpairs(lutest, n, n_targ, eig, evec, "LOBPCG")
         if (.not. ok) then
-            write (*, f_string) "LOBPCG results do not match with reference!"
+            write (*, f_string) "LOBPCG results do not match with reference! Maybe rerun reference?"
             !stop
         end if
     else
@@ -164,7 +168,7 @@ program test_fortran
         ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric Generalized")
         call dump_eigpairs(lutest, n, n_targ, eig, evec, "Generalized LOBPCG")
         if (.not. ok) then
-            write (*, f_string) "Generalized LOBPCG results do not match with reference!"
+            write (*, f_string) "Generalized LOBPCG results do not match with reference! Maybe rerun reference?"
             !stop
         end if
     else
@@ -192,7 +196,7 @@ program test_fortran
         ok = compare_eigs(2*n, n_targ, tol, eig, evec, "Linear response")
         call dump_eigpairs(lutest, n*2, n_targ, eig, evec, "SMOGD")
         if (.not. ok) then
-            write (*, f_string) "SMOGD results do not match with reference!"
+            write (*, f_string) "SMOGD results do not match with reference! Maybe rerun reference?"
             !stop
         end if
     else

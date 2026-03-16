@@ -6,7 +6,7 @@ module utility
     integer, parameter :: dp = selected_real_kind(15)
     real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp
 
-    integer, parameter :: n = 50, n_targ = 5, n_max = 5
+    integer, parameter :: n = 500, n_targ = 5, n_max = 5
     integer, parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
@@ -82,6 +82,54 @@ contains
 
     end function compare_eigs
 
+    subroutine check_reference(ld, n_eig)
+        implicit none
+        integer, intent(in) :: ld, n_eig
+
+        integer :: n_eig_read, ld_read
+        character(len=200) :: line
+
+        if (.not. file_exist(trim(reference_fname))) then
+            write (*, "(t3,a)") "Reference file does not exist, first run the 'reference' executable"
+            stop
+        end if
+
+        open (file=trim(reference_fname), unit=luref, status="old")
+        n_eig_read = 0
+        ld_read = 0
+
+        do
+            read (luref, "(a)") line
+            if (index(line, "Eigenvalues") .ne. 0) exit
+        end do
+        do
+            read (luref, "(a)") line
+            if (index(line, "Eigenvectors") .ne. 0) exit
+            n_eig_read = n_eig_read + 1
+        end do
+
+        if (n_eig .ne. n_eig_read) then
+            write (*, "(t3,a)") "Reference file contains the wrong number of eigenvalues, "// &
+                "re-run the 'reference' executable"
+            stop
+        end if
+
+        do
+            read (luref, "(a)") line
+            if (len_trim(line) .eq. 0) exit
+            ld_read = ld_read + 1
+        end do
+
+        if (ld .ne. ld_read) then
+            write (*, "(t3,a)") "Reference file contains results for a differently sized matrix, "// &
+                "re-run the 'reference' executable"
+            stop
+        end if
+
+        close(luref)
+
+    end subroutine check_reference
+
     subroutine read_reference(ld, n_eig, eig, evec, string)
         integer, intent(in) :: ld, n_eig
         real(dp), intent(inout) :: eig(n_eig), evec(ld, n_eig)
@@ -89,11 +137,6 @@ contains
 
         character(len=200) :: line
         integer :: k
-
-        if (.not. file_exist(trim(reference_fname))) then
-            write (*, "(t3,a)") "Reference file does not exist, first run the 'reference' executable"
-            stop
-        end if
 
         open (file=trim(reference_fname), unit=luref, status="old")
 
