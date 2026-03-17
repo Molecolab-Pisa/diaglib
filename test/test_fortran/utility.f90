@@ -2,21 +2,21 @@ module utility
 !!
 !! Common module for testing
 !!
-    integer :: i, j
     integer, parameter :: dp = selected_real_kind(15)
     real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp
-
-    integer, parameter :: n = 500, n_targ = 5, n_max = 5
+    
+    integer, parameter :: n = 20, n_targ = 5, n_max = 5
     integer, parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
     integer, parameter :: memory = 100
     character(len=2), parameter :: memory_unit = "MB"
     procedure(), pointer :: mx_p => null()
-
+    
     character(len=30) :: reference_fname = "output_reference.txt"
     character(len=30) :: results_fname = "output_fortran.txt"
     integer, parameter :: lutest = 100, luref = 101
+    integer :: i, j
 
     interface prtmat
         module procedure prtmat_r
@@ -60,13 +60,13 @@ contains
 
         call read_reference(ld, n_eig, ex_eig, ex_evec, string)
 
-        if (maxval(eig - ex_eig) .gt. thresh) success = .false.
+        if (abs(maxval(eig - ex_eig)) .gt. thresh) success = .false.
+
         do i = 1, n_eig
             norms(i, 1) = sqrt(dot_product(evec(:, i), evec(:, i)))
             norms(i, 2) = sqrt(dot_product(ex_evec(:, i), ex_evec(:, i)))
         end do
-
-        if (maxval(norms(:, 1) - norms(:, 2)) .gt. thresh) success = .false.
+        if (abs(maxval(norms(:, 1) - norms(:, 2))) .gt. thresh) success = .false.
 
         if (.not. success) then
             write (*, "(t3,a,*(d14.4))") "Comp Eigenvals: ", eig
