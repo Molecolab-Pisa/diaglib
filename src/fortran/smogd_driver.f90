@@ -208,9 +208,13 @@ contains
 ! Stupidity checks
 !
         if (n_targ .gt. n_max) call dgl_error( &
-            "Number of eigenvalues request is larger that size of arrays passed")
+                "Number of eigenvalues requested is larger that size of arrays passed")
+!
         if (mod(n2, 2) .ne. 0) call dgl_error( &
-            "Size of the total problem is not even, something is really wrong with your input")
+                "Size of the total problem is not even, something is really wrong with your input")
+!
+        if (n_max .gt. n2/4) call dgl_error( &
+                "Requested more than half of the total number of eigenvalues: expansions space would break down!")
 !
 ! Parse optional arguments
 !

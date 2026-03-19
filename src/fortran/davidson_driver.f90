@@ -109,7 +109,10 @@ contains
 ! Stupidity checks
 !
         if (n_targ .gt. n_max) call dgl_error( &
-            "Number of eigenvalues request is larger that size of arrays passed")
+                "Number of eigenvalues requested is larger that size of arrays passed")
+!
+        if (n_max .gt. n/2) call dgl_error( &
+                "Requested more than half of the total number of eigenvalues: expansions space would break down!")
 !
 ! check what problem we are dealing with
 !
