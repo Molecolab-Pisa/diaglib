@@ -59,22 +59,17 @@ program reference
     a(n + 1:2*n, n + 1:2*n) = copy
 
     call get_spd_matrix(n, copy)
-    !b(n + 1:2*n, 1:n) = -copy
     b(1:n, n + 1:2*n) = copy
     
     call get_smd_matrix(n, copy)
-    !b(1:n, n + 1:2*n) = -copy
     b(n + 1:2*n, 1:n) = copy
-
-    call prtmat(2*n, 2*n, a)
-    print *
-    call prtmat(2*n, 2*n, b)
 
     !linear response problem
     call dsygv(1, "V", "U", 2*n, b, 2*n, a, 2*n, eig, work, lwork, info)
     call check_lapack(info)
+
     eig = -one/eig
-    call dump_eigpairs(luref, 2*n, n_targ, eig, evec, "Linear response diagonalization")
+    call dump_eigpairs(luref, 2*n, n_targ, eig, b, "Linear response diagonalization")
 
     deallocate (evec, eig)
     deallocate (a, b, copy)
