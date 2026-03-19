@@ -60,7 +60,7 @@ program reference
 
     call get_spd_matrix(n, copy)
     b(1:n, n + 1:2*n) = copy
-    
+
     call get_smd_matrix(n, copy)
     b(n + 1:2*n, 1:n) = copy
 
