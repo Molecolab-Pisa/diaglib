@@ -69,13 +69,13 @@ contains
         if (abs(maxval(norms(:, 1) - norms(:, 2))) .gt. thresh) success = .false.
 
         if (.not. success) then
-            write (*, "(t3,a,*(d14.4))") "Comp Eigenvals: ", eig
-            write (*, "(t3,a,*(d14.4))") "Ref  Eigenvals: ", ex_eig
-            write (*, "(t3,a,*(d14.4))") "Diff Eigenvals: ", ex_eig - eig
+            write (*, "(t3,a,*(d14.4))") "Computed  Eigenvals: ", eig
+            write (*, "(t3,a,*(d14.4))") "Reference Eigenvals: ", ex_eig
+            write (*, "(t3,a,*(d14.4))") "Difference:          ", ex_eig - eig
             write (*, *)
-            write (*, "(t3,a,*(d14.4))") "Norm of Comp Eigenvecs: ", norms(:, 1)
-            write (*, "(t3,a,*(d14.4))") "Norm of Ref  Eigenvecs: ", norms(:, 2)
-            write (*, "(t3,a,*(d14.4))") "Norm of Diff Eigenvecs: ", norms(:, 2) - norms(:, 1)
+            write (*, "(t3,a,*(d14.4))") "Norm of Computed  Eigenvecs: ", norms(:, 1)
+            write (*, "(t3,a,*(d14.4))") "Norm of Reference Eigenvecs: ", norms(:, 2)
+            write (*, "(t3,a,*(d14.4))") "Difference of Norms:         ", norms(:, 2) - norms(:, 1)
         end if
 
         deallocate (ex_eig, ex_evec, norms)
@@ -95,13 +95,13 @@ contains
         end if
 
         open (file=trim(reference_fname), unit=luref, status="old")
-        n_eig_read = 0
-        ld_read = 0
-
+        
         do
             read (luref, "(a)") line
             if (index(line, "Eigenvalues") .ne. 0) exit
         end do
+        
+        n_eig_read = 0
         do
             read (luref, "(a)") line
             if (index(line, "Eigenvectors") .ne. 0) exit
@@ -110,10 +110,11 @@ contains
 
         if (n_eig .ne. n_eig_read) then
             write (*, "(t3,a)") "Reference file contains the wrong number of eigenvalues, "// &
-                "re-run the 'reference' executable"
+            "re-run the 'reference' executable"
             stop
         end if
-
+        
+        ld_read = 0
         do
             read (luref, "(a)") line
             if (len_trim(line) .eq. 0) exit
