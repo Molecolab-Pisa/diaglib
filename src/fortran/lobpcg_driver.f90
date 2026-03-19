@@ -108,10 +108,10 @@ contains
 ! Stupidity check
 !
         if (n_targ .gt. n_max) call dgl_error( &
-                "Number of eigenvalues requested is larger that size of arrays passed")
+            "Number of eigenvalues requested is larger that size of arrays passed")
 !
-        if (n_max .gt. n/2) call dgl_error( &
-                "Requested more than half of the total number of eigenvalues: expansions space would break down!")
+        if (3*n_max .ge. n) call dgl_error( &
+            "Requested more than a third of the total number of eigenvalues: expansions space would break down!")
 !
 ! check what problem we are dealing with
 !
@@ -207,7 +207,7 @@ contains
 !
         if (abs(shift) .gt. num_thresh) call daxpy(n*n_max, shift, space, 1, aspace, 1)
         call dgemm('t', 'n', n_max, n_max, n, one, space, n, aspace, n, zero, a_red, lda)
-!        
+!
         call get_time(t1)
         call dsyev('v', 'l', n_max, a_red, lda, e_red, work, lwork, info)
         call get_time(t2)

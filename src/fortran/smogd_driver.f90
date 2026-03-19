@@ -208,13 +208,13 @@ contains
 ! Stupidity checks
 !
         if (n_targ .gt. n_max) call dgl_error( &
-                "Number of eigenvalues requested is larger that size of arrays passed")
+            "Number of eigenvalues requested is larger that size of arrays passed")
 !
         if (mod(n2, 2) .ne. 0) call dgl_error( &
-                "Size of the total problem is not even, something is really wrong with your input")
+            "Size of the total problem is not even, something is really wrong with your input")
 !
-        if (n_max .gt. n2/4) call dgl_error( &
-                "Requested more than half of the total number of eigenvalues: expansions space would break down!")
+        if (4*n_max .ge. n2) call dgl_error( &
+            "Requested more than half of the total number of eigenvalues: expansions space would break down!")
 !
 ! Parse optional arguments
 !
@@ -317,13 +317,6 @@ contains
             vm(:, i_eig) = evec(1:n, i_eig) - evec(n + 1:n2, i_eig)
         end do
 !
-! orthogonalize the expansion space to the metric.
-!
-        call apbmul(n, n_max, vp, lvp)
-        call b_ortho(n, n_max, vp, lvp)
-        call ambmul(n, n_max, vm, lvm)
-        call b_ortho(n, n_max, vm, lvm)
-!
 ! initialize the counters
 !
         n_act = n_max
@@ -350,8 +343,26 @@ contains
 ! perform this iteration's matrix-vector multiplications:
 !
             call get_time(t1)
+!
+            call apbmul(n, n_act, vp(1, i_beg), lvp(1, i_beg))
+            call ambmul(n, n_act, vm(1, i_beg), lvm(1, i_beg))
+!
+            call get_time(t2)
+            t_mv = t_mv + t2 - t1
+!
+            call get_time(t1)
+!
+            call b_ortho(n, n_act, vp(1, i_beg), lvp(1, i_beg))
+            call b_ortho(n, n_act, vm(1, i_beg), lvm(1, i_beg))
+!
+            call get_time(t2)
+            t_ortho = t_ortho + t2 - t1
+!
+            call get_time(t1)
+!
             call spdmul(n, n_act, vp(1, i_beg), bvm(1, i_beg))
             call smdmul(n, n_act, vm(1, i_beg), bvp(1, i_beg))
+!
             call get_time(t2)
             t_mv = t_mv + t2 - t1
 !
@@ -394,11 +405,6 @@ contains
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, vp, n, up, lda, zero, eigp, n)
             call dgemm('n', 'n', n, n_max, ld_current, one, vm, n, um, lda, zero, eigm, n)
-!
-! assemble the current approximation to the eigenvectors
-!
-            evec(1:n, :) = eigp + eigm
-            evec(n + 1:n2, :) = eigp - eigm
 !
 ! compute the residuals, and their rms and sup norms:
 !
@@ -446,6 +452,10 @@ contains
                 ok = .true.
                 do i_eig = 1, n_targ
                     eig(i_eig) = one/eig(i_eig)
+                    evec(1:n, :) = (eigp + eigm)/two
+                    evec(n + 1:n2, :) = (eigp - eigm)/two
+                    !evec(1:n, :) = eigp + eigm
+                    !evec(n + 1:n2, :) = eigp - eigm
                 end do
                 exit
             end if
@@ -512,12 +522,10 @@ contains
 ! orthonormalize them.
 !
             call get_time(t1)
+!
             call b_ortho_vs_x(n, ld_current, n_act, vp, lvp, vp(1, i_beg))
-            call apbmul(n, n_act, vp(1, i_beg), lvp(1, i_beg))
-            call b_ortho(n, n_act, vp(1, i_beg), lvp(1, i_beg))
             call b_ortho_vs_x(n, ld_current, n_act, vm, lvm, vm(1, i_beg))
-            call ambmul(n, n_act, vm(1, i_beg), lvm(1, i_beg))
-            call b_ortho(n, n_act, vm(1, i_beg), lvm(1, i_beg))
+!
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
 !

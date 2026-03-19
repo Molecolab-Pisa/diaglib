@@ -148,10 +148,10 @@ contains
 ! Check dimension VS. number of eigs requested
 !
         if (n_targ .gt. n_max) call dgl_error( &
-                "Number of eigenvalues requested is larger that size of arrays passed")
+            "Number of eigenvalues requested is larger that size of arrays passed")
 !
-        if (n_max .gt. n/2) call dgl_error( &
-                "Requested more than half of the total number of eigenvalues: expansions space would break down!")
+        if (2*n_max .ge. n) call dgl_error( &
+            "Requested more than half of the total number of eigenvalues: expansions space would break down!")
 !
 ! Parse optional arguments
 !! zio pera
