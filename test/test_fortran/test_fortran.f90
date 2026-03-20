@@ -8,7 +8,6 @@ program test_fortran
     implicit none
     logical :: ok
     real(dp), allocatable :: eig(:), evec(:, :), evec_2(:, :)
-    character(len=20), parameter :: f_string = "('-- ', a, /)"
 !
 ! Check if the reference exists
 !

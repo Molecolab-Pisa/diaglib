@@ -12,10 +12,11 @@ module utility
     integer, parameter :: memory = 100
     character(len=2), parameter :: memory_unit = "MB"
     procedure(), pointer :: mx_p => null()
-    
+
     character(len=30) :: reference_fname = "output_reference.txt"
     character(len=30) :: results_fname = "output_fortran.txt"
     integer, parameter :: lutest = 100, luref = 101
+    character(len=20), parameter :: f_string = "('-- ', a, /)"
     integer :: i, j
 
     interface prtmat
@@ -95,12 +96,12 @@ contains
         end if
 
         open (file=trim(reference_fname), unit=luref, status="old")
-        
+
         do
             read (luref, "(a)") line
             if (index(line, "Eigenvalues") .ne. 0) exit
         end do
-        
+
         n_eig_read = 0
         do
             read (luref, "(a)") line
@@ -110,10 +111,10 @@ contains
 
         if (n_eig .ne. n_eig_read) then
             write (*, "(t3,a)") "Reference file contains the wrong number of eigenvalues, "// &
-            "re-run the 'reference' executable"
+                "re-run the 'reference' executable"
             stop
         end if
-        
+
         ld_read = 0
         do
             read (luref, "(a)") line
@@ -127,7 +128,7 @@ contains
             stop
         end if
 
-        close(luref)
+        close (luref)
 
     end subroutine check_reference
 

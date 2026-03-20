@@ -19,23 +19,29 @@ program reference
 
     open (file=trim(reference_fname), unit=luref, status="unknown")
 
+    write(*,f_string) "Building symmetric matrix"
     call get_sym_matrix(n, a)
+    write(*,f_string) "Building symmetric metric"
     call get_sym_metric(n, b)
     copy = a
 
     !symmetric diagonalization
+    write(*,f_string) "Running symmetric diagonalization"
     call dsyev("V", "U", n, a, n, eig, work, lwork, info)
     call check_lapack(info)
     call dump_eigpairs(luref, n, n_targ, eig, a, "Symmetric diagonalization")
 
     a = copy
     !symmetric generalized problem
+    write(*,f_string) "Running symmetric generalized diagonalization"
     call dsygv(1, "V", "U", n, a, n, b, n, eig, work, lwork, info)
     call check_lapack(info)
     call dump_eigpairs(luref, n, n_targ, eig, a, "Symmetric Generalized diagonalization")
 
+    write(*,f_string) "Building non symmetric matrix"
     call get_asym_matrix(n, a)
     !non symmetric diagonalization
+    write(*,f_string) "Running non symmetric generalized diagonalization"
     call dgeev("V", "V", n, a, n, eig, eig(1, 2), evec, n, evec(1, 1, 2), n, work, lwork, info)
     call check_lapack(info)
 
@@ -52,6 +58,7 @@ program reference
     allocate (eig(2*n, 1))
     a = zero; b = zero
 
+    write(*,f_string) "Building linear response matrices"
     call get_apb_matrix(n, copy)
     a(1:n, 1:n) = copy
 
@@ -65,12 +72,14 @@ program reference
     b(n + 1:2*n, 1:n) = copy
 
     !linear response problem
+    write(*,f_string) "Running linear response diagonalization"
     call dsygv(1, "V", "U", 2*n, b, 2*n, a, 2*n, eig, work, lwork, info)
     call check_lapack(info)
 
     eig = -one/eig
     call dump_eigpairs(luref, 2*n, n_targ, eig, b, "Linear response diagonalization")
 
+    write(*,f_string) "All done!"
     deallocate (evec, eig)
     deallocate (a, b, copy)
     deallocate (work)
