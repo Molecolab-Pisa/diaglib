@@ -191,8 +191,15 @@ contains
 ! if required, compute b*evec and b-orthogonalize the guess
 !
         if (generalized) then
+            call get_time(t1)
             call metvec(n, n_max, evec, bx_new)
+            call get_time(t2)
+            t_mv = t_mv + t2 - t1
+
+            call get_time(t1)
             call b_ortho(n, n_max, evec, bx_new)
+            call get_time(t2)
+            t_ortho = t_ortho + t2 - t1
         end if
 !
 ! compute the first eigenpairs by diagonalizing the reduced matrix:
@@ -253,12 +260,6 @@ contains
         call get_time(t1)
         if (generalized) then
             call b_ortho_vs_x(n, n_max, n_max, space, bspace, space(1, ind_w))
-!
-! after b_ortho, w is b-orthogonal to x, and orthonormal.
-! compute the application of b to w, and b-orthonormalize it.
-!
-            call metvec(n, n_max, space(1, ind_w), bspace(1, ind_w))
-            call b_ortho(n, n_max, space(1, ind_w), bspace(1, ind_w))
         else
             call ortho_vs_x(n, n_max, n_max, space, space(1, ind_w))
         end if
@@ -293,12 +294,26 @@ contains
 !
         do it = 1, max_iter
 !
-! perform the matrix-vector multiplication for this iteration:
+! perform this iteration's matrix-vector multiplication and b-orthogonalize
+! the latest vectors in case of a generalized problem:
+!
+            if (generalized) then
+                call get_time(t1)
+                call metvec(n, n_act, space(1, ind_w), bspace(1, ind_w))
+                call get_time(t2)
+                t_mv = t_mv + t2 - t1
+
+                call get_time(t1)
+                call b_ortho(n, n_act, space(1, ind_w), bspace(1, ind_w))
+                call get_time(t2)
+                t_ortho = t_ortho + t2 - t1
+            end if
 !
             call get_time(t1)
             call matvec(n, n_act, space(1, ind_w), aspace(1, ind_w))
             call get_time(t2)
             t_mv = t_mv + t2 - t1
+!
             if (abs(shift) .gt. num_thresh) call daxpy(n*n_act, shift, space(1, ind_w), 1, aspace(1, ind_w), 1)
 !
 ! build the reduced matrix and diagonalize it:
@@ -427,8 +442,6 @@ contains
             call get_time(t1)
             if (generalized) then
                 call b_ortho_vs_x(n, n_max + n_act, n_act, space, bspace, space(1, ind_w))
-                call metvec(n, n_act, space(1, ind_w), bspace(1, ind_w))
-                call b_ortho(n, n_act, space(1, ind_w), bspace(1, ind_w))
             else
                 call ortho_vs_x(n, n_max + n_act, n_act, space, space(1, ind_w))
             end if

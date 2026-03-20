@@ -268,9 +268,8 @@ contains
 !
 ! clean out various quantities
 !
-            call get_time(t_tot1)
+            call get_time(t_tot)
 !
-            t_tot = zero
             t_diag = zero
             t_ortho = zero
             t_mv = zero
@@ -632,8 +631,8 @@ contains
 !
 ! end of davidson, print results
 !
-            call get_time(t_tot2)
-            t_tot = t_tot2 - t_tot1
+            call get_time(t2)
+            t_tot = t2 - t_tot
 !
 ! if required, print timings
 !

@@ -215,13 +215,6 @@ contains
 !
         call dcopy(n*n_max, evec, 1, space, 1)
 !
-! apply the b matrix and b-orthogonalize the guess:
-!
-        if (generalized) then
-            call metvec(n, n_max, space, bspace)
-            call b_ortho(n, n_max, space, bspace)
-        end if
-!
 ! initialize the number of active vectors and the associated indices.
 !
         n_act = n_max
@@ -256,7 +249,20 @@ contains
 !
             ld_current = ld_current + n_act
 !
-! perform this iteration's matrix-vector multiplication:
+! perform this iteration's matrix-vector multiplication and b-orthogonalize
+! the latest vectors in case of a generalized problem:
+!
+            if (generalized) then
+                call get_time(t1)
+                call metvec(n, n_act, space(1, i_beg), bspace(1, i_beg))
+                call get_time(t2)
+                t_mv = t_mv + t2 - t1
+!
+                call get_time(t1)
+                call b_ortho(n, n_act, space(1, i_beg), bspace(1, i_beg))
+                call get_time(t2)
+                t_ortho = t_ortho + t2 - t1
+            end if
 !
             call get_time(t1)
             call matvec(n, n_act, space(1, i_beg), aspace(1, i_beg))
@@ -406,8 +412,6 @@ contains
             call get_time(t1)
             if (generalized) then
                 call b_ortho_vs_x(n, ld_current, n_act, space, bspace, space(1, i_beg))
-                call metvec(n, n_act, space(1, i_beg), bspace(1, i_beg))
-                call b_ortho(n, n_act, space(1, i_beg), bspace(1, i_beg))
             else
                 call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg))
             end if
