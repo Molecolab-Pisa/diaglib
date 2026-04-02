@@ -60,8 +60,9 @@ find_package(OpenMP REQUIRED)
 
 # Add appropriate subdirectories
 add_subdirectory(src/fortran)
-add_subdirectory(test/test_fortran)
 add_subdirectory(src/fortran_include)
+#add_subdirectory(src/c_interface)
+add_subdirectory(test/test_fortran)
 
 # uninstall target
 if(NOT TARGET uninstall)

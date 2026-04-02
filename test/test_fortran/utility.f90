@@ -4,8 +4,8 @@ module utility
 !!
     integer, parameter :: dp = selected_real_kind(15)
     real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp
-    
-    integer, parameter :: n = 20, n_targ = 5, n_max = 5
+
+    integer, parameter :: n = 500, n_targ = 5, n_max = 10
     integer, parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
@@ -50,7 +50,8 @@ contains
     logical function compare_eigs(ld, n_eig, thresh, eig, evec, string) result(success)
         integer, intent(in) :: ld, n_eig
         real(dp), intent(in) :: thresh
-        real(dp), intent(in) :: eig(n_eig), evec(ld, n_eig)
+        real(dp), intent(in) :: eig(n_eig)
+        real(dp), intent(inout) :: evec(ld, n_eig)
         character(len=*) :: string
 
         real(dp), allocatable :: ex_eig(:), ex_evec(:, :), norms(:, :)
@@ -64,19 +65,20 @@ contains
         if (abs(maxval(eig - ex_eig)) .gt. thresh) success = .false.
 
         do i = 1, n_eig
+            if (evec(1, i) .lt. zero) evec(:, i) = -evec(:, i)
             norms(i, 1) = sqrt(dot_product(evec(:, i), evec(:, i)))
-            norms(i, 2) = sqrt(dot_product(ex_evec(:, i), ex_evec(:, i)))
+            norms(i, 2) = sqrt(dot_product(evec(:, i), ex_evec(:, i)))
         end do
         if (abs(maxval(norms(:, 1) - norms(:, 2))) .gt. thresh) success = .false.
 
         if (.not. success) then
-            write (*, "(t3,a,*(d14.4))") "Computed  Eigenvals: ", eig
-            write (*, "(t3,a,*(d14.4))") "Reference Eigenvals: ", ex_eig
-            write (*, "(t3,a,*(d14.4))") "Difference:          ", ex_eig - eig
+            write (*, "(t3,a,*(d14.4))") "Computed  Eigenvals:", eig
+            write (*, "(t3,a,*(d14.4))") "Reference Eigenvals:", ex_eig
+            write (*, "(t3,a,*(d14.4))") "Difference:         ", abs(ex_eig - eig)
             write (*, *)
-            write (*, "(t3,a,*(d14.4))") "Norm of Computed  Eigenvecs: ", norms(:, 1)
-            write (*, "(t3,a,*(d14.4))") "Norm of Reference Eigenvecs: ", norms(:, 2)
-            write (*, "(t3,a,*(d14.4))") "Difference of Norms:         ", norms(:, 2) - norms(:, 1)
+            write (*, "(t3,a,*(d14.4))") "Norm of Computed  Eigenvecs:     ", norms(:, 1)
+            write (*, "(t3,a,*(d14.4))") "Overlap with Reference Eigenvecs:", norms(:, 2)
+            write (*, "(t3,a,*(d14.4))") "Difference:                      ", abs(norms(:, 2) - norms(:, 1))
         end if
 
         deallocate (ex_eig, ex_evec, norms)

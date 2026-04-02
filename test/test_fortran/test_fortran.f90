@@ -41,6 +41,7 @@ program test_fortran
 contains
 !
     subroutine test_davidson()
+        implicit none
 !
 ! test davidson:
 !
@@ -72,6 +73,7 @@ contains
     end subroutine test_davidson
 !
     subroutine test_davidson_generalized()
+        implicit none
 !
 ! test generalized davidson:
 !
@@ -103,6 +105,7 @@ contains
     end subroutine test_davidson_generalized
 !
     subroutine test_nonsym_davidson()
+        implicit none
 !
 ! test non-symmetric davidson:
 !
@@ -141,6 +144,8 @@ contains
     end subroutine test_nonsym_davidson
 !
     subroutine test_lobpcg()
+        implicit none
+
 !
 ! test lobpcg:
 !
@@ -172,6 +177,7 @@ contains
     end subroutine test_lobpcg
 !
     subroutine test_lobpcg_generalized()
+        implicit none
 !
 ! test generalized lobpcg:
 !
@@ -202,6 +208,7 @@ contains
     end subroutine test_lobpcg_generalized
 !
     subroutine test_smogd()
+        implicit none
 !
 ! test smogd:
 !
