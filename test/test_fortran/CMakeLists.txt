@@ -20,6 +20,7 @@ if(MKL_FOUND)
         target_link_libraries(reference PUBLIC MKL::MKL)
 else()
         target_link_libraries(reference PUBLIC BLAS::BLAS)
+        target_link_libraries(reference PUBLIC LAPACK::LAPACK)
 endif()
 
 

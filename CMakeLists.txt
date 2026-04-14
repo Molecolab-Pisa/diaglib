@@ -47,11 +47,13 @@ if(NOT BLA_VENDOR)
         find_package(MKL)
         if (NOT MKL_FOUND)
                 find_package(BLAS REQUIRED)
+                find_package(LAPACK REQUIRED)
         endif()
 elseif(BLA_VENDOR MATCHES "Intel")
         find_package(MKL REQUIRED)
 else()
         find_package(BLAS REQUIRED)
+        find_package(LAPACK REQUIRED)
 endif()
 
 # Find OpenMP
