@@ -29,27 +29,28 @@ program reference
     write(*,f_string) "Running symmetric diagonalization"
     call dsyev("V", "U", n, a, n, eig, work, lwork, info)
     call check_lapack(info)
-    call dump_eigpairs(luref, n, n_targ, eig, a, "Symmetric diagonalization")
+    call dump_eigpairs(luref, n, n, eig, a, "Symmetric diagonalization")
 
     a = copy
     !symmetric generalized problem
     write(*,f_string) "Running symmetric generalized diagonalization"
     call dsygv(1, "V", "U", n, a, n, b, n, eig, work, lwork, info)
     call check_lapack(info)
-    call dump_eigpairs(luref, n, n_targ, eig, a, "Symmetric Generalized diagonalization")
+    call dump_eigpairs(luref, n, n, eig, a, "Symmetric Generalized diagonalization")
 
     write(*,f_string) "Building non symmetric matrix"
     call get_asym_matrix(n, a)
+    
     !non symmetric diagonalization
     write(*,f_string) "Running non symmetric generalized diagonalization"
     call dgeev("V", "V", n, a, n, eig, eig(1, 2), evec, n, evec(1, 1, 2), n, work, lwork, info)
     call check_lapack(info)
 
-    if (sqrt(dot_product(eig(:, 2), eig(:, 2))) .gt. 1.e-12_dp) print *, "Immaginary eigs detected"
-    call sort_eigenpairs(n, n_targ, eig, evec)
+    if (sqrt(dot_product(eig(:, 2), eig(:, 2))) .gt. 1.e-12_dp) write(*,f_string) "Immaginary eigs detected !!"
+    call sort_eigenpairs(n, n, eig, evec)
 
-    call dump_eigpairs(luref, n, n_targ, eig, evec, "Non Symmetric diagonalization, Right")
-    call dump_eigpairs(luref, n, n_targ, eig, evec(1, 1, 2), "Non Symmetric diagonalization, Left")
+    call dump_eigpairs(luref, n, n, eig, evec, "Non Symmetric diagonalization, Right")
+    call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Non Symmetric diagonalization, Left")
 
     deallocate (a, b)
     deallocate (eig)
@@ -84,7 +85,7 @@ program reference
     do i = 1, 2*n
         a(:,i) = b (:, 2*n + 1 - i)
     enddo
-    call dump_eigpairs(luref, 2*n, n_targ, eig, a, "Linear response diagonalization")
+    call dump_eigpairs(luref, 2*n, 2*n, eig, a, "Linear response diagonalization")
 
     write(*,f_string) "All done!"
     deallocate (evec, eig)

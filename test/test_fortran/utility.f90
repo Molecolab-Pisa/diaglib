@@ -85,11 +85,11 @@ contains
 
     end function compare_eigs
 
-    subroutine check_reference(ld, n_eig)
+    subroutine check_reference(ld)
         implicit none
-        integer, intent(in) :: ld, n_eig
+        integer, intent(in) :: ld
 
-        integer :: n_eig_read, ld_read
+        integer :: ld_read
         character(len=200) :: line
 
         if (.not. file_exist(trim(reference_fname))) then
@@ -104,23 +104,10 @@ contains
             if (index(line, "Eigenvalues") .ne. 0) exit
         end do
 
-        n_eig_read = 0
-        do
-            read (luref, "(a)") line
-            if (index(line, "Eigenvectors") .ne. 0) exit
-            n_eig_read = n_eig_read + 1
-        end do
-
-        if (n_eig .ne. n_eig_read) then
-            write (*, "(t3,a)") "Reference file contains the wrong number of eigenvalues, "// &
-                "re-run the 'reference' executable"
-            stop
-        end if
-
         ld_read = 0
         do
             read (luref, "(a)") line
-            if (len_trim(line) .eq. 0) exit
+            if (index(line, "Eigenvectors") .ne. 0) exit
             ld_read = ld_read + 1
         end do
 
@@ -155,7 +142,11 @@ contains
             read (luref, *) k, eig(i)
         end do
 
-        read (luref, *)
+        do
+            read (luref, "(a)") line
+            if (index(line, "Eigenvectors") .ne. 0) exit
+        end do
+
         do i = 1, ld
             read (luref, *) k, (evec(i, j), j=1, n_eig)
         end do

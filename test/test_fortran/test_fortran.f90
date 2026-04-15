@@ -11,7 +11,7 @@ program test_fortran
 !
 ! Check if the reference exists
 !
-    call check_reference(n, n_targ)
+    call check_reference(n)
 !
 ! open a text file to dump the output.
 !
