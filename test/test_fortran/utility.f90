@@ -3,7 +3,7 @@ module utility
 !! Common module for testing
 !!
     integer, parameter :: dp = selected_real_kind(15)
-    real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp
+    real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp, half = 0.5_dp
 
     integer, parameter :: n = 500, n_targ = 5, n_max = 10
     integer, parameter :: max_iter = 100, dav_iter = 10

@@ -452,11 +452,9 @@ contains
                 ok = .true.
                 do i_eig = 1, n_targ
                     eig(i_eig) = one/eig(i_eig)
-                    evec(1:n, :) = (eigp + eigm)/two
-                    evec(n + 1:n2, :) = (eigp - eigm)/two
-                    !evec(1:n, :) = eigp + eigm
-                    !evec(n + 1:n2, :) = eigp - eigm
                 end do
+                evec(1:n, :) = (eigp + eigm)/two
+                evec(n + 1:n2, :) = (eigp - eigm)/two
                 exit
             end if
 !

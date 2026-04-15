@@ -6,13 +6,13 @@ program reference
     implicit none
 
     integer :: lwork = 10000, ilwork = 10000, info
-    real(dp), allocatable :: a(:, :), b(:, :), copy(:, :)
+    real(dp), allocatable :: a(:, :), b(:, :), copy(:, :), cont(:,:)
     real(dp), allocatable :: eig(:, :)
     real(dp), allocatable :: evec(:, :, :)
     real(dp), allocatable :: work(:)
     integer, allocatable :: iwork(:)
 
-    allocate (a(n, n), b(n, n), copy(n, n))
+    allocate (a(n, n), b(n, n), copy(n, n), cont(n,n))
     allocate (eig(n, 2), evec(n, n, 2))
     allocate (work(lwork), iwork(ilwork))
     a = zero; b = zero
@@ -60,28 +60,35 @@ program reference
 
     write(*,f_string) "Building linear response matrices"
     call get_apb_matrix(n, copy)
-    a(1:n, 1:n) = copy
-
-    call get_amb_matrix(n, copy)
-    a(n + 1:2*n, n + 1:2*n) = copy
-
+    call get_amb_matrix(n, cont)
+        
+    a(1:n, 1:n) = (copy + cont) * half
+    a(n + 1:2*n, n + 1:2*n) = (copy + cont) * half
+    a(1:n, n + 1:2*n) = (copy - cont) * half
+    a(n + 1:2*n, 1:n) = (copy - cont) * half
+    
     call get_spd_matrix(n, copy)
-    b(1:n, n + 1:2*n) = copy
-
-    call get_smd_matrix(n, copy)
-    b(n + 1:2*n, 1:n) = copy
+    call get_smd_matrix(n, cont)
+    
+    b(1:n, 1:n) = (copy + cont) * half
+    b(n + 1:2*n, n + 1:2*n) = - (copy + cont) * half
+    b(1:n, n + 1:2*n) = (copy - cont) * half
+    b(n + 1:2*n, 1:n) = - (copy - cont) * half
 
     !linear response problem
     write(*,f_string) "Running linear response diagonalization"
-    call dsygv(1, "V", "U", 2*n, b, 2*n, a, 2*n, eig, work, lwork, info)
+    call dsygv(1, "V", "L", 2*n, b, 2*n, a, 2*n, eig, work, lwork, info)
     call check_lapack(info)
 
     eig = -one/eig
-    call dump_eigpairs(luref, 2*n, n_targ, eig, b, "Linear response diagonalization")
+    do i = 1, 2*n
+        a(:,i) = b (:, 2*n + 1 - i)
+    enddo
+    call dump_eigpairs(luref, 2*n, n_targ, eig, a, "Linear response diagonalization")
 
     write(*,f_string) "All done!"
     deallocate (evec, eig)
-    deallocate (a, b, copy)
+    deallocate (a, b, copy, cont)
     deallocate (work)
 
     close (luref)
@@ -175,10 +182,10 @@ subroutine get_spd_matrix(n, mat)
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
-            mat(j, i) = +0.05_dp
+            mat(j, i) = -0.05_dp
         end do
         do j = i + 1, n
-            mat(j, i) = -0.05_dp
+            mat(j, i) = +0.05_dp
         end do
         mat(i, i) = one
     end do
@@ -193,10 +200,10 @@ subroutine get_smd_matrix(n, mat)
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
-            mat(j, i) = -0.05_dp
+            mat(j, i) = +0.05_dp
         end do
         do j = i + 1, n
-            mat(j, i) = +0.05_dp
+            mat(j, i) = -0.05_dp
         end do
         mat(i, i) = one
     end do

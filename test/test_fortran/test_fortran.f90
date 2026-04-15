@@ -38,6 +38,14 @@ program test_fortran
     call test_nonsym_davidson
     call test_smogd
 !
+! close the output file:
+!
+    close (lutest)
+!
+! free the memory:
+!
+    deallocate (evec, evec_2, eig)
+!    
 contains
 !
     subroutine test_davidson()
@@ -212,8 +220,8 @@ contains
 !
 ! test smogd:
 !
-        deallocate (evec)
-        allocate (evec(2*n, n_max))
+        deallocate (evec, eig)
+        allocate (evec(2*n, n_max), eig(2*n))
         call init_eigenpairs(2*n, n_max, eig, evec, ok)
 !
         write (6, f_string) 'testing SMOGD:'
@@ -237,13 +245,8 @@ contains
             write (6, f_string) 'SMOGD failed to converge.'
         end if
 !
-! close the output file:
-!
-        close (lutest)
-!
-! free the memory:
-!
-        deallocate (evec, evec_2, eig)
+        deallocate (evec, eig)
+        allocate (evec(n, n_max), eig(n))
 !
     end subroutine test_smogd
 !
