@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15...4.0)
 
 project(diaglib VERSION 1.0
         DESCRIPTION "A collection of iterative, matrix-free eigensolvers"
-        LANGUAGES Fortran)
+        LANGUAGES Fortran C)
 
 #Include CPack to install the package
 include(CPack)
@@ -38,16 +38,31 @@ if (DGL_INTEGER_KIND EQUAL 8)
         endif()
 endif()
 
-# Find required BLAS
+# Set required BLAS
 set(BLA_SIZEOF_INTEGER ${DGL_INTEGER_KIND})
 set(BLA_THREAD CACHE STRING "Choice between SEQ or OMP BLAS")
 set(BLA_VENDOR CACHE STRING "Choice of BLAS vendor")
 
+# Set required size for MKL
+if(DGL_INTEGER_KIND EQUAL 4)
+        set(MKL_INTERFACE_FULL gf_lp64)
+else()
+        set(MKL_INTERFACE_FULL gf_ilp64)
+endif()
+
 if(NOT BLA_VENDOR)
-        find_package(MKL)
+        find_package(MKL QUIET)
         if (NOT MKL_FOUND)
                 find_package(BLAS REQUIRED)
                 find_package(LAPACK REQUIRED)
+        else()
+                message(STATUS "MKL_VERSION: ${MKL_VERSION}")
+                message(STATUS "MKL_ROOT: ${MKL_ROOT}")
+                message(STATUS "MKL_ARCH: ${MKL_ARCH}")
+                message(STATUS "MKL_LINK: ${MKL_LINK}")
+                message(STATUS "MKL_INTERFACE_FULL: ${MKL_INTERFACE_FULL}")
+                message(STATUS "MKL_THREADING: ${MKL_THREADING}")
+                message(STATUS "MKL_MPI: ${MKL_MPI}")
         endif()
 elseif(BLA_VENDOR MATCHES "Intel")
         find_package(MKL REQUIRED)
@@ -63,8 +78,9 @@ find_package(OpenMP REQUIRED)
 # Add appropriate subdirectories
 add_subdirectory(src/fortran)
 add_subdirectory(src/fortran_include)
-#add_subdirectory(src/c_interface)
+add_subdirectory(src/c_interface)
 add_subdirectory(test/test_fortran)
+add_subdirectory(test/test_c)
 
 # uninstall target
 if(NOT TARGET uninstall)

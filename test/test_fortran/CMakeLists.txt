@@ -37,6 +37,6 @@ install(TARGETS test_fortran
 )
 
 # Install the reference
-install(TARGETS test_fortran
+install(TARGETS reference
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
