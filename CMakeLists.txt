@@ -16,26 +16,41 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-# set flags for build types
+# set Fortran flags for build types
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     set(CMAKE_Fortran_FLAGS "-std=f2003 -pedantic")
-    set(CMAKE_Fortran_FLAGS_DEBUG "-g -Wall -Wextra -fcheck=all -fbacktrace")
+    set(CMAKE_Fortran_FLAGS_DEBUG "-ggdb -Wall -Wextra -fcheck=all -fbacktrace")
     set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -march=native")
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
     set(CMAKE_Fortran_FLAGS "-stand 2003")
-    set(CMAKE_Fortran_FLAGS_DEBUG "-g -warn all -check all -traceback")
+    set(CMAKE_Fortran_FLAGS_DEBUG "-ggdb -warn all -check all -traceback")
     set(CMAKE_Fortran_FLAGS_RELEASE "-O3 -xHost")
+endif()
+set(CMAKE_Fortran_PREPROCESS ON)
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    set(CMAKE_C_FLAGS "-pedantic")
+    set(CMAKE_C_FLAGS_DEBUG "-ggdb -Wall -Wextra")
+    set(CMAKE_C_FLAGS_RELEASE "-O3 -march=native")
+elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
+    #set(CMAKE_C_FLAGS "-stand 2003")
+    set(CMAKE_C_FLAGS_DEBUG "-O0 -ggdb -traceback")
+    set(CMAKE_C_FLAGS_RELEASE "-O3 -xHost")
 endif()
 
 
 # If wanted force double precision integers
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
+
 if (DGL_INTEGER_KIND EQUAL 8)
         if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
-                add_compile_options(-fdefault-integer-8)
+                add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
         elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^Intel")
-                add_compile_options(-i8)
+                add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
         endif()
+        add_compile_definitions(DGL_INT_KIND_8)
+else()
+        add_compile_definitions(DGL_INT_KIND_4)
 endif()
 
 # Set required BLAS

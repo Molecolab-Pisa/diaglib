@@ -10,7 +10,7 @@ target_include_directories(test_c PUBLIC
 )
 
 # Link DiagLib
-target_link_libraries(test_c PRIVATE diaglib)
+target_link_libraries(test_c PRIVATE diaglib_c)
 
 # Ensure proper RPATH is set for installation
 set_target_properties(test_fortran PROPERTIES
