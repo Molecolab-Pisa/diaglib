@@ -1,26 +1,38 @@
 module dgl_utils_c
     use dgl_interface
+    use iso_c_binding
 
     integer, parameter :: dp = dgl_real
 
 contains
 
-subroutine C_string_ptr_to_F_string(C_string, F_string)
-    use ISO_C_BINDING
-    type(C_PTR), intent(in) :: C_string
-    character(len=*), intent(out) :: F_string
-    character(len=1, kind=C_CHAR), dimension(:), pointer :: p_chars
-    integer :: i
-    if (.not. C_associated(C_string)) then
-      F_string = ' '
-    else
-      call C_F_pointer(C_string, p_chars, [huge(0)])
-      do i = 1, len(F_string)
-        if (p_chars(i) == C_NULL_CHAR) exit
-        F_string(i:i) = p_chars(i)
-      end do
-      if (i <= len(F_string)) F_string(i:) = ' '
-    end if
-end subroutine
+FUNCTION c_ptr_to_f_string(c_ptr_str) RESULT(f_str)
+        TYPE(C_PTR), INTENT(IN)           :: c_ptr_str
+        CHARACTER(LEN=:), ALLOCATABLE     :: f_str
+        CHARACTER(KIND=C_CHAR), POINTER   :: char_array(:)
+        INTEGER :: length, i
+
+        ! Step 1: Check for NULL pointer
+        IF (.NOT. C_ASSOCIATED(c_ptr_str)) THEN
+            f_str = ''
+            RETURN
+        END IF
+
+        ! Step 2: Associate C pointer with Fortran pointer
+        CALL C_F_POINTER(c_ptr_str, char_array, [HUGE(0)])
+
+        ! Step 3: Scan for null terminator to get length
+        length = 0
+        DO WHILE (char_array(length + 1) /= C_NULL_CHAR)
+            length = length + 1
+        END DO
+
+        ! Step 4: Copy characters into allocatable Fortran string
+        ALLOCATE(CHARACTER(LEN=length) :: f_str)
+        DO i = 1, length
+            f_str(i:i) = char_array(i)
+        END DO
+
+END FUNCTION c_ptr_to_f_string
 
 end module dgl_utils_c

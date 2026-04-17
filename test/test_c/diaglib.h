@@ -4,19 +4,37 @@
 #include <stdbool.h>
 
 void davidson_driver_c(
-    bool verbose,
+#ifdef DGL_INT_KIND_4
     int n,
     int n_targ,
     int n_max,
-    int max_iter,
-    int max_dav,
-    double tol,
-    double shift,
+#elif DGL_INT_KIND_8
+    long int n,
+    long int n_targ,
+    long int n_max,
+#endif
     void (*matvec)(int*, int*, double*, double*),
     void (*precnd)(int*, int*, double*, double*, double*),
+    void (*metvec)(int*, int*, double*, double*),
     double* eig,
     double* evec,
-    bool* ok
+    bool* ok,
+    bool verbose,
+    double tol,
+#ifdef DGL_INT_KIND_4
+    int max_iter,
+    int dav_iter,
+#elif DGL_INT_KIND_8
+    int long max_iter,
+    int long dav_iter,
+#endif
+    double shift,
+#ifdef DGL_INT_KIND_4
+    int memory,
+#elif DGL_INT_KIND_8
+    int long memory,
+#endif
+    const char* memory_unit
 );
 
 void nonsym_driver_c(

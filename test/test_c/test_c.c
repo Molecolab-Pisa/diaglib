@@ -45,7 +45,7 @@
 //
 //     d_{ii} = 1/i
 //    
-// bvec_c(int* n, int* m, double* x, double* bx)
+// metvec_c(int* n, int* m, double* x, double* bx)
 //
 //   applies a positive definite matrix b (here, just the identity)
 //   to m vectors of length n (in x, assumed column major
@@ -148,7 +148,7 @@ void matvec_l_c(int* n, int* m, double* x, double* y) {
         }
 }
 
-void bvec_c(int* n, int* m, double* x, double* bx) {
+void metvec_c(int* n, int* m, double* x, double* bx) {
   int N = *n;
   int M = *m;
   for (int j = 0; j < M; ++j)
@@ -294,6 +294,7 @@ void write_results_c_2(const char* label, int n, int n_targ, double* eig, double
   fprintf(f, "\n");
   fclose(f);
 }
+
 void fix_phase(int n, int n_targ, double* evec) {
   for (int i = 0; i < n_targ; ++i) {
     int idx = i * n;  // indice del primo elemento della colonna i
@@ -307,25 +308,37 @@ void fix_phase(int n, int n_targ, double* evec) {
 // main program: test davidson, non-symmetric davidson, lobpcg and smogd.
 //  
 int main() {
-  const int n = 100, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+#ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
   const double tol = 1e-10, shift = 0.0;
   double eig[n_max];
   double evec[n * n_max], evec_l[n * n_max];
   bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
 //
 // get rid of the output file if it's already present.
 //
   remove("output_c.txt");
 //
   printf("\nCalling DAVIDSON driver...\n");
-  for (int i = 0; i < n * n_max; ++i)
+  for (int i = 0; i < n * n_max; ++i){
     evec[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
+  }
+  for (int j = 0; j < n_max; ++j){
+    for (int i = 0; i < n; ++i){
       evec[i + j * n] = (j == i) ? 1.0 : 0.0;
+    }
+  }
 
-  davidson_driver_c(false, n, n_targ, n_max, max_iter, max_dav, tol, shift,
-                    matvec_c, precnd_c, eig, evec, &ok);
+  davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
+                   false, tol, max_iter, max_dav, shift, memory, memory_unit);
+  
   fix_phase(n,n_targ,evec);
 
   if (ok) {
@@ -335,83 +348,83 @@ int main() {
     printf("Davidson failed to converge.\n");
   }
 
-  printf("\nCalling non-symmetric DAVIDSON driver...\n");
-  for (int i = 0; i < n * n_max; ++i)
-    evec[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-  for (int i = 0; i < n * n_max; ++i)
-    evec_l[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
-
-  nonsym_driver_c(false, n, n_targ, n_max, max_iter, tol, max_dav, shift,
-//                matvec_c, matvec_c, precnd_c, eig, evec, evec_l, 
-                  matvec_r_c, matvec_l_c, precnd_c, eig, evec, evec_l, 
-                  4, &ok);
-  fix_phase(n,n_targ,evec);
-  fix_phase(n,n_targ,evec_l);
-
-  if (ok) {
-    printf("Non-symmetric Davidson converged.\n");
-    write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
-  } else {
-    printf("Non-symmetric Davidson failed to converge.\n");
-  }
-
-  printf("\nCalling LOBPCG driver...\n");
-
-  for (int i = 0; i < n * n_max; ++i)
-    evec[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-
-  ok = false;
-  
-  lobpcg_driver_c(
-    false,         // verbose
-    true,        // gen_eig = false → problema standard
-    n, n_targ, n_max, max_iter, tol, shift,
-    matvec_c, precnd_c, bvec_c,
-    eig, evec, &ok
-  );
-  fix_phase(n,n_targ,evec);
-  
-  if (ok) {
-    printf("LOBPCG converged.\n");
-    write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
-  } else {
-    printf("LOBPCG failed to converge.\n");
-  }
-
-printf("\nCalling SMOGD driver...\n");
-
-  int n2 = 2 * n;
-  double* evec2 = malloc(sizeof(double) * n2 * n_max);
-  for (int i = 0; i < n2 * n_max; ++i)
-    evec2[i] = 0.0;
-  for (int i = 0; i < n_max && i < n2; ++i)
-    evec2[i + i * n2] = 1.0;
-  
-  ok = false;
-  
-  smogd_driver_c(
-    false, n, n2, n_targ, n_max, max_iter, tol, max_dav,
-    apbmul_c, ambmul_c, spdmul_c, smdmul_c, lrprec_c,
-    eig, evec2, &ok
-  );
-  
-  if (ok) {
-    printf("SMOGD converged.\n");
-    write_results_c_1("SMOGD", n2, n_targ, eig, "output_c.txt");
-  } else {
-    printf("SMOGD failed to converge.\n");
-  }
-
-free(evec2);
+  //printf("\nCalling non-symmetric DAVIDSON driver...\n");
+  //for (int i = 0; i < n * n_max; ++i)
+  //  evec[i] = 0.0;
+  //for (int j = 0; j < n_max; ++j)
+  //  for (int i = 0; i < n; ++i)
+  //    evec[i + j * n] = (j == i) ? 1.0 : 0.0;
+  //for (int i = 0; i < n * n_max; ++i)
+  //  evec_l[i] = 0.0;
+  //for (int j = 0; j < n_max; ++j)
+  //  for (int i = 0; i < n; ++i)
+  //    evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
+  //
+  //nonsym_driver_c(false, n, n_targ, n_max, max_iter, tol, max_dav, shift,
+  //                matvec_c, matvec_c, precnd_c, eig, evec, evec_l, 
+  //                matvec_r_c, matvec_l_c, precnd_c, eig, evec, evec_l, 
+  //                4, &ok);
+  //fix_phase(n,n_targ,evec);
+  //fix_phase(n,n_targ,evec_l);
+  //
+  //if (ok) {
+  //  printf("Non-symmetric Davidson converged.\n");
+  //  write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
+  //} else {
+  //  printf("Non-symmetric Davidson failed to converge.\n");
+  //}
+  //
+  //printf("\nCalling LOBPCG driver...\n");
+  //
+  //for (int i = 0; i < n * n_max; ++i)
+  //  evec[i] = 0.0;
+  //for (int j = 0; j < n_max; ++j)
+  //  for (int i = 0; i < n; ++i)
+  //    evec[i + j * n] = (j == i) ? 1.0 : 0.0;
+  //
+  //ok = false;
+  //
+  //lobpcg_driver_c(
+  //  false,         // verbose
+  //  true,        // gen_eig = false → problema standard
+  //  n, n_targ, n_max, max_iter, tol, shift,
+  //  matvec_c, precnd_c, metvec_c,
+  //  eig, evec, &ok
+  //);
+  //fix_phase(n,n_targ,evec);
+  //
+  //if (ok) {
+  //  printf("LOBPCG converged.\n");
+  //  write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
+  //} else {
+  //  printf("LOBPCG failed to converge.\n");
+  //}
+  //
+  //printf("\nCalling SMOGD driver...\n");
+  //
+  //int n2 = 2 * n;
+  //double* evec2 = malloc(sizeof(double) * n2 * n_max);
+  //for (int i = 0; i < n2 * n_max; ++i)
+  //  evec2[i] = 0.0;
+  //for (int i = 0; i < n_max && i < n2; ++i)
+  //  evec2[i + i * n2] = 1.0;
+  //
+  //ok = false;
+  //
+  //smogd_driver_c(
+  //  false, n, n2, n_targ, n_max, max_iter, tol, max_dav,
+  //  apbmul_c, ambmul_c, spdmul_c, smdmul_c, lrprec_c,
+  //  eig, evec2, &ok
+  //);
+  //
+  //if (ok) {
+  //  printf("SMOGD converged.\n");
+  //  write_results_c_1("SMOGD", n2, n_targ, eig, "output_c.txt");
+  //} else {
+  //  printf("SMOGD failed to converge.\n");
+  //}
+  //
+  //free(evec2);
 
   return 0;
 }
