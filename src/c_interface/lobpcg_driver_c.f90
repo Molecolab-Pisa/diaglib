@@ -1,62 +1,76 @@
-subroutine lobpcg_driver_c(verbose, gen_eig, n, n_targ, n_max, max_iter, tol, shift, &
-                           matvec, precnd, bvec, eig, evec, ok) bind(C, name="lobpcg_driver_c")
-  use iso_c_binding
-  use diaglib_global_utils
-  use diaglib
-  implicit none
+module mod_lobpcg_driver_c
+    use dgl_utils_c
+    implicit none
 
-  ! Argomenti C
-  logical(C_BOOL), value :: verbose, gen_eig
-  integer(C_INT), value :: n, n_targ, n_max, max_iter
-  real(C_DOUBLE), value :: tol, shift
-  type(C_FUNPTR), value :: matvec, precnd, bvec
-  real(C_DOUBLE), intent(inout) :: eig(n_max)
-  real(C_DOUBLE), intent(inout) :: evec(n,n_max)
-  logical(C_BOOL), intent(out) :: ok
-
-  ! Conversione
-  logical :: verbose_f, gen_eig_f, ok_f
-  procedure(), pointer :: matvec_ptr, precnd_ptr, bvec_ptr
-
-  ! Wrapper locali
-! external :: matvec_wrapper, precnd_wrapper, bvec_wrapper
-
-  ! Associa i puntatori
-  call c_f_procpointer(matvec, matvec_ptr)
-  call c_f_procpointer(precnd, precnd_ptr)
-  call c_f_procpointer(bvec, bvec_ptr)
-
-  verbose_f = verbose
-  gen_eig_f = gen_eig
-
-  ! Chiamata alla routine Fortran
-  call lobpcg_driver(verbose_f, gen_eig_f, n, n_targ, n_max, max_iter, tol, shift, &
-                     matvec_wrapper, precnd_wrapper, bvec_wrapper, eig, evec, ok_f)
-
-  ok = ok_f
+    ! Procedure pointer
+    procedure(), private, pointer :: matvec_ptr, precnd_ptr, metvec_ptr
 
 contains
 
-  subroutine matvec_wrapper(n, m, x, ax)
-    integer, intent(in) :: n, m
-    real(dp), intent(in) :: x(n,m)
-    real(dp), intent(out) :: ax(n,m)
-    call matvec_ptr(n, m, x, ax)
-  end subroutine
+    subroutine lobpcg_driver_c(n, n_targ, n_max, matvec, precnd, metvec, eig, evec, ok, &
+                               verbose, tol, max_iter, shift, memory, memory_unit) &
+        bind(C, name="lobpcg_driver_c")
+        implicit none
+        ! C-compatible arguments
+#ifdef DGL_INT_KIND_4
+        integer(C_INT), value, intent(in) :: n, n_targ, n_max
+        integer(C_INT), value, intent(in) :: max_iter
+        integer(C_INT), value, intent(in) :: memory
+#elif DGL_INT_KIND_8
+        integer(C_LONG), value, intent(in) :: n, n_targ, n_max
+        integer(C_LONG), value, intent(in) :: max_iter
+        integer(C_LONG), value, intent(in) :: memory
+#endif
+        logical(C_BOOL), value, intent(in) :: verbose
+        real(C_DOUBLE), value, intent(in) :: tol, shift
+        type(C_PTR), value, intent(in) :: memory_unit
+        type(C_FUNPTR), value :: matvec, precnd, metvec
+        !
+        real(C_DOUBLE), intent(inout) :: eig(n_max)
+        real(C_DOUBLE), intent(inout) :: evec(n, n_max)
+        logical(C_BOOL), intent(out) :: ok
 
-  subroutine precnd_wrapper(n, m, shift, r, z)
-    integer, intent(in) :: n, m
-    real(dp), intent(in) :: shift
-    real(dp), intent(in) :: r(n,m)
-    real(dp), intent(out) :: z(n,m)
-    call precnd_ptr(n, m, shift, r, z)
-  end subroutine
+        character(len=:), allocatable :: memory_unit_f
+        logical :: verbose_f, ok_f
 
-  subroutine bvec_wrapper(n, m, x, bx)
-    integer, intent(in) :: n, m
-    real(dp), intent(in) :: x(n,m)
-    real(dp), intent(out) :: bx(n,m)
-    call bvec_ptr(n, m, x, bx)
-  end subroutine
+        memory_unit_f = c_ptr_to_f_string(memory_unit)
 
-end subroutine lobpcg_driver_c
+!       ! Associate pointers
+        call c_f_procpointer(matvec, matvec_ptr)
+        call c_f_procpointer(precnd, precnd_ptr)
+        call c_f_procpointer(metvec, metvec_ptr)
+
+!       ! Bool conversion
+        verbose_f = verbose
+
+!       ! Main driver call
+        call dgl_lobpcg_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, eig, evec, ok_f, &
+                               dgl_verbose=verbose_f, &
+                               dgl_max_iter=max_iter, &
+                               dgl_shift=shift, &
+                               dgl_tol=tol, &
+                               dgl_memory=memory, &
+                               dgl_memory_unit=memory_unit_f, &
+                               metvec=metvec_ptr &
+                               )
+!       ! Chiamata al driver
+        ok = ok_f
+
+    end subroutine lobpcg_driver_c
+
+    subroutine matvec_wrapper(n, m, x, ax)
+        integer, intent(in) :: n, m
+        real(dp), intent(in) :: x(n, m)
+        real(dp), intent(inout) :: ax(n, m)
+        call matvec_ptr(n, m, x, ax)
+    end subroutine
+
+    subroutine precnd_wrapper(n, m, shift, r, z)
+        integer, intent(in) :: n, m
+        real(dp), intent(in) :: shift
+        real(dp), intent(in) :: r(n, m)
+        real(dp), intent(inout) :: z(n, m)
+        call precnd_ptr(n, m, shift, r, z)
+    end subroutine
+
+end module mod_lobpcg_driver_c

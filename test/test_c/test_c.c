@@ -236,7 +236,6 @@ void lrprec_c(int* n, int* m, double* fac, double* xp, double* xm,
 //
 // small function to output the results to a file:
 //
-#include <stdio.h>
 
 void write_results_c(const char* label, int n, int n_targ, double* eig, double* evec, const char* filename) {
   FILE* f = fopen(filename, "a");
@@ -304,10 +303,9 @@ void fix_phase(int n, int n_targ, double* evec) {
     }
   }
 }
-//
-// main program: test davidson, non-symmetric davidson, lobpcg and smogd.
-//  
-int main() {
+
+
+void test_davidson(){
 #ifdef DGL_INT_KIND_4
   const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
   const int memory = 1;
@@ -322,10 +320,6 @@ int main() {
   bool verbose = false;
   const char* memory_unit = "GB";
 //
-// get rid of the output file if it's already present.
-//
-  remove("output_c.txt");
-//
   printf("\nCalling DAVIDSON driver...\n");
   for (int i = 0; i < n * n_max; ++i){
     evec[i] = 0.0;
@@ -337,7 +331,7 @@ int main() {
   }
 
   davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
-                   false, tol, max_iter, max_dav, shift, memory, memory_unit);
+                   verbose, tol, max_iter, max_dav, shift, memory, memory_unit);
   
   fix_phase(n,n_targ,evec);
 
@@ -347,6 +341,130 @@ int main() {
   } else {
     printf("Davidson failed to converge.\n");
   }
+
+}
+
+void test_davidson_generalized(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
+  const double tol = 1e-10, shift = 0.0;
+  double eig[n_max];
+  double evec[n * n_max], evec_l[n * n_max];
+  bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
+//
+
+};
+
+void test_lobpcg(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
+  const double tol = 1e-10, shift = 0.0;
+  double eig[n_max];
+  double evec[n * n_max], evec_l[n * n_max];
+  bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
+  
+  printf("\nCalling LOBPCG driver...\n");
+  
+  for (int i = 0; i < n * n_max; ++i)
+    evec[i] = 0.0;
+  for (int j = 0; j < n_max; ++j)
+    for (int i = 0; i < n; ++i)
+      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
+  
+  ok = false;
+  
+  lobpcg_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
+                   verbose, tol, max_iter, shift, memory, memory_unit);
+
+  fix_phase(n,n_targ,evec);
+  
+  if (ok) {
+    printf("LOBPCG converged.\n");
+    write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
+  } else {
+    printf("LOBPCG failed to converge.\n");
+  }
+
+};
+
+void test_lobpcg_generalized(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
+  const double tol = 1e-10, shift = 0.0;
+  double eig[n_max];
+  double evec[n * n_max], evec_l[n * n_max];
+  bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
+//
+
+};
+
+void test_nonsym_davidson(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
+  const double tol = 1e-10, shift = 0.0;
+  double eig[n_max];
+  double evec[n * n_max], evec_l[n * n_max];
+  bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
+//
+
+};
+
+void test_smogd(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
+  const double tol = 1e-10, shift = 0.0;
+  double eig[n_max];
+  double evec[n * n_max], evec_l[n * n_max];
+  bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
+//
+
+}
+//
+// main program: test davidson, non-symmetric davidson, lobpcg and smogd.
+//
+int main() {
+//
+// get rid of the output file if it's already present.
+//
+  remove("output_c.txt");
+
+  test_davidson();
+  test_lobpcg();
 
   //printf("\nCalling non-symmetric DAVIDSON driver...\n");
   //for (int i = 0; i < n * n_max; ++i)
@@ -372,32 +490,6 @@ int main() {
   //  write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
   //} else {
   //  printf("Non-symmetric Davidson failed to converge.\n");
-  //}
-  //
-  //printf("\nCalling LOBPCG driver...\n");
-  //
-  //for (int i = 0; i < n * n_max; ++i)
-  //  evec[i] = 0.0;
-  //for (int j = 0; j < n_max; ++j)
-  //  for (int i = 0; i < n; ++i)
-  //    evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-  //
-  //ok = false;
-  //
-  //lobpcg_driver_c(
-  //  false,         // verbose
-  //  true,        // gen_eig = false → problema standard
-  //  n, n_targ, n_max, max_iter, tol, shift,
-  //  matvec_c, precnd_c, metvec_c,
-  //  eig, evec, &ok
-  //);
-  //fix_phase(n,n_targ,evec);
-  //
-  //if (ok) {
-  //  printf("LOBPCG converged.\n");
-  //  write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
-  //} else {
-  //  printf("LOBPCG failed to converge.\n");
   //}
   //
   //printf("\nCalling SMOGD driver...\n");

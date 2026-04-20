@@ -57,20 +57,35 @@ void nonsym_driver_c(
 );
     
 void lobpcg_driver_c(
-    bool verbose,
-    bool gen_eig,
+#ifdef DGL_INT_KIND_4
     int n,
     int n_targ,
     int n_max,
-    int max_iter,
-    double tol,
-    double shift,
+#elif DGL_INT_KIND_8
+    long int n,
+    long int n_targ,
+    long int n_max,
+#endif
     void (*matvec)(int*, int*, double*, double*),
     void (*precnd)(int*, int*, double*, double*, double*),
-    void (*bvec)(int*, int*, double*, double*),
+    void (*metvec)(int*, int*, double*, double*),
     double* eig,
     double* evec,
-    bool* ok
+    bool* ok,
+    bool verbose,
+    double tol,
+#ifdef DGL_INT_KIND_4
+    int max_iter,
+#elif DGL_INT_KIND_8
+    int long max_iter,
+#endif
+    double shift,
+#ifdef DGL_INT_KIND_4
+    int memory,
+#elif DGL_INT_KIND_8
+    int long memory,
+#endif
+    const char* memory_unit
 );
 
 void smogd_driver_c(
