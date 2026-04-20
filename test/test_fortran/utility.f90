@@ -2,22 +2,27 @@ module utility
 !!
 !! Common module for testing
 !!
-    integer, parameter :: dp = selected_real_kind(15)
+#ifdef DGL_INT_KIND_8
+    integer, parameter :: ip = selected_int_kind(15)
+#elif DGL_INT_KIND_4
+    integer, parameter :: ip = selected_int_kind(8)
+#endif
+    integer(ip), parameter :: dp = selected_real_kind(15)
     real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp, half = 0.5_dp
 
-    integer, parameter :: n = 500, n_targ = 5, n_max = 10
-    integer, parameter :: max_iter = 100, dav_iter = 10
+    integer(ip), parameter :: n = 500, n_targ = 5, n_max = 10
+    integer(ip), parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
-    integer, parameter :: memory = 100
+    integer(ip), parameter :: memory = 100
     character(len=2), parameter :: memory_unit = "MB"
     procedure(), pointer :: mx_p => null()
 
     character(len=30) :: reference_fname = "output_reference.txt"
     character(len=30) :: results_fname = "output_fortran.txt"
-    integer, parameter :: lutest = 100, luref = 101
+    integer(ip), parameter :: lutest = 100, luref = 101
     character(len=20), parameter :: f_string = "('-- ', a, /)"
-    integer :: i, j
+    integer(ip) :: i, j
 
     interface prtmat
         module procedure prtmat_r
@@ -32,8 +37,8 @@ contains
 !! Make a simple guess
 !!
         implicit none
-        integer, intent(in) :: ld
-        integer, intent(in) :: n_eig
+        integer(ip), intent(in) :: ld
+        integer(ip), intent(in) :: n_eig
         real(dp) :: eig(n_eig)
         real(dp) :: evec(ld, n_eig)
         logical :: ok
@@ -48,7 +53,7 @@ contains
     end subroutine init_eigenpairs
 
     logical function compare_eigs(ld, n_eig, thresh, eig, evec, string) result(success)
-        integer, intent(in) :: ld, n_eig
+        integer(ip), intent(in) :: ld, n_eig
         real(dp), intent(in) :: thresh
         real(dp), intent(in) :: eig(n_eig)
         real(dp), intent(inout) :: evec(ld, n_eig)
@@ -87,9 +92,9 @@ contains
 
     subroutine check_reference(ld)
         implicit none
-        integer, intent(in) :: ld
+        integer(ip), intent(in) :: ld
 
-        integer :: ld_read
+        integer(ip) :: ld_read
         character(len=200) :: line
 
         if (.not. file_exist(trim(reference_fname))) then
@@ -122,12 +127,12 @@ contains
     end subroutine check_reference
 
     subroutine read_reference(ld, n_eig, eig, evec, string)
-        integer, intent(in) :: ld, n_eig
+        integer(ip), intent(in) :: ld, n_eig
         real(dp), intent(inout) :: eig(n_eig), evec(ld, n_eig)
         character(len=*), intent(in) :: string
 
         character(len=200) :: line
-        integer :: k
+        integer(ip) :: k
 
         open (file=trim(reference_fname), unit=luref, status="old")
 
@@ -157,13 +162,13 @@ contains
 
     subroutine sort_eigenpairs(ld, n_eig, eig, evec)
         implicit none
-        integer, intent(in) :: ld
-        integer, intent(in) :: n_eig
+        integer(ip), intent(in) :: ld
+        integer(ip), intent(in) :: n_eig
         real(dp), intent(inout) :: eig(ld)
         real(dp), intent(inout) :: evec(ld, ld, 2)
 
         logical, allocatable :: mask(:)
-        integer :: idx(1)
+        integer(ip) :: idx(1)
         real(dp) :: copy
         real(dp), allocatable :: copy_arr(:)
 
@@ -195,9 +200,9 @@ contains
 !! dump eigvecs to outputfile to be compares with a reference.
 !!
         implicit none
-        integer, intent(in) :: ld
-        integer, intent(in) :: n_eig
-        integer, intent(in) :: unit
+        integer(ip), intent(in) :: ld
+        integer(ip), intent(in) :: n_eig
+        integer(ip), intent(in) :: unit
         character(len=*), intent(in) :: string
         real(dp), intent(inout) :: eig(n_eig), evec(ld, n_eig)
 
@@ -243,7 +248,7 @@ contains
 !
     logical function file_opened(unit)
         implicit none
-        integer, intent(in) :: unit
+        integer(ip), intent(in) :: unit
 
         inquire (unit=unit, opened=file_opened)
 
@@ -251,7 +256,7 @@ contains
 
     subroutine prtmat_r(ld, m, mat)
         implicit none
-        integer, intent(in) :: ld, m
+        integer(ip), intent(in) :: ld, m
         real(dp), dimension(ld, m), intent(in) :: mat
 
         character(len=5) :: s_n, s_m
@@ -268,8 +273,8 @@ contains
 !
     subroutine prtmat_i(ld, m, mat)
         implicit none
-        integer, intent(in) :: ld, m
-        integer, dimension(ld, m), intent(in) :: mat
+        integer(ip), intent(in) :: ld, m
+        integer(ip), dimension(ld, m), intent(in) :: mat
 
         character(len=5) :: s_n, s_m
         character(len=20) :: fmt

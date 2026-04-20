@@ -23,9 +23,9 @@ contains
 !! performing the matrix vector multiplication.
         implicit none
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Lenght of the input vectors
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Number of input vectors
         real(dp), dimension(n, m), intent(inout) :: u
 !! Vectors to orthogonalize
@@ -62,9 +62,9 @@ contains
 !! of the [[ortho_cd]] procedure
         implicit none
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Lenght of the vectors
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Number of vectors
         real(dp), dimension(n, m), intent(inout) :: u
 !! Vectors to B-orthogonalize
@@ -74,7 +74,7 @@ contains
 ! local variables
 ! ===============
 !
-        integer :: i, j
+        integer(ip) :: i, j
         real(dp), allocatable :: metric(:, :), sigma(:), u_svd(:, :), vt_svd(:, :), &
                                  temp(:, :)
         real(dp), parameter :: tol_svd = 1.0e-5_dp
@@ -154,11 +154,11 @@ contains
 !! Add a shift to the diagonal elements of the matrix \(a\)
         implicit none
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
         real(dp), intent(in) :: shift
         real(dp), dimension(n, n), intent(inout) :: a
 !
-        integer :: i
+        integer(ip) :: i
 !
         do i = 1, n
             a(i, i) = a(i, i) + shift
@@ -188,9 +188,9 @@ contains
 !
         implicit none
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Lenght of the vectors
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Number of vectors
         real(dp), dimension(n, m), intent(inout) :: u
 !! Vectors to orthogonalize
@@ -202,11 +202,11 @@ contains
 ! local variables
 ! ===============
 !
-        integer :: it, it_micro
+        integer(ip) :: it, it_micro
         real(dp) :: error, alpha, unorm, shift
         real(dp) :: rcond, l_norm, linv_norm
         logical :: macro_done, micro_done
-        integer, parameter :: maxit = 10
+        integer(ip), parameter :: maxit = 10
 !
 ! local scratch
 ! =============
@@ -334,18 +334,18 @@ contains
 !
         implicit none
 !
-        integer, intent(in) :: n, m, k
+        integer(ip), intent(in) :: n, m, k
         real(dp), dimension(n, m), intent(in) :: xl, xr
         real(dp), dimension(n, k), intent(inout) :: ul, ur
 !
 ! local variables:
 !
-        integer :: it
+        integer(ip) :: it
         real(dp) :: xu_norm(2), growth
         logical :: done, ok
         real(dp), allocatable :: xu(:, :)
 !
-        integer, parameter :: maxit = 20
+        integer(ip), parameter :: maxit = 20
 !
         call mallocate(m, k, xu)
 !
@@ -395,16 +395,16 @@ contains
 !
         implicit none
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Lenght of the vectors
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Number of vectors
         real(dp), dimension(n, m), intent(inout) :: u_l
 !! First set of vectors
         real(dp), dimension(n, m), intent(inout) :: u_r
 !! Second set of vectors
 !
-        integer :: i
+        integer(ip) :: i
         real(dp) :: fac
 !
         real(dp), allocatable :: over(:, :), u(:, :), s(:), vt(:, :), tmp(:, :)
@@ -459,14 +459,14 @@ contains
 ! This is tight enough, and goes to 1 when \(a\) approaches the identity.
 !
         implicit none
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Dimension of the matrix
         real(dp), dimension(m, m), intent(in) :: a
 !! Matrix to compute the norm
 !
 ! Local vars
 !
-        integer :: i, j
+        integer(ip) :: i, j
         real(dp) :: diag_norm, od_norm
 !
         diag_norm = zero
@@ -503,11 +503,11 @@ contains
 ! overlap between \(x\) and the orthogonalized \(u\) is smaller than
 ! a (tight) threshold.
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Lenght of the vectors
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Number of reference vectors
-        integer, intent(in) :: k
+        integer(ip), intent(in) :: k
 !! Number of vectors to orthogonalize again \(x\)
         real(dp), dimension(n, m), intent(in) :: x
 !! Reference vectors
@@ -518,11 +518,11 @@ contains
 ! ================
 !
         logical :: done, ok
-        integer :: it
+        integer(ip) :: it
         real(dp) :: xu_norm, growth
         real(dp), allocatable :: xu(:, :)
 !
-        integer, parameter :: maxit = 10
+        integer(ip), parameter :: maxit = 10
         logical, parameter :: useqr = .false.
 !
 ! allocate space for the overlap between x and u.
@@ -589,11 +589,11 @@ contains
 !
         implicit none
 !
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Lenght of the vectors
-        integer, intent(in) :: m
+        integer(ip), intent(in) :: m
 !! Number of reference vectors
-        integer, intent(in) :: k
+        integer(ip), intent(in) :: k
 !! Number of vectors to orthogonalize
         real(dp), dimension(n, m), intent(in) :: x
 !! Reference vectors
@@ -606,11 +606,11 @@ contains
 ! ================
 !
         logical :: done, ok
-        integer :: it
+        integer(ip) :: it
         real(dp) :: xu_norm, growth
         real(dp), allocatable :: xu(:, :)
 !
-        integer, parameter :: maxit = 10
+        integer(ip), parameter :: maxit = 10
         logical, parameter :: useqr = .false.
 !
 ! allocate space for the overlap between x and u.

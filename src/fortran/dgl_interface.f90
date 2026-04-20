@@ -1,6 +1,6 @@
 module dgl_interface
 
-    use dgl_global_utils, only: dgl_real => dp
+    use dgl_global_utils, only: dgl_real => dp, dgl_int => ip
 
     use mod_davidson_driver, only: dgl_davidson_driver => davidson_driver
     use mod_davidson_nosym_driver, only: dgl_davidson_nosym_driver => davidson_nosym_driver

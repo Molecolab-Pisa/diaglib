@@ -25,11 +25,11 @@ contains
 !! throught the iterations. It has to be tested and probably cleaned a little bit.
 !! @endtodo
         implicit none
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Size of the matrix to be diagonalized
-        integer, intent(in) :: n_targ
+        integer(ip), intent(in) :: n_targ
 !! Number of required eigenpairs.
-        integer, intent(in) :: n_max
+        integer(ip), intent(in) :: n_max
 !! Maximum size of the search space. Should be >= n_targ
         character(len=2), intent(in) :: side
 !! String to decide which eigenvectors to compute and whether to compute
@@ -54,11 +54,11 @@ contains
 !! External subroutine that applies a preconditioner
         logical, optional, intent(in) :: dgl_verbose
 !! Verbose mode. Default = .false.
-        integer, optional, intent(in) :: dgl_max_iter
+        integer(ip), optional, intent(in) :: dgl_max_iter
 !! Maximum number of allowed iterations. Default = \(100\)
-        integer, optional, intent(in) :: dgl_dav_iter
+        integer(ip), optional, intent(in) :: dgl_dav_iter
 !! Maximum number of iterations before Davidson restart. Default = \(25\)
-        integer, optional, intent(in) :: dgl_memory
+        integer(ip), optional, intent(in) :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
         character(len=2), optional, intent(in) :: dgl_memory_unit
 !! Unit of memory. Default = MB
@@ -70,26 +70,26 @@ contains
 ! local variables:
 ! ================
         logical :: verbose_in
-        integer :: max_iter, dav_iter, memory
+        integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
 !
 ! expansion space varibles:
 ! total dimension, current dimension
 !
-        integer :: lda, ld_current
+        integer(ip) :: lda, ld_current
 !
 ! number of large arrays that will be allocated
 !
-        integer :: n_arrs
+        integer(ip) :: n_arrs
 !
 ! number of active vectors at a given iteration, and indices to access them
 !
-        integer :: n_act, ind, i_beg
+        integer(ip) :: n_act, ind, i_beg
 !
 ! number of frozen (i.e. converged) vectors
 !
-        integer :: n_frozen
+        integer(ip) :: n_frozen
 !
 ! tolerances on residuals norms, used for convergence
 !
@@ -97,10 +97,10 @@ contains
 !
 ! iterators and utilities
 !
-        integer :: it, i_eig
+        integer(ip) :: it, i_eig
         real(dp) :: sqrtn, tol_im
         real(dp) :: yy
-        integer :: j
+        integer(ip) :: j
 !
 ! arrays to control convergence
 !
@@ -121,19 +121,19 @@ contains
 ! variables for left, right, or both eigenvectors
 !
         character(len=1) :: current_side
-        integer :: davidson_runs, current_run
+        integer(ip) :: davidson_runs, current_run
         real(dp) :: eig_r(n_max)
 !
 ! variables for the sorting eigenpairs, since lapack does not.
 !
-        integer :: max_idx(1)
+        integer(ip) :: max_idx(1)
         logical :: found_im, found_er, double
         logical, allocatable :: mask_overlap(:)
 !
         real(dp), allocatable :: overlap(:, :), perm_mat(:, :), evec_temp(:, :), eig_temp(:), overlap_diff(:)
         real(dp) :: overlap_val(n_max, 2), overlap_self(n_max)
         real(dp), allocatable :: perm_temp(:, :)
-        integer :: overlap_idx(n_max, 2), k
+        integer(ip) :: overlap_idx(n_max, 2), k
 !
 ! Scratch vector to avoid recomputation of reduced matrix
 !
@@ -731,7 +731,7 @@ contains
 ! in decreasing order according to the real eigenvalues in the rang.e of n_want
 !
         implicit none
-        integer, intent(in) :: m, ldv, n_want
+        integer(ip), intent(in) :: m, ldv, n_want
         real(dp), intent(inout) :: w_re(m), w_im(m), v(ldv, m)
         real(dp), intent(in) :: thresh
         logical, intent(in) :: ignore
@@ -739,7 +739,7 @@ contains
 !
 ! local variables
 !
-        integer :: i, j, idx, min_idx(1), fin
+        integer(ip) :: i, j, idx, min_idx(1), fin
         logical :: mask(m)
 !
 ! define initial mask
@@ -802,7 +802,7 @@ contains
 ! indices i and j with each other
 !
         implicit none
-        integer, intent(in) :: m, ldv, i, j
+        integer(ip), intent(in) :: m, ldv, i, j
         real(dp), intent(inout) :: w_re(m), w_im(m), v(ldv, m)
 !
         real(dp) :: w, v_tmp(ldv)

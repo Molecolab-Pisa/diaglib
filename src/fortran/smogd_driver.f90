@@ -109,11 +109,11 @@ contains
 !!
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
         implicit none
-        integer, intent(in) :: n2
+        integer(ip), intent(in) :: n2
 !! Totals size of the generalized eigenvalue
-        integer, intent(in) :: n_targ
+        integer(ip), intent(in) :: n_targ
 !! Number of required eigenpairs.
-        integer, intent(in) :: n_max
+        integer(ip), intent(in) :: n_max
 !! Maximum size of the search space. Should be >= n_targ.
         real(dp), dimension(n_max), intent(inout) :: eig
 !! Computed eigenvalues
@@ -133,11 +133,11 @@ contains
 !! External subroutine that applies a preconditioner to both plus and minus vectors
         logical, optional, intent(in) :: dgl_verbose
 !! Verbose mode. Default = .false.
-        integer, optional, intent(in) :: dgl_dav_iter
+        integer(ip), optional, intent(in) :: dgl_dav_iter
 !! Maximum number of iterations before Davidson restart. Default = \(25\)
-        integer, optional, intent(in) :: dgl_max_iter
+        integer(ip), optional, intent(in) :: dgl_max_iter
 !! Maximum number of allowed iterations. Default = \(100\)
-        integer, optional, intent(in) :: dgl_memory
+        integer(ip), optional, intent(in) :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
         character(len=2), optional, intent(in) :: dgl_memory_unit
 !! Unit of memory. Default = MBs
@@ -147,35 +147,35 @@ contains
 ! local variables:
 ! ================
         logical :: verbose_in
-        integer :: max_iter, dav_iter, memory
+        integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol
         character(len=2) :: memory_unit
 !
 ! dimension of the halved problem, the one we are actually solving
 !
-        integer :: n
+        integer(ip) :: n
 !
 ! actual expansion space size and total dimension
 !
-        integer :: lda, lda2
+        integer(ip) :: lda, lda2
 !
 ! number of active vectors at a given iteration, and indices to access them
 !
-        integer :: n_act, ind, i_beg
+        integer(ip) :: n_act, ind, i_beg
 !
 ! current size and total dimension of the expansion space
 !
-        integer :: ld_current
+        integer(ip) :: ld_current
 !
 ! number of large arrays that will be allocated
 !
-        integer :: n_arrs
+        integer(ip) :: n_arrs
 !
 ! number of frozen (i.e. converged) vectors
 !
-        integer :: n_frozen
+        integer(ip) :: n_frozen
 !
-        integer :: it, i_eig
+        integer(ip) :: it, i_eig
 !
         real(dp) :: sqrtn, tol_rms, tol_max
 !

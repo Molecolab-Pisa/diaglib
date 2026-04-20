@@ -1,15 +1,15 @@
 module direct_matvecs
-    use dgl_interface, only: dgl_real
+    use dgl_interface, only: dgl_real, dgl_int
 !
 contains
 !
     subroutine ax(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
 !
         y = 0.0_dgl_real
 !
@@ -30,11 +30,11 @@ contains
 !
     subroutine mx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
 !
         y = 0.0_dgl_real
 !
@@ -55,12 +55,12 @@ contains
 !
     subroutine dx(n, m, shift, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), intent(in) :: shift
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, k
+        integer(dgl_int) :: i, k
         real(dgl_real) :: fac
 !
         real(dgl_real), parameter :: eps = 1.0e-5_dgl_real
@@ -79,11 +79,11 @@ contains
 !
     subroutine arx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
         real(dgl_real) :: fac
 !
         y = 0.0_dgl_real
@@ -106,11 +106,11 @@ contains
 !
     subroutine alx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
         real(dgl_real) :: fac
 !
         y = 0.0_dgl_real
@@ -133,7 +133,7 @@ contains
 !
     subroutine sx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
@@ -146,11 +146,11 @@ contains
 !
     subroutine apbx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
 !
 !   (a + b)_ij = (5 + i) \delta_ij + (1 - \delta_ij) / (i+j)
 !
@@ -172,11 +172,11 @@ contains
 !
     subroutine ambx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
 !
 !   (a + b)_ij = (2 + i) \delta_ij + (0.2 - \delta_ij) / (i+j)
 !
@@ -198,11 +198,11 @@ contains
 !
     subroutine spdx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
 !
 !   \sigma = 1, \delta_ij = +- 0.05
 !
@@ -226,11 +226,11 @@ contains
 !
     subroutine smdx(n, m, x, y)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), dimension(n, m), intent(in) :: x
         real(dgl_real), dimension(n, m), intent(inout) :: y
 !
-        integer :: i, j, k
+        integer(dgl_int) :: i, j, k
 !
 !   (a + b)_ij = (2 + i) \delta_ij + (0.2 - \delta_ij) / (i+j)
 !
@@ -254,12 +254,12 @@ contains
 !
     subroutine lrprc(n, m, fac, xp, xm, yp, ym)
         implicit none
-        integer, intent(in) :: n, m
+        integer(dgl_int), intent(in) :: n, m
         real(dgl_real), intent(in) :: fac
         real(dgl_real), dimension(n, m), intent(in) :: xp, xm
         real(dgl_real), dimension(n, m), intent(inout) :: yp, ym
 !
-        integer :: i, k
+        integer(dgl_int) :: i, k
         real(dgl_real) :: val
 !
 !   yp = xp

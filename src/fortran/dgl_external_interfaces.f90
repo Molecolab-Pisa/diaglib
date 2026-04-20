@@ -1,7 +1,7 @@
 module dgl_external_interfaces
 !* Module contaning all the interfaces for the external procedure,
 ! like matrix-vector multipltications.
-    use dgl_global_utils, only: dp
+    use dgl_global_utils, only: dp, ip
     implicit none
 
     interface
@@ -10,9 +10,9 @@ module dgl_external_interfaces
 !! Interface for the external routine performing the Matrix-Vector product
             import
             implicit none
-            integer, intent(in) :: n
+            integer(ip), intent(in) :: n
 !! Lenght of the vectors to multiply
-            integer, intent(in) :: m
+            integer(ip), intent(in) :: m
 !! Number of vectors to multiply
             real(dp), dimension(n, m), intent(in) :: x
 !! Input vectors
@@ -24,9 +24,9 @@ module dgl_external_interfaces
 !! Interface for the external routine performing the preconditining of the residuals
             import
             implicit none
-            integer, intent(in) :: n
+            integer(ip), intent(in) :: n
 !! Lenght of the vectors to multiply
-            integer, intent(in) :: m
+            integer(ip), intent(in) :: m
 !! Number of vectors to multiply
             real(dp), intent(in) :: shift
 !! Level-shifting parameter
@@ -40,9 +40,9 @@ module dgl_external_interfaces
 !! Interface for the external routine performing the Matrix-Vector product
             import
             implicit none
-            integer, intent(in) :: n
+            integer(ip), intent(in) :: n
 !! Lenght of the vectors to multiply
-            integer, intent(in) :: m
+            integer(ip), intent(in) :: m
 !! Number of vectors to multiply
             real(dp), dimension(n, m), intent(in) :: x
 !! Input vectors
@@ -54,9 +54,9 @@ module dgl_external_interfaces
 !! Interface for the external routine performing the Matrix-Vector products for SMO-GD
             import
             implicit none
-            integer, intent(in) :: n
+            integer(ip), intent(in) :: n
 !! Lenght of the vectors to multiply
-            integer, intent(in) :: m
+            integer(ip), intent(in) :: m
 !! Number of vectors to multiply
             real(dp), dimension(n, m), intent(in) :: x
 !! Input vectors
@@ -67,9 +67,9 @@ module dgl_external_interfaces
         subroutine smogd_precnd(n, m, fac, xp, xm, yp, ym)
             import
             implicit none
-            integer, intent(in) :: n
+            integer(ip), intent(in) :: n
 !! Lenght of the vectors to multiply
-            integer, intent(in) :: m
+            integer(ip), intent(in) :: m
 !! Number of vectors to multiply
             real(dp), intent(in) :: fac
 !! ???

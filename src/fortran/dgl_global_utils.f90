@@ -3,11 +3,18 @@ module dgl_global_utils
 ! Also contains all the allocation and deallocation procedures for memroy management.
     implicit none
 !
+#ifdef DGL_INT_KIND_8
+    integer, parameter :: ip = selected_int_kind(15)
+!! Global variable holding kind for integer(ip)s
+#elif DGL_INT_KIND_4
+    integer, parameter :: ip = selected_int_kind(8)
+!! Globla variable holding kind for integer(ip)s
+#endif
     integer, parameter :: dp = selected_real_kind(15)
 !! Global variable holding kind for double precision
     real(dp), parameter :: zero = 0.0_dp, one = 1.0_dp, two = 2.0_dp, ten = 10.0_dp
 !! Useful Constant
-    integer :: lwork, info
+    integer(ip) :: lwork, info
 !! Dimension for Lapack work arrays
     real(dp), allocatable :: work(:), tau(:)
 !! Lapack work arrays
@@ -16,7 +23,7 @@ module dgl_global_utils
     real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), &
                 t_mv(2), t_tot1(2), t_tot2(2), t_tot(2)
 !! Timings
-    integer, protected :: maxmem, maxcor, peakmem
+    integer(ip), protected :: maxmem, maxcor, peakmem
 !! Variables to keep track of memory
     logical, protected :: verbose
 !! Global verbosity mode
@@ -63,10 +70,10 @@ contains
 !
     subroutine r_alloc1(len1, v)
         implicit none
-        integer, intent(in) :: len1
+        integer(ip), intent(in) :: len1
         real(dp), allocatable, intent(inout) :: v(:)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1), stat=istat)
         call chk_mall(len1, istat)
@@ -75,10 +82,10 @@ contains
 !
     subroutine r_alloc2(len1, len2, v)
         implicit none
-        integer, intent(in) :: len1, len2
+        integer(ip), intent(in) :: len1, len2
         real(dp), allocatable, intent(inout) :: v(:, :)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1, len2), stat=istat)
         call chk_mall(len1*len2, istat)
@@ -87,10 +94,10 @@ contains
 !
     subroutine i_alloc1(len1, v)
         implicit none
-        integer, intent(in) :: len1
-        integer, allocatable, intent(inout) :: v(:)
+        integer(ip), intent(in) :: len1
+        integer(ip), allocatable, intent(inout) :: v(:)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1), stat=istat)
         call chk_mall(len1, istat)
@@ -99,10 +106,10 @@ contains
 !
     subroutine i_alloc2(len1, len2, v)
         implicit none
-        integer, intent(in) :: len1, len2
-        integer, allocatable, intent(inout) :: v(:, :)
+        integer(ip), intent(in) :: len1, len2
+        integer(ip), allocatable, intent(inout) :: v(:, :)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1, len2), stat=istat)
         call chk_mall(len1*len2, istat)
@@ -111,10 +118,10 @@ contains
 !
     subroutine c_alloc1(len1, v)
         implicit none
-        integer, intent(in) :: len1
+        integer(ip), intent(in) :: len1
         complex(dp), allocatable, intent(inout) :: v(:)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1), stat=istat)
         call chk_mall(len1, istat)
@@ -123,10 +130,10 @@ contains
 !
     subroutine c_alloc2(len1, len2, v)
         implicit none
-        integer, intent(in) :: len1, len2
+        integer(ip), intent(in) :: len1, len2
         complex(dp), allocatable, intent(inout) :: v(:, :)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1, len2), stat=istat)
         call chk_mall(len1*len2, istat)
@@ -135,10 +142,10 @@ contains
 !
     subroutine ch_alloc1(len1, v)
         implicit none
-        integer, intent(in) :: len1
+        integer(ip), intent(in) :: len1
         character(len=*), allocatable, intent(inout) :: v(:)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1), stat=istat)
         call chk_mall(len1, istat)
@@ -147,10 +154,10 @@ contains
 !
     subroutine l_alloc1(len1, v)
         implicit none
-        integer, intent(in) :: len1
+        integer(ip), intent(in) :: len1
         logical, allocatable, intent(inout) :: v(:)
 !
-        integer :: istat
+        integer(ip) :: istat
 !
         allocate (v(len1), stat=istat)
         call chk_mall(len1, istat)
@@ -160,7 +167,7 @@ contains
     subroutine r_free1(v)
         real(dp), allocatable, intent(inout) :: v(:)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -172,7 +179,7 @@ contains
     subroutine r_free2(v)
         real(dp), allocatable, intent(inout) :: v(:, :)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -182,9 +189,9 @@ contains
     end subroutine r_free2
 !
     subroutine i_free1(v)
-        integer, allocatable, intent(inout) :: v(:)
+        integer(ip), allocatable, intent(inout) :: v(:)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -194,9 +201,9 @@ contains
     end subroutine i_free1
 !
     subroutine i_free2(v)
-        integer, allocatable, intent(inout) :: v(:, :)
+        integer(ip), allocatable, intent(inout) :: v(:, :)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -208,7 +215,7 @@ contains
     subroutine c_free1(v)
         complex(dp), allocatable, intent(inout) :: v(:)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -220,7 +227,7 @@ contains
     subroutine c_free2(v)
         complex(dp), allocatable, intent(inout) :: v(:, :)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -232,7 +239,7 @@ contains
     subroutine ch_free1(v)
         character(len=*), allocatable, intent(inout) :: v(:)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -244,7 +251,7 @@ contains
     subroutine l_free1(v)
         logical, allocatable, intent(inout) :: v(:)
 !
-        integer :: lfree, istat
+        integer(ip) :: lfree, istat
 !
         if (.not. allocated(v)) return
         lfree = size(v)
@@ -258,11 +265,11 @@ contains
 !! Converter from numbers to Bytes. Actual unit depends on the
 !! magnitude of the number and it is returned. Assumes 8 Byte numbers
         implicit none
-        integer, intent(in) :: num
+        integer(ip), intent(in) :: num
         real(dp), intent(inout) :: b_num
         character(len=*), intent(inout) :: b_unit
 !
-        integer :: num_l
+        integer(ip) :: num_l
         real(dp) :: converter
 !
         num_l = 8*num
@@ -287,11 +294,11 @@ contains
     subroutine bytes_to_nums(bytes, bytes_unit, nums)
 !! Converter from Bytes to numbers. Assumes 8 Byte numbers
         implicit none
-        integer, intent(in) :: bytes
+        integer(ip), intent(in) :: bytes
         character(len=*), intent(in) :: bytes_unit
-        integer, intent(inout) :: nums
+        integer(ip), intent(inout) :: nums
 !
-        integer :: converter
+        integer(ip) :: converter
 !
         select case (bytes_unit)
         case ("KB")
@@ -313,7 +320,7 @@ contains
 !! Check for proper allocations. Also keeps track of the memory used.
 !! Checks for out of memory condition.
         implicit none
-        integer, intent(in) :: lall, istat
+        integer(ip), intent(in) :: lall, istat
 !
         real(dp) :: b_lall, b_maxmem
         character(len=2) :: lall_unit, maxmem_unit
@@ -342,7 +349,7 @@ contains
 !! Check for proper deallocation.
 !! Also keeps track of memory released.
         implicit none
-        integer, intent(in) :: lfree, istat
+        integer(ip), intent(in) :: lfree, istat
 !
 9000    format(t3, 'deallocation error, stat= ', i5)
 !
@@ -378,12 +385,12 @@ contains
     subroutine dgl_init(lenght, n_arrs, mem, mem_unit, verbose_in)
 !! Global initializer for all drivers
         implicit none
-        integer, intent(in) :: lenght, n_arrs
-        integer, intent(in) :: mem
+        integer(ip), intent(in) :: lenght, n_arrs
+        integer(ip), intent(in) :: mem
         character(len=2), intent(in) :: mem_unit
         logical, intent(in) :: verbose_in
 !
-        integer :: numbers, numbers_preview
+        integer(ip) :: numbers, numbers_preview
         real(dp) :: memory_preview
         character(len=2) :: memory_preview_unit
 !
@@ -429,17 +436,17 @@ contains
         write (*, "(t3,a)") "-- DiagLib Warning: "//string
     end subroutine
 !
-    integer function get_mem_lapack(n, n_max)
+    integer(ip) function get_mem_lapack(n, n_max)
 !! Get the highest optimal memory amount required by lapacks
 !! for the driver execution.
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Number of rows of matrices that will be processed
-        integer, intent(in) :: n_max
+        integer(ip), intent(in) :: n_max
 !! Number of columns of matrices that will be processed
-        integer :: lwork1, lwork2, len_rr, len_qr, nb
+        integer(ip) :: lwork1, lwork2, len_rr, len_qr, nb
 !fl
-        integer :: lwork3
-        integer, external :: ilaenv
+        integer(ip) :: lwork3
+        integer(ip), external :: ilaenv
 !
 ! maximum size of the rayleigh-ritz matrix:
 !

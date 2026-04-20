@@ -18,11 +18,11 @@ contains
 !! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
 !! @endnote
         implicit none
-        integer, intent(in) :: n
+        integer(ip), intent(in) :: n
 !! Size of the matrix to be diagonalized
-        integer, intent(in) :: n_targ
+        integer(ip), intent(in) :: n_targ
 !! Number of required eigenpairs.
-        integer, intent(in) :: n_max
+        integer(ip), intent(in) :: n_max
 !! Maximum size of the search space. Should be >= n_targ.
         real(dp), dimension(n_max), intent(inout) :: eig
 !! Computed eigenvalues
@@ -36,11 +36,11 @@ contains
 !! External subroutine that applies a preconditioner
         logical, optional, intent(in) :: dgl_verbose
 !! Verbose mode. Default = .false.
-        integer, optional, intent(in) :: dgl_max_iter
+        integer(ip), optional, intent(in) :: dgl_max_iter
 !! Maximum number of allowed iterations. Default = \(100\)
-        integer, optional, intent(in) :: dgl_dav_iter
+        integer(ip), optional, intent(in) :: dgl_dav_iter
 !! Maximum number of iterations before Davidson restart. Default = \(25\)
-        integer, optional, intent(in) :: dgl_memory
+        integer(ip), optional, intent(in) :: dgl_memory
 !! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
         character(len=2), optional, intent(in) :: dgl_memory_unit
 !! Unit of memory. Default = MB
@@ -54,26 +54,26 @@ contains
 ! local variables:
 ! ================
         logical :: verbose_in
-        integer :: max_iter, dav_iter, memory
+        integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
 !
 ! expansion space varibles:
 ! total dimension, current dimension
 !
-        integer :: lda, ld_current
+        integer(ip) :: lda, ld_current
 !
 ! number of large arrays that will be allocated
 !
-        integer :: n_arrs
+        integer(ip) :: n_arrs
 !
 ! number of active vectors at a given iteration, and indices to access them
 !
-        integer :: n_act, ind, i_beg
+        integer(ip) :: n_act, ind, i_beg
 !
 ! number of frozen (i.e. converged) vectors
 !
-        integer :: n_frozen
+        integer(ip) :: n_frozen
 !
 ! tolerances on residuals norms, used for convergence
 !
@@ -85,7 +85,7 @@ contains
 !
 ! iterators and utilities
 !
-        integer :: it, i_eig
+        integer(ip) :: it, i_eig
         real(dp) :: sqrtn
 !
 ! array to control convergence
@@ -116,10 +116,13 @@ contains
 !
 ! check what problem we are dealing with
 !
-        generalized = present(metvec)
-        if (generalized) then
+        generalized = .false.
+        if (present(metvec)) then
             if (.not. associated(metvec)) then
-                call dgl_error("DiagLib: Non associated pointer to metric-vector product routine")
+                !call dgl_error("DiagLib: Non associated pointer to metric-vector product routine")
+                call dgl_warning("DiagLib: Non associated pointer to metric-vector product routine, going on with standard solver")
+            else
+                generalized = .true.
             end if
         end if
 !

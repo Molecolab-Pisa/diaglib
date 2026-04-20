@@ -42,28 +42,20 @@ endif()
 # If wanted force double precision integers
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
 
+# Set required size of integers for BLAS, MKL and internal integers
+set(BLA_SIZEOF_INTEGER ${DGL_INTEGER_KIND})
 if (DGL_INTEGER_KIND EQUAL 8)
-        if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
-                add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
-        elseif(CMAKE_Fortran_COMPILER_ID MATCHES "^Intel")
-                add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
-        endif()
+        set(MKL_INTERFACE_FULL gf_ilp64)
         add_compile_definitions(DGL_INT_KIND_8)
 else()
+        set(MKL_INTERFACE_FULL gf_lp64)
         add_compile_definitions(DGL_INT_KIND_4)
 endif()
 
-# Set required BLAS
-set(BLA_SIZEOF_INTEGER ${DGL_INTEGER_KIND})
+# Set required parameters for BLAS
 set(BLA_THREAD CACHE STRING "Choice between SEQ or OMP BLAS")
 set(BLA_VENDOR CACHE STRING "Choice of BLAS vendor")
 
-# Set required size for MKL
-if(DGL_INTEGER_KIND EQUAL 4)
-        set(MKL_INTERFACE_FULL gf_lp64)
-else()
-        set(MKL_INTERFACE_FULL gf_ilp64)
-endif()
 
 if(NOT BLA_VENDOR)
         find_package(MKL QUIET)
