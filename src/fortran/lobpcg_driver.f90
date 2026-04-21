@@ -118,7 +118,8 @@ contains
         generalized = .false.
         if (present(metvec)) then
             if (.not. associated(metvec)) then
-                call dgl_warning("DiagLib: Non associated pointer to metric-vector product routine, going on with standard solver")
+                call dgl_error("Non associated pointer to metric-vector product routine")
+                !call dgl_warning("Non associated pointer to metric-vector product routine, going on with standard solver")
             else
                 generalized = .true.
             end if

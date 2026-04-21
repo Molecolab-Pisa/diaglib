@@ -330,7 +330,7 @@ void test_davidson(){
     }
   }
 
-  davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
+  dgl_davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
                    verbose, tol, max_iter, max_dav, shift, memory, memory_unit);
   
   fix_phase(n,n_targ,evec);
@@ -360,7 +360,7 @@ void test_davidson_generalized(){
   const char* memory_unit = "GB";
 //
 
-};
+}
 
 void test_lobpcg(){
   #ifdef DGL_INT_KIND_4
@@ -399,7 +399,7 @@ void test_lobpcg(){
     printf("LOBPCG failed to converge.\n");
   }
 
-};
+}
 
 void test_lobpcg_generalized(){
   #ifdef DGL_INT_KIND_4
@@ -417,7 +417,7 @@ void test_lobpcg_generalized(){
   const char* memory_unit = "GB";
 //
 
-};
+}
 
 void test_nonsym_davidson(){
   #ifdef DGL_INT_KIND_4
@@ -435,7 +435,7 @@ void test_nonsym_davidson(){
   const char* memory_unit = "GB";
 //
 
-};
+}
 
 void test_smogd(){
   #ifdef DGL_INT_KIND_4

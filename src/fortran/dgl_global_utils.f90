@@ -425,7 +425,7 @@ contains
         character(len=*), intent(in) :: string
 
         write (*, "(t3,a)") "-- DiagLib Error: "//string
-        stop "** DiagLib isseued stop signal **"
+        stop "** DiagLib issued stop signal **"
     end subroutine
 !
     subroutine dgl_warning(string)
