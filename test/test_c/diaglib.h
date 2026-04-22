@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-void davidson_driver_c(
+extern void dgl_davidson_driver_c(
 #ifdef DGL_INT_KIND_4
     int n,
     int n_targ,
@@ -56,7 +56,7 @@ void nonsym_driver_c(
     bool* ok
 );
     
-void lobpcg_driver_c(
+void dgl_lobpcg_driver_c(
 #ifdef DGL_INT_KIND_4
     int n,
     int n_targ,

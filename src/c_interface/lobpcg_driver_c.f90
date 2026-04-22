@@ -9,8 +9,9 @@ contains
 
     subroutine lobpcg_driver_c(n, n_targ, n_max, matvec, precnd, metvec, eig, evec, ok, &
                                verbose, tol, max_iter, shift, memory, memory_unit) &
-        bind(C, name="lobpcg_driver_c")
+                               bind(C, name="dgl_lobpcg_driver_c")
         implicit none
+        
         ! C-compatible arguments
 #ifdef DGL_INT_KIND_4
         integer(C_INT), value, intent(in) :: n, n_targ, n_max
