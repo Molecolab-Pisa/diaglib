@@ -33,11 +33,13 @@ contains
         real(C_DOUBLE), intent(inout) :: evec_1(n, n_max), evec_2(n, n_max)
         logical(C_BOOL), intent(out) :: ok
 
-        character(len=:), allocatable :: memory_unit_f, side_f
-        logical :: verbose_f, ok_f ! Procedure pointer
+        character(len=:), allocatable :: memory_unit_f, side_p
+        character(len=2), allocatable :: side_f
+        logical :: verbose_f, ok_f
 !
         memory_unit_f = c_ptr_to_f_string(memory_unit)
-        side_f = c_ptr_to_f_string(side)
+        side_p = c_ptr_to_f_string(side)
+        side_f = side_p
 !
 !       ! Associate pointers
         call check_pointer(matvec_r, "matvec_r")
@@ -50,17 +52,30 @@ contains
         verbose_f = verbose
 
         ! Chiamata al driver
-        call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
-                                        side_f, eig, evec_1, ok_f, &
-                                        evec_2 = evec_2, &
-                                        dgl_verbose=verbose_f, &
-                                        dgl_max_iter=max_iter, &
-                                        dgl_dav_iter=dav_iter, &
-                                        dgl_shift=shift, &
-                                        dgl_tol=tol, &
-                                        dgl_memory=memory, &
-                                        dgl_memory_unit=memory_unit_f &
-                                        )
+        if (trim(side_f) == "LR") then
+                call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
+                                               side_f, eig, evec_1, ok_f, &
+                                               evec_2 = evec_2, &
+                                               dgl_verbose=verbose_f, &
+                                               dgl_max_iter=max_iter, &
+                                               dgl_dav_iter=dav_iter, &
+                                               dgl_shift=shift, &
+                                               dgl_tol=tol, &
+                                               dgl_memory=memory, &
+                                               dgl_memory_unit=memory_unit_f &
+                                               )
+        else
+                call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
+                                               side_f, eig, evec_1, ok_f, &
+                                               dgl_verbose=verbose_f, &
+                                               dgl_max_iter=max_iter, &
+                                               dgl_dav_iter=dav_iter, &
+                                               dgl_shift=shift, &
+                                               dgl_tol=tol, &
+                                               dgl_memory=memory, &
+                                               dgl_memory_unit=memory_unit_f &
+                                               )
+        endif
 
         ok = ok_f
 
