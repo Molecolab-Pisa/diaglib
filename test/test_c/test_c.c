@@ -391,7 +391,7 @@ void test_lobpcg(){
 #endif
   const double tol = 1e-10, shift = 0.0;
   double eig[n_max];
-  double evec[n * n_max]; //, evec_l[n * n_max];
+  double evec[n * n_max];
   bool ok;
   bool verbose = false;
   const char* memory_unit = "GB";
@@ -430,7 +430,7 @@ void test_lobpcg_generalized(){
 #endif
   const double tol = 1e-10, shift = 0.0;
   double eig[n_max];
-  double evec[n * n_max]; //, evec_l[n * n_max];
+  double evec[n * n_max];
   bool ok;
   bool verbose = false;
   const char* memory_unit = "GB";
@@ -459,23 +459,48 @@ void test_lobpcg_generalized(){
 
 }
 
-//void test_nonsym_davidson(){
-//  #ifdef DGL_INT_KIND_4
-//  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
-//  const int memory = 1;
-//#elif DGL_INT_KIND_8
-//  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
-//  const long int memory = 1;
-//#endif
-//  const double tol = 1e-10, shift = 0.0;
-//  double eig[n_max];
-//  double evec[n * n_max], evec_l[n * n_max];
-//  bool ok;
-//  bool verbose = false;
-//  const char* memory_unit = "GB";
-////
-//
-//}
+void test_davidson_nosym_davidson(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int memory = 1;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int memory = 1;
+#endif
+  const double tol = 1e-10, shift = 0.0;
+  double eig[n_max];
+  double evec[n * n_max], evec_l[n * n_max];
+  bool ok;
+  bool verbose = false;
+  const char* memory_unit = "GB";
+  const char* side = "LR";
+
+  printf("\nCalling non-symmetric DAVIDSON driver...\n");
+  for (int i = 0; i < n * n_max; ++i)
+    evec[i] = 0.0;
+  for (int j = 0; j < n_max; ++j)
+    for (int i = 0; i < n; ++i)
+      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
+  for (int i = 0; i < n * n_max; ++i)
+    evec_l[i] = 0.0;
+  for (int j = 0; j < n_max; ++j)
+    for (int i = 0; i < n; ++i)
+      evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
+  
+  dgl_davidson_nosym_driver_c(n, n_targ, n_max, matvec_r_c, matvec_l_c, precnd_c, side,
+                              eig, evec, evec_l, &ok,
+                              verbose, tol, max_iter, max_dav, shift, memory, memory_unit);
+  fix_phase(n,n_targ,evec);
+  fix_phase(n,n_targ,evec_l);
+  
+  if (ok) {
+    printf("Non-symmetric Davidson converged.\n");
+    write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
+  } else {
+    printf("Non-symmetric Davidson failed to converge.\n");
+  }
+
+}
 
 //void test_smogd(){
 //  #ifdef DGL_INT_KIND_4
@@ -507,32 +532,8 @@ int main() {
   test_davidson_generalized();
   test_lobpcg();
   test_lobpcg_generalized();
+  test_davidson_nosym_davidson();
 
-  //printf("\nCalling non-symmetric DAVIDSON driver...\n");
-  //for (int i = 0; i < n * n_max; ++i)
-  //  evec[i] = 0.0;
-  //for (int j = 0; j < n_max; ++j)
-  //  for (int i = 0; i < n; ++i)
-  //    evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-  //for (int i = 0; i < n * n_max; ++i)
-  //  evec_l[i] = 0.0;
-  //for (int j = 0; j < n_max; ++j)
-  //  for (int i = 0; i < n; ++i)
-  //    evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
-  //
-  //nonsym_driver_c(false, n, n_targ, n_max, max_iter, tol, max_dav, shift,
-  //                matvec_c, matvec_c, precnd_c, eig, evec, evec_l, 
-  //                matvec_r_c, matvec_l_c, precnd_c, eig, evec, evec_l, 
-  //                4, &ok);
-  //fix_phase(n,n_targ,evec);
-  //fix_phase(n,n_targ,evec_l);
-  //
-  //if (ok) {
-  //  printf("Non-symmetric Davidson converged.\n");
-  //  write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
-  //} else {
-  //  printf("Non-symmetric Davidson failed to converge.\n");
-  //}
   //
   //printf("\nCalling SMOGD driver...\n");
   //
