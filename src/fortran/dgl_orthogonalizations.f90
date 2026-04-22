@@ -233,8 +233,7 @@ contains
 ! ortho_cd failed. return with an error message
 !
                 ok = .false.
-                write (6, 100) ' maximum number of iterations reached.'
-                return
+                call dgl_error('ortho_cd failed: maximum number of iterations reached.')
             end if
             call dgemm('t', 'n', m, m, n, one, u, n, u, n, zero, metric, m)
             msave = metric
@@ -262,9 +261,7 @@ contains
 ! will be carried out using a different algorithm.
 !
                         ok = .false.
-                        write (6, 100) ' maximum number of iterations for factorization reached.'
-                        stop
-                        return
+                        call dgl_error('ortho_cd failed: maximum number of iterations reached.')
                     end if
 !
                     shift = max(epsilon(one)*alpha*unorm, tol_ortho)
@@ -314,8 +311,6 @@ contains
             error = epsilon(one)*rcond*rcond
             macro_done = error .lt. tol_ortho
         end do
-!
-100     format(t3, 'ortho_cd failed with the following error:', a)
 !
         ok = .true.
 !

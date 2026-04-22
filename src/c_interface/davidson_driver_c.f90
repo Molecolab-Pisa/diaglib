@@ -9,7 +9,7 @@ contains
 
     subroutine davidson_driver_c(n, n_targ, n_max, matvec, precnd, metvec, eig, evec, ok, &
                                  verbose, tol, max_iter, dav_iter, shift, memory, memory_unit) &
-                                 bind(C, name="dgl_davidson_driver_c")
+        bind(C, name="dgl_davidson_driver_c")
         implicit none
 
         ! C-compatible arguments
@@ -41,37 +41,37 @@ contains
         call check_pointer(precnd, "precnd")
         call c_f_procpointer(matvec, matvec_ptr)
         call c_f_procpointer(precnd, precnd_ptr)
-        
+
         ! Bool conversion
         verbose_f = verbose
-        
+
         ! Main driver call
         if (c_associated(metvec)) then
-                
-                call c_f_procpointer(metvec, metvec_ptr)
-                call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, &
-                                         eig, evec, ok_f, &
-                                         dgl_verbose=verbose_f, &
-                                         dgl_max_iter=max_iter, &
-                                         dgl_dav_iter=dav_iter, &
-                                         dgl_shift=shift, &
-                                         dgl_tol=tol, &
-                                         dgl_memory=memory, &
-                                         dgl_memory_unit=memory_unit_f, &
-                                         metvec=metvec_ptr &
-                                         )
+
+            call c_f_procpointer(metvec, metvec_ptr)
+            call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, &
+                                     eig, evec, ok_f, &
+                                     dgl_verbose=verbose_f, &
+                                     dgl_max_iter=max_iter, &
+                                     dgl_dav_iter=dav_iter, &
+                                     dgl_shift=shift, &
+                                     dgl_tol=tol, &
+                                     dgl_memory=memory, &
+                                     dgl_memory_unit=memory_unit_f, &
+                                     metvec=metvec_ptr &
+                                     )
         else
-                call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, &
-                                         eig, evec, ok_f, &
-                                         dgl_verbose=verbose_f, &
-                                         dgl_max_iter=max_iter, &
-                                         dgl_dav_iter=dav_iter, &
-                                         dgl_shift=shift, &
-                                         dgl_tol=tol, &
-                                         dgl_memory=memory, &
-                                         dgl_memory_unit=memory_unit_f &
-                                         )
-        endif
+            call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, &
+                                     eig, evec, ok_f, &
+                                     dgl_verbose=verbose_f, &
+                                     dgl_max_iter=max_iter, &
+                                     dgl_dav_iter=dav_iter, &
+                                     dgl_shift=shift, &
+                                     dgl_tol=tol, &
+                                     dgl_memory=memory, &
+                                     dgl_memory_unit=memory_unit_f &
+                                     )
+        end if
         ! Bool conversion
         ok = ok_f
 !

@@ -8,10 +8,10 @@ module mod_davidson_nosym_driver_c
 contains
 
     subroutine davidson_nosym_driver_c(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
-                                        eig, evec_1, evec_2, ok,&
-                                        verbose, tol, max_iter, dav_iter, &
-                                        shift, memory, memory_unit) &
-                                        bind(C, name="dgl_davidson_nosym_driver_c")
+                                       eig, evec_1, evec_2, ok, &
+                                       verbose, tol, max_iter, dav_iter, &
+                                       shift, memory, memory_unit) &
+        bind(C, name="dgl_davidson_nosym_driver_c")
         implicit none
 
         ! C-compatible arguments
@@ -53,62 +53,60 @@ contains
 
         ! Chiamata al driver
         if (trim(side_f) == "LR") then
-                call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
-                                               side_f, eig, evec_1, ok_f, &
-                                               evec_2 = evec_2, &
-                                               dgl_verbose=verbose_f, &
-                                               dgl_max_iter=max_iter, &
-                                               dgl_dav_iter=dav_iter, &
-                                               dgl_shift=shift, &
-                                               dgl_tol=tol, &
-                                               dgl_memory=memory, &
-                                               dgl_memory_unit=memory_unit_f &
-                                               )
+            call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
+                                           side_f, eig, evec_1, ok_f, &
+                                           evec_2=evec_2, &
+                                           dgl_verbose=verbose_f, &
+                                           dgl_max_iter=max_iter, &
+                                           dgl_dav_iter=dav_iter, &
+                                           dgl_shift=shift, &
+                                           dgl_tol=tol, &
+                                           dgl_memory=memory, &
+                                           dgl_memory_unit=memory_unit_f &
+                                           )
         else
-                call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
-                                               side_f, eig, evec_1, ok_f, &
-                                               dgl_verbose=verbose_f, &
-                                               dgl_max_iter=max_iter, &
-                                               dgl_dav_iter=dav_iter, &
-                                               dgl_shift=shift, &
-                                               dgl_tol=tol, &
-                                               dgl_memory=memory, &
-                                               dgl_memory_unit=memory_unit_f &
-                                               )
-        endif
+            call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
+                                           side_f, eig, evec_1, ok_f, &
+                                           dgl_verbose=verbose_f, &
+                                           dgl_max_iter=max_iter, &
+                                           dgl_dav_iter=dav_iter, &
+                                           dgl_shift=shift, &
+                                           dgl_tol=tol, &
+                                           dgl_memory=memory, &
+                                           dgl_memory_unit=memory_unit_f &
+                                           )
+        end if
 
         ok = ok_f
 
-    contains
-
-        subroutine matvec_l_wrapper(n, m, x, ax)
-            integer, intent(in) :: n, m
-            real(dp), intent(in) :: x(n, m)
-            real(dp), intent(inout) :: ax(n, m)
-!
-            call matvec_l_ptr(n, m, x, ax)
-!
-        end subroutine
-
-        subroutine matvec_r_wrapper(n, m, x, ax)
-            integer, intent(in) :: n, m
-            real(dp), intent(in) :: x(n, m)
-            real(dp), intent(inout) :: ax(n, m)
-!
-            call matvec_r_ptr(n, m, x, ax)
-!
-        end subroutine
-
-        subroutine precnd_wrapper(n, m, shift, r, z)
-            integer, intent(in) :: n, m
-            real(dp), intent(in) :: shift
-            real(dp), intent(in) :: r(n, m)
-            real(dp), intent(inout) :: z(n, m)
-!
-            call precnd_ptr(n, m, shift, r, z)
-!
-        end subroutine
-
     end subroutine davidson_nosym_driver_c
+
+    subroutine matvec_l_wrapper(n, m, x, ax)
+        integer, intent(in) :: n, m
+        real(dp), intent(in) :: x(n, m)
+        real(dp), intent(inout) :: ax(n, m)
+!
+        call matvec_l_ptr(n, m, x, ax)
+!
+    end subroutine
+
+    subroutine matvec_r_wrapper(n, m, x, ax)
+        integer, intent(in) :: n, m
+        real(dp), intent(in) :: x(n, m)
+        real(dp), intent(inout) :: ax(n, m)
+!
+        call matvec_r_ptr(n, m, x, ax)
+!
+    end subroutine
+
+    subroutine precnd_wrapper(n, m, shift, r, z)
+        integer, intent(in) :: n, m
+        real(dp), intent(in) :: shift
+        real(dp), intent(in) :: r(n, m)
+        real(dp), intent(inout) :: z(n, m)
+!
+        call precnd_ptr(n, m, shift, r, z)
+!
+    end subroutine
 
 end module mod_davidson_nosym_driver_c

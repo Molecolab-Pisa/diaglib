@@ -106,15 +106,16 @@ void dgl_davidson_nosym_driver_c(
     const char* memory_unit
 );
 
-void smogd_driver_c(
-    bool verbose,
-    int n,
+void dgl_smogd_driver_c(
+#ifdef DGL_INT_KIND_4
     int n2,
     int n_targ,
     int n_max,
-    int max_iter,
-    double tol,
-    int maxdav,
+#elif DGL_INT_KIND_8
+    long int n2,
+    long int n_targ,
+    long int n_max,
+#endif
     void (*apbmul)(int*, int*, double*, double*),
     void (*ambmul)(int*, int*, double*, double*),
     void (*spdmul)(int*, int*, double*, double*),
@@ -122,7 +123,19 @@ void smogd_driver_c(
     void (*lrprec)(int*, int*, double*, double*, double*, double*, double*),
     double* eig,
     double* evec,
-    bool* ok
+    bool* ok,
+    bool verbose,
+    double tol,
+#ifdef DGL_INT_KIND_4
+    int max_iter,
+    int dav_iter,
+    int memory,
+#elif DGL_INT_KIND_8
+    int long max_iter,
+    int long dav_iter,
+    int long memory,
+#endif
+    const char* memory_unit
 );
 
 #endif

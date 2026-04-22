@@ -233,10 +233,10 @@ void lrprec_c(int* n, int* m, double* fac, double* xp, double* xm,
     }
   }
 }
+
 //
 // small function to output the results to a file:
 //
-
 void write_results_c(const char* label, int n, int n_targ, double* eig, double* evec, const char* filename) {
   FILE* f = fopen(filename, "a");
   if (!f) return;
@@ -307,10 +307,10 @@ void fix_phase(int n, int n_targ, double* evec) {
 
 void test_davidson(){
 #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -330,7 +330,7 @@ void test_davidson(){
     }
   }
   dgl_davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
-                   verbose, tol, max_iter, max_dav, shift, memory, memory_unit);
+                   verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
   
   fix_phase(n,n_targ,evec);
 
@@ -345,10 +345,10 @@ void test_davidson(){
 
 void test_davidson_generalized(){
 #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -368,7 +368,7 @@ void test_davidson_generalized(){
     }
   }
   dgl_davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
-                   verbose, tol, max_iter, max_dav, shift, memory, memory_unit);
+                   verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
   
   fix_phase(n,n_targ,evec);
 
@@ -461,10 +461,10 @@ void test_lobpcg_generalized(){
 
 void test_davidson_nosym_davidson(){
   #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -489,7 +489,7 @@ void test_davidson_nosym_davidson(){
   
   dgl_davidson_nosym_driver_c(n, n_targ, n_max, matvec_r_c, matvec_l_c, precnd_c, side,
                               eig, evec, evec_l, &ok,
-                              verbose, tol, max_iter, max_dav, shift, memory, memory_unit);
+                              verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
   fix_phase(n,n_targ,evec);
   fix_phase(n,n_targ,evec_l);
   
@@ -502,23 +502,44 @@ void test_davidson_nosym_davidson(){
 
 }
 
-//void test_smogd(){
-//  #ifdef DGL_INT_KIND_4
-//  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
-//  const int memory = 1;
-//#elif DGL_INT_KIND_8
-//  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, max_dav = 20;
-//  const long int memory = 1;
-//#endif
-//  const double tol = 1e-10, shift = 0.0;
-//  double eig[n_max];
-//  double evec[n * n_max], evec_l[n * n_max];
-//  bool ok;
-//  bool verbose = false;
-//  const char* memory_unit = "GB";
-////
-//
-//}
+void test_smogd(){
+  #ifdef DGL_INT_KIND_4
+  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const int memory = 1;
+  int n2 = 2 * n;
+#elif DGL_INT_KIND_8
+  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const long int memory = 1;
+  long int n2 = 2 * n;
+#endif
+  const double tol = 1e-10;
+  double eig[n_max];
+  double evec2 [n2 * n_max];
+  
+  bool ok;
+  bool verbose = true;
+  const char* memory_unit = "GB";
+
+  printf("\nCalling SMOGD driver...\n");
+  for (int i = 0; i < n2 * n_max; ++i)
+    evec2[i] = 0.0;
+  for (int i = 0; i < n_max && i < n2; ++i)
+    evec2[i + i * n2] = 1.0;
+  
+  ok = false;
+  
+  dgl_smogd_driver_c(n2, n_targ, n_max, apbmul_c, ambmul_c, spdmul_c, smdmul_c, 
+                 lrprec_c, eig, evec2, &ok,
+                 verbose, tol, max_iter, dav_iter, memory, memory_unit);
+  
+  if (ok) {
+    printf("SMOGD converged.\n");
+    write_results_c_1("SMOGD", n2, n_targ, eig, "output_c.txt");
+  } else {
+    printf("SMOGD failed to converge.\n");
+  }
+
+}
 //
 // main program: test davidson, non-symmetric davidson, lobpcg and smogd.
 //
@@ -533,33 +554,7 @@ int main() {
   test_lobpcg();
   test_lobpcg_generalized();
   test_davidson_nosym_davidson();
-
-  //
-  //printf("\nCalling SMOGD driver...\n");
-  //
-  //int n2 = 2 * n;
-  //double* evec2 = malloc(sizeof(double) * n2 * n_max);
-  //for (int i = 0; i < n2 * n_max; ++i)
-  //  evec2[i] = 0.0;
-  //for (int i = 0; i < n_max && i < n2; ++i)
-  //  evec2[i + i * n2] = 1.0;
-  //
-  //ok = false;
-  //
-  //smogd_driver_c(
-  //  false, n, n2, n_targ, n_max, max_iter, tol, max_dav,
-  //  apbmul_c, ambmul_c, spdmul_c, smdmul_c, lrprec_c,
-  //  eig, evec2, &ok
-  //);
-  //
-  //if (ok) {
-  //  printf("SMOGD converged.\n");
-  //  write_results_c_1("SMOGD", n2, n_targ, eig, "output_c.txt");
-  //} else {
-  //  printf("SMOGD failed to converge.\n");
-  //}
-  //
-  //free(evec2);
+  test_smogd();
 
   return 0;
 }

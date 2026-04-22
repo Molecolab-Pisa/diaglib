@@ -3,6 +3,7 @@ add_library(diaglib_c SHARED
         davidson_driver_c.f90
         lobpcg_driver_c.f90
         davidson_nosym_driver_c.f90
+        smogd_driver_c.f90
 )
 
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
