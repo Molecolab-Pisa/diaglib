@@ -304,7 +304,6 @@ void fix_phase(int n, int n_targ, double* evec) {
   }
 }
 
-
 void test_davidson(){
 #ifdef DGL_INT_KIND_4
   const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
@@ -517,7 +516,7 @@ void test_smogd(){
   double evec2 [n2 * n_max];
   
   bool ok;
-  bool verbose = true;
+  bool verbose = false;
   const char* memory_unit = "GB";
 
   printf("\nCalling SMOGD driver...\n");
