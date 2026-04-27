@@ -10,6 +10,8 @@ include(CPack)
 include(GNUInstallDirs)
 #Include this to automatically make the configuration file
 include(CMakePackageConfigHelpers)
+#Include Ctest for testing
+include(CTest)
 
 # default build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -38,7 +40,6 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -xHost")
 endif()
 
-
 # If wanted force double precision integers
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
 
@@ -47,9 +48,11 @@ set(BLA_SIZEOF_INTEGER ${DGL_INTEGER_KIND})
 if (DGL_INTEGER_KIND EQUAL 8)
         set(MKL_INTERFACE_FULL gf_ilp64)
         add_compile_definitions(DGL_INT_KIND_8)
+        message(STATUS "Using 64-bit integers")
 else()
         set(MKL_INTERFACE_FULL gf_lp64)
         add_compile_definitions(DGL_INT_KIND_4)
+        message(STATUS "Using 32-bit integers")
 endif()
 
 # Set required parameters for BLAS

@@ -10,7 +10,7 @@ module utility
     integer(ip), parameter :: dp = selected_real_kind(15)
     real(dp), parameter :: zero = 0._dp, one = 1._dp, two = 2._dp, five = 5._dp, half = 0.5_dp
 
-    integer(ip), parameter :: n = 500, n_targ = 5, n_max = 10
+    integer(ip), parameter :: n = 700, n_targ = 5, n_max = 10
     integer(ip), parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp

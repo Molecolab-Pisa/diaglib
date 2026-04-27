@@ -256,19 +256,6 @@ void write_results_c(const char* label, int n, int n_targ, double* eig, double* 
   fclose(f);
 }
 
-void write_results_c_1(const char* label, int n, int n_targ, double* eig, const char* filename) {
-  FILE* f = fopen(filename, "a");
-  if (!f) return;
-
-  fprintf(f, "  %s results\n\n", label);
-  fprintf(f, "  Eigenvalues:\n");
-  for (int i = 0; i < n_targ; ++i)
-    fprintf(f, "  %5d%14.6f\n", i + 1, eig[i]);
-
-  fprintf(f, "\n");
-  fclose(f);
-}
-
 void write_results_c_2(const char* label, int n, int n_targ, double* eig, double* evec, 
                        double* evec_l, const char* filename) {
   FILE* f = fopen(filename, "a");
@@ -304,12 +291,12 @@ void fix_phase(int n, int n_targ, double* evec) {
   }
 }
 
-void test_davidson(){
+int test_davidson(){
 #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -338,16 +325,17 @@ void test_davidson(){
     write_results_c("Davidson", n, n_targ, eig, evec, "output_c.txt");
   } else {
     printf("Davidson failed to converge.\n");
+    return 1;
   }
-
+  return 0;
 }
 
-void test_davidson_generalized(){
+int test_davidson_generalized(){
 #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -376,16 +364,18 @@ void test_davidson_generalized(){
     write_results_c("Davidson", n, n_targ, eig, evec, "output_c.txt");
   } else {
     printf("Davidson failed to converge.\n");
+    return 1;
   }
+  return 0;
 
 }
 
-void test_lobpcg(){
+int test_lobpcg(){
   #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100;
+  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100;
+  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -415,16 +405,18 @@ void test_lobpcg(){
     write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
   } else {
     printf("LOBPCG failed to converge.\n");
+    return 1;
   }
+  return 0;
 
 }
 
-void test_lobpcg_generalized(){
+int test_lobpcg_generalized(){
   #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100;
+  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100;
+  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -454,16 +446,18 @@ void test_lobpcg_generalized(){
     write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
   } else {
     printf("LOBPCG failed to converge.\n");
+    return 1;
   }
+  return 0;
 
 }
 
-void test_davidson_nosym_davidson(){
+int test_davidson_nosym_davidson(){
   #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
 #endif
   const double tol = 1e-10, shift = 0.0;
@@ -497,17 +491,19 @@ void test_davidson_nosym_davidson(){
     write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
   } else {
     printf("Non-symmetric Davidson failed to converge.\n");
+    return 1;
   }
+  return 0;
 
 }
 
-void test_smogd(){
+int test_smogd(){
   #ifdef DGL_INT_KIND_4
-  const int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const int memory = 1;
   int n2 = 2 * n;
 #elif DGL_INT_KIND_8
-  const long int n = 500, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
+  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
   const long int memory = 1;
   long int n2 = 2 * n;
 #endif
@@ -533,10 +529,12 @@ void test_smogd(){
   
   if (ok) {
     printf("SMOGD converged.\n");
-    write_results_c_1("SMOGD", n2, n_targ, eig, "output_c.txt");
+    write_results_c("SMOGD", n2, n_targ, eig, evec2, "output_c.txt");
   } else {
     printf("SMOGD failed to converge.\n");
+    return 1;
   }
+  return 0;
 
 }
 //
@@ -547,13 +545,14 @@ int main() {
 // get rid of the output file if it's already present.
 //
   remove("output_c.txt");
+  int exitstatus;
 
-  test_davidson();
-  test_davidson_generalized();
-  test_lobpcg();
-  test_lobpcg_generalized();
-  test_davidson_nosym_davidson();
-  test_smogd();
+  exitstatus = test_davidson(); if (exitstatus != 0) {return 1;} ;
+  exitstatus = test_davidson_generalized(); if (exitstatus != 0) {return 1;} ;
+  exitstatus = test_lobpcg(); if (exitstatus != 0) {return 1;} ;
+  exitstatus = test_lobpcg_generalized(); if (exitstatus != 0) {return 1;} ;
+  exitstatus = test_davidson_nosym_davidson(); if (exitstatus != 0) {return 1;} ;
+  exitstatus = test_smogd(); if (exitstatus != 0) {return 1;} ;
 
   return 0;
 }

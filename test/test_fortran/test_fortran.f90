@@ -73,9 +73,11 @@ contains
             call dump_eigpairs(lutest, n, n_targ, eig, evec, "Davidson")
             if (.not. ok) then
                 write (*, f_string) "Davidson results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
         else
             write (6, f_string) 'Davidson failed to converge.'
+            stop 1
         end if
 !
     end subroutine test_davidson
@@ -104,10 +106,12 @@ contains
             call dump_eigpairs(lutest, n, n_targ, eig, evec, "Generalized Davidson")
             if (.not. ok) then
                 write (*, f_string) "Generalized Davidson results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
 
         else
             write (6, f_string) 'Generalized Davidson failed to converge.'
+            stop 1
         end if
 !
     end subroutine test_davidson_generalized
@@ -138,15 +142,18 @@ contains
             call dump_eigpairs(lutest, n, n_targ, eig, evec, "Non Symmetric Davidson, Right")
             if (.not. ok) then
                 write (*, f_string) "Right Non symmetric Davidson results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
 
             ok = compare_eigs(n, n_targ, tol, eig, evec_2, "Non Symmetric diagonalization, Left")
             call dump_eigpairs(lutest, n, n_targ, eig, evec_2, "Non Symmetric Davidson, Left")
             if (.not. ok) then
                 write (*, f_string) "Left Non symmetric Davidson results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
         else
             write (6, f_string) 'non-symmetric Davidson failed to converge.'
+            stop 1
         end if
 !
     end subroutine test_nonsym_davidson
@@ -177,9 +184,11 @@ contains
             call dump_eigpairs(lutest, n, n_targ, eig, evec, "LOBPCG")
             if (.not. ok) then
                 write (*, f_string) "LOBPCG results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
         else
             write (6, f_string) 'LOBPCG failed to converge.'
+            stop 1
         end if
 
     end subroutine test_lobpcg
@@ -208,9 +217,11 @@ contains
             call dump_eigpairs(lutest, n, n_targ, eig, evec, "Generalized LOBPCG")
             if (.not. ok) then
                 write (*, f_string) "Generalized LOBPCG results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
         else
             write (6, f_string) 'Generalized LOBPCG failed to converge.'
+            stop 1
         end if
 !
     end subroutine test_lobpcg_generalized
@@ -240,9 +251,11 @@ contains
             call dump_eigpairs(lutest, n*2, n_targ, eig, evec, "SMOGD")
             if (.not. ok) then
                 write (*, f_string) "SMOGD results do not match with reference! Maybe rerun reference?"
+                stop 1
             end if
         else
             write (6, f_string) 'SMOGD failed to converge.'
+            stop 1
         end if
 !
         deallocate (evec, eig)
