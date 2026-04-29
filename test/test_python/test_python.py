@@ -1,67 +1,5 @@
-import ctypes
 import numpy as np
-
-# Carica la libreria
-lib = ctypes.CDLL('./../../lib/libdiaglib.so')
-
-# Definisci i tipi delle callback
-MATVEC = ctypes.CFUNCTYPE(None,
-    ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double)
-)
-
-MATVEC2 = MATVEC
-
-PRECND = ctypes.CFUNCTYPE(None,
-    ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double)
-)
-
-BVEC = ctypes.CFUNCTYPE(None,
-    ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double)
-)
-
-LRPREC = ctypes.CFUNCTYPE(None,
-    ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double)
-)
-
-# Definisci la funzione Fortran
-lib.davidson_driver_c.argtypes = [
-    ctypes.c_bool, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    ctypes.c_int, ctypes.c_int, ctypes.c_double, ctypes.c_double,
-    MATVEC, PRECND,
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_bool)
-]
-
-lib.lobpcg_driver_c.argtypes = [
-    ctypes.c_bool, ctypes.c_bool,
-    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    ctypes.c_double, ctypes.c_double,
-    MATVEC, PRECND, BVEC,
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_double),
-    ctypes.POINTER(ctypes.c_bool)
-]
-
-lib.nonsym_driver_c.argtypes = [
-    ctypes.c_bool, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    ctypes.c_double, ctypes.c_int, ctypes.c_double,
-    MATVEC2, MATVEC2, PRECND,
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double),
-    ctypes.c_int, ctypes.POINTER(ctypes.c_bool)
-]
-
-lib.smogd_driver_c.argtypes = [
-    ctypes.c_bool, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    ctypes.c_double, ctypes.c_int,
-    MATVEC2, MATVEC2, MATVEC2, MATVEC2, LRPREC,
-    ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_bool)
-]
+import pyDiaglib as dgl
 
 # Matvec: A_{ii} = i+1, A_{ij} = 1/(i+j)
 def matvec(n_ptr, m_ptr, x_ptr, ax_ptr):
@@ -88,14 +26,17 @@ def precnd(n_ptr, m_ptr, shift_ptr, r_ptr, z_ptr):
             diag = (i + 2.0) + shift
             z[i + j*n] = r[i + j*n] / diag
 
-def bvec(n_ptr, m_ptr, x_ptr, bx_ptr):
+def metvec(n_ptr, m_ptr, x_ptr, bx_ptr):
     n = n_ptr[0]
     m = m_ptr[0]
     x = np.ctypeslib.as_array(x_ptr, shape=(n*m,))
     bx = np.ctypeslib.as_array(bx_ptr, shape=(n*m,))
     for j in range(m):
         for i in range(n):
-            bx[i + j*n] = x[i + j*n]
+            bx[i + j*n] = sum(
+                ( 1.0 if i == k else 1.0 / (i + k + 2.0)) * x[k + j*n]
+                for k in range(n)
+            )
 
 def matvec_r(n_ptr, m_ptr, x_ptr, y_ptr):
     n, m = n_ptr[0], m_ptr[0]
@@ -176,99 +117,53 @@ def lrprec(n_ptr, m_ptr, fac_ptr, xp_ptr, xm_ptr, yp_ptr, ym_ptr):
             yp[i + j*n] = (f*(i+8.0)*xp[i + j*n] + xm[i + j*n]) / denom
             ym[i + j*n] = (f*(i+8.0)*xm[i + j*n] + xp[i + j*n]) / denom
 
-# Parametri
-n = 100
-n_targ = 2
-n_max = 4
-max_iter = 100
-max_dav = 20
-tol = 1e-8
-shift = 0.0
 
-eig = np.zeros(n_max, dtype=np.float64)
-evec = np.zeros((n, n_max), dtype=np.float64, order='F')
-for i in range(min(n, n_max)):
-    evec[i, i] = 1.0
+def reset_eigs(n, n_max):
+    eig = np.zeros(n_max, dtype=np.float64)
+    evec = np.zeros((n, n_max), dtype=np.float64, order='F')
+    for i in range(min(n, n_max)):
+        evec[i, i] = 1.0
+    return eig, evec
 
-ok = ctypes.c_bool(False)
+def glance_results(ok,eig,evec,string):
+    if ok.value:
+        print(f"\n{string} converged.")
+        print("Eigenvalues:", eig[:n_targ])
+        print("Eigenvectors:", evec[:5,:n_targ])
+    else:
+        print(f"\n{string} failed.")
 
-# Chiamata
-lib.davidson_driver_c(
-    True, n, n_targ, n_max, max_iter, max_dav, tol, shift,
-    MATVEC(matvec), PRECND(precnd),
-    eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    evec.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    ctypes.byref(ok)
-)
+if __name__ == "__main__":
 
-# Risultati
-if ok.value:
-    print("Davidson converged.")
-    print("Eigenvalues:", eig[:n_targ])
-else:
-    print("Davidson failed.")
+    n = 500
+    n_targ = 5
+    n_max = 10
 
+    mycalc = dgl.diaglib("/home/i-gianni/software/diaglib/build/src/c_interface/libdiaglib_c.so", 4,
+                n, n_targ, n_max)
+    
 
+    eig, evec = reset_eigs(n,n_max)
+    ok = mycalc.dgl_davidson_driver(eig, evec, matvec, precnd)
+    #glance_results(ok,eig,evec,"Davidson")
 
-evec = np.zeros((n, n_max), dtype=np.float64, order='F')
-for i in range(min(n, n_max)):
-    evec[i, i] = 1.0
-ok = ctypes.c_bool(False)
+    eig, evec = reset_eigs(n,n_max)
+    ok = mycalc.dgl_lobpcg_driver(eig, evec, matvec, precnd)
+    #glance_results(ok,eig,evec,"LOBPCG")
+    
+    eig, evec = reset_eigs(n,n_max)
+    ok = mycalc.dgl_davidson_driver(eig, evec, matvec, precnd, metvec=metvec)
+    #glance_results(ok,eig,evec,"Generalized Davidson")
 
-lib.lobpcg_driver_c(
-    True, False,  # verbose, gen_eig
-    n, n_targ, n_max, max_iter, tol, shift,
-    MATVEC(matvec), PRECND(precnd), BVEC(bvec),
-    eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    evec.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    ctypes.byref(ok)
-)
+    eig, evec = reset_eigs(n,n_max)
+    ok = mycalc.dgl_lobpcg_driver(eig, evec, matvec, precnd, metvec=metvec)
+    #glance_results(ok,eig,evec,"Generalized LOBPCG")
 
-if ok.value:
-    print("LOBPCG converged.")
-    print("Eigenvalues:", eig[:n_targ])
-else:
-    print("LOBPCG failed.")
+    eig, evec = reset_eigs(n,n_max)
+    eig, evec1 = reset_eigs(n,n_max)
+    ok = mycalc.dgl_davidson_nosym_driver(eig, evec, evec1, "LR", matvec_r, matvec_l, precnd)
+    #glance_results(ok,eig,evec,"Non-symmetric Davidson")
 
-evec_l = np.zeros((n, n_max), dtype=np.float64, order='F')
-for i in range(min(n, n_max)):
-    evec[i, i] = 1.0
-    evec_l[i, i] = 1.0
-ok = ctypes.c_bool(False)
-
-lib.nonsym_driver_c(
-    True, n, n_targ, n_max, max_iter, tol, max_dav, shift,
-    MATVEC2(matvec_r), MATVEC2(matvec_l), PRECND(precnd),
-    eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    evec.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    evec_l.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    4, ctypes.byref(ok)
-)
-
-if ok.value:
-    print("Non-symmetric Davidson converged.")
-    print("Eigenvalues:", eig[:n_targ])
-else:
-    print("Non-symmetric Davidson failed.")
-
-# === Chiamata smogd_driver_c ===
-
-n2 = 2 * n
-evec2 = np.zeros((n2, n_max), dtype=np.float64, order='F')
-for i in range(min(n2, n_max)):
-    evec2[i, i] = 1.0
-ok = ctypes.c_bool(False)
-
-lib.smogd_driver_c(
-    True, n, n2, n_targ, n_max, max_iter, tol, max_dav,
-    MATVEC2(apbmul), MATVEC2(ambmul), MATVEC2(spdmul), MATVEC2(smdmul), LRPREC(lrprec),
-    eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    evec2.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-    ctypes.byref(ok)
-)
-
-if ok.value:
-    print("SMOGD converged.")
-    print("Eigenvalues:", eig[:n_targ])
-else:
-    print("SMOGD failed.")
+    eig, evec = reset_eigs(2*n,n_max)
+    ok = mycalc.dgl_smogd_driver(eig, evec, apbmul, ambmul, spdmul, smdmul, lrprec)
+    #glance_results(ok,eig,evec,"SMOGD")

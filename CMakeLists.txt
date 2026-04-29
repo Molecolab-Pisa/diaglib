@@ -91,6 +91,7 @@ add_subdirectory(src/fortran_include)
 add_subdirectory(src/c_interface)
 add_subdirectory(test/test_fortran)
 add_subdirectory(test/test_c)
+add_subdirectory(test/test_python)
 
 # uninstall target
 if(NOT TARGET uninstall)
