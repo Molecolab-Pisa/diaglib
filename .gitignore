@@ -4,6 +4,7 @@
 *.a
 *.so
 *.swp
+.vscode/
 
 Makefile*
 build/
@@ -12,5 +13,5 @@ doc/
 *bkp
 output*
 .venv/
-*.ipynb
+*.ipynb*
 __pycache__
