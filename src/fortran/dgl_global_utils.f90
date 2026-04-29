@@ -332,12 +332,12 @@ contains
 !
         if (istat .ne. 0) then
             write (*, 9000) istat
-            stop
+            stop 1
         else if (lall .gt. maxmem) then
             call nums_to_bytes(lall, b_lall, lall_unit)
             call nums_to_bytes(maxmem, b_maxmem, maxmem_unit)
             write (*, 9010) b_lall, lall_unit, b_maxmem, maxmem_unit
-            stop
+            stop 1
         else
             maxmem = maxmem - lall
             if (peakmem .gt. maxmem) peakmem = maxmem
@@ -355,7 +355,7 @@ contains
 !
         if (istat .ne. 0) then
             write (*, 9000) istat
-            stop
+            stop 1
         else
             maxmem = maxmem + lfree
         end if
@@ -425,7 +425,8 @@ contains
         character(len=*), intent(in) :: string
 
         write (*, "(t3,a)") "-- DiagLib Error: "//string
-        stop "** DiagLib issued stop signal **"
+        write (*, "(t3,a)") "** DiagLib issued stop signal **"
+        stop 1
     end subroutine
 !
     subroutine dgl_warning(string)

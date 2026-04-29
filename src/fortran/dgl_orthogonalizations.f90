@@ -349,7 +349,7 @@ contains
 !
         do while (.not. done)
             it = it + 1
-            if (it .gt. maxit) stop 'biortho_vs_x failed.'
+            if (it .gt. maxit) call dgl_error('biortho_vs_x failed.')
 !
 ! biorthogonalize ul and ur to xr and xl:
 !
@@ -564,7 +564,7 @@ contains
 !
 ! if things went really wrong, abort.
 !
-            if (it .gt. maxit) stop ' catastrophic failure of ortho_vs_x'
+            if (it .gt. maxit) call dgl_error('catastrophic failure of ortho_vs_x')
         end do
 !
         call mfree(xu)
