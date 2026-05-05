@@ -10,8 +10,12 @@ add_library(diaglib SHARED
         dgl_interface.f90
 )
 
+set_target_properties(diaglib PROPERTIES
+        Fortran_MODULE_DIRECTORY ${CMAKE_INSTALL_INCLUDEDIR})
+
 target_include_directories(diaglib PUBLIC 
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}>
+#        $<INSTALL_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -37,24 +41,23 @@ install(TARGETS diaglib
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Export DiagLib as a cmake package 
+# Export DiagLib target
 install(EXPORT diaglibTargets
         FILE DiaglibTargets.cmake
         NAMESPACE diaglib::
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
 
-configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
-        "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
-        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
-)
-
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
 
-install(FILES
-        dgl_include.F90
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+install(DIRECTORY 
+        ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/..)
+
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )

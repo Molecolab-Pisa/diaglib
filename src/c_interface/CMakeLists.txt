@@ -11,7 +11,6 @@ target_include_directories(diaglib_c PUBLIC
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     set(CMAKE_Fortran_FLAGS "-std=f2018 -pedantic")
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
@@ -20,6 +19,19 @@ endif()
 
 target_link_libraries(diaglib_c PRIVATE diaglib)
 
-install(FILES diaglib.h
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+
+# Install libray
+install(TARGETS diaglib_c
+        EXPORT diaglibTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Export DiagLib as a cmake package 
+install(EXPORT diaglibTargets
+        FILE DiaglibTargets.cmake
+        NAMESPACE diaglib::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
