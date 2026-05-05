@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import pyDiaglib as dgl
 
@@ -135,11 +136,22 @@ def glance_results(ok,eig,evec,string):
 
 if __name__ == "__main__":
 
+    if len(sys.argv) < 3:
+        print(f"""
+{sys.argv[0]} takes 2 arguments:
+1) libPath: path to the libdiaglib_c.so library
+2) intKind: the kind of integers of the library. Possible options: 4, 8
+              """)
+        sys.exit(1)
+        
+    libPath = sys.argv[1]
+    intKind = int(sys.argv[2])
+
     n = 500
     n_targ = 5
     n_max = 10
-
-    mycalc = dgl.diaglib("/home/i-gianni/software/diaglib/build/src/c_interface/libdiaglib_c.so", 4,
+    
+    mycalc = dgl.diaglib(libPath, intKind,
                 n, n_targ, n_max)
     
 

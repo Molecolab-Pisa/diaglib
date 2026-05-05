@@ -36,5 +36,5 @@ install(TARGETS dgl_test dgl_reference
 )
 
 # Run test
-#add_test(NAME dgl_reference COMMAND dgl_reference)
+add_test(NAME dgl_reference COMMAND dgl_reference)
 add_test(NAME dgl_test COMMAND dgl_test)

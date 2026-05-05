@@ -1,6 +1,5 @@
-import ctypes
 import sys
-import numpy as np
+import ctypes
 
 class diaglib:
 
@@ -16,8 +15,8 @@ class diaglib:
         # Load the library
         try:
             self.lib = ctypes.CDLL(libPath)
-        except ValueError:
-            print(f"Could not find diaglib at {libPath}")
+        except:
+            print(f"\nCould not find diaglib at {libPath}")
             sys.exit(1)
 
         # Set correct kind for integers

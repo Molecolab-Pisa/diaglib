@@ -4,7 +4,11 @@
 *.a
 *.so
 *.swp
+
 .vscode/
+
+*egg-info
+dist/
 
 Makefile*
 build/

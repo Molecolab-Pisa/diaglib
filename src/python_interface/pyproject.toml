@@ -1,0 +1,12 @@
+[project]
+name = "pyDiaglib"
+version = "1.0.0"
+authors = [
+  { name="Ivan Giannì", email="ivangianni@live.it" },
+]
+description = "DiagLib python interface"
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]

@@ -216,7 +216,8 @@ subroutine check_lapack(info)
     integer, intent(in) :: info
 
     if (info .ne. 0) then
-        stop "Lapack Failed"
+        write(*,"(t3,a)") "Lapack Failed"
+        stop 1
     end if
 
 end subroutine check_lapack

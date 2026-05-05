@@ -12,6 +12,9 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 #Include Ctest for testing
 include(CTest)
+#Include prject macros
+include(${CMAKE_SOURCE_DIR}/cmake_macros.cmake)
+
 
 # default build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -85,21 +88,35 @@ endif()
 find_package(OpenMP REQUIRED)
 
 
+set(BUILD_PYTHON OFF CACHE STRING "Build python interface")
+
 # Add appropriate subdirectories
 add_subdirectory(src/fortran)
-add_subdirectory(src/fortran_include)
 add_subdirectory(src/c_interface)
-add_subdirectory(test/test_fortran)
-add_subdirectory(test/test_c)
-add_subdirectory(test/test_python)
+if (BUILD_TESTING)
+        message(STATUS "Tests will be built")
+        add_subdirectory(test/test_fortran)
+        add_subdirectory(test/test_c)
+endif()
+if (BUILD_PYTHON)
+        if (NOT TARGET pyDiaglib)
+                create_venv()
+                pipinstall(numpy)
+        endif()
+        add_subdirectory(src/python_interface)
+        if (BUILD_TESTING)
+                add_subdirectory(test/test_python)
+        endif()
+endif()
 
 # uninstall target
 if(NOT TARGET uninstall)
-  configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-    IMMEDIATE @ONLY)
+        configure_file(
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+                "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+                IMMEDIATE @ONLY)
 
-  add_custom_target(uninstall
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+        add_custom_target(uninstall
+                COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake
+                )
 endif()

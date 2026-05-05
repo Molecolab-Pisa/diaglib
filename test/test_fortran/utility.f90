@@ -99,7 +99,7 @@ contains
 
         if (.not. file_exist(trim(reference_fname))) then
             write (*, "(t3,a)") "Reference file does not exist, first run the 'reference' executable"
-            stop
+            stop 1
         end if
 
         open (file=trim(reference_fname), unit=luref, status="old")
@@ -119,7 +119,7 @@ contains
         if (ld .ne. ld_read) then
             write (*, "(t3,a)") "Reference file contains results for a differently sized matrix, "// &
                 "re-run the 'reference' executable"
-            stop
+            stop 1
         end if
 
         close (luref)
@@ -208,7 +208,7 @@ contains
 
         if (.not. file_opened(unit)) then
             write (*, "(t3,a)") "Tried to dump on file that is not open"
-            stop
+            stop 1
         end if
 
         write (unit, 1000) string

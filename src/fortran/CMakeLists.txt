@@ -39,17 +39,22 @@ install(TARGETS diaglib
 
 # Export DiagLib as a cmake package 
 install(EXPORT diaglibTargets
-    FILE DiaglibTargets.cmake
-    NAMESPACE diaglib::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+        FILE DiaglibTargets.cmake
+        NAMESPACE diaglib::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
 
 configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
-  "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
-  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+        "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
 
 install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+        "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+)
+
+install(FILES
+        dgl_include.F90
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )

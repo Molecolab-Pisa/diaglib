@@ -24,9 +24,6 @@ install(TARGETS dgl_test_c
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(FILES diaglib.h
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
 
 # Run test
 add_test(NAME dgl_test_c COMMAND dgl_test_c)
