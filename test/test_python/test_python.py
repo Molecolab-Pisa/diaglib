@@ -15,7 +15,7 @@ def matvec(n_ptr, m_ptr, x_ptr, ax_ptr):
                 for k in range(n)
             )
 
-# Precondizionatore: solo diagonale
+# Diagonal preconditioner
 def precnd(n_ptr, m_ptr, shift_ptr, r_ptr, z_ptr):
     n = n_ptr[0]
     m = m_ptr[0]
@@ -140,7 +140,7 @@ if __name__ == "__main__":
         print(f"""
 {sys.argv[0]} takes 2 arguments:
 1) libPath: path to the libdiaglib_c.so library
-2) intKind: the kind of integers of the library. Possible options: 4, 8
+2) intKind: the kind of integers in the compiled library. Possible options: 4, 8
               """)
         sys.exit(1)
         
@@ -157,6 +157,7 @@ if __name__ == "__main__":
 
     eig, evec = reset_eigs(n,n_max)
     ok = mycalc.dgl_davidson_driver(eig, evec, matvec, precnd)
+    ok = mycalc.dgl_ortho_vs_x(mycalc.n,mycalc.n_targ,3,evec,evec[n_targ:,:])
     #glance_results(ok,eig,evec,"Davidson")
 
     eig, evec = reset_eigs(n,n_max)

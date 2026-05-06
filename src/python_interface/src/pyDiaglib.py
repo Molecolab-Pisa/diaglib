@@ -97,6 +97,17 @@ class diaglib:
             cBool, cDouble, cInt, cInt, cInt, cCharP
         ]
 
+        self.lib.dgl_ortho_cd.argtypes = [
+            cInt, cInt, ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cBool)
+        ]
+
+        self.lib.dgl_ortho_vs_x.argtypes = [
+            cInt, cInt, cInt, ctypes.POINTER(cDouble), ctypes.POINTER(cDouble)
+        ]
+
+        self.lib.dgl_b_ortho_vs_x.argtypes = [
+            cInt, cInt, cInt, ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cDouble)
+        ]
 
     def dgl_davidson_driver(self, eig, evec, matvec, precnd, metvec=None):
         matvec = self.__MATVEC(matvec)
@@ -195,3 +206,26 @@ class diaglib:
             ctypes.c_char_p(bytes(self.memory_unit,"utf-8"))
         )
         return ok
+
+    def dgl_ortho_cd(self,n,m,u):
+
+        ok = ctypes.c_bool(False)
+        growth = ctypes.c_double(0.)
+        self.lib.dgl_ortho_cd(n, m, 
+                              u.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                              growth, ok)
+
+        return growth, ok
+    
+    def dgl_ortho_vs_x(self,n, m, k, x, u):
+
+        self.lib.dgl_ortho_vs_x(n, m, k,
+                                x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                                u.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
+
+    def dgl_b_ortho_vs_x(self,n, m, k, x, bx, u):
+
+        self.lib.dgl_b_ortho_vs_x(n, m, k,
+                                  x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                                  bx.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                                  u.ctypes.data_as(ctypes.POINTER(ctypes.c_double)))
