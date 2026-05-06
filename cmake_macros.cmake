@@ -20,7 +20,7 @@ macro(create_venv)
         unset(Python3_EXECUTABLE)
         # Launch a new search
         message(STATUS "Look for python3 in a venv")
-        find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter Development)
+        find_package(Python3 3.9 REQUIRED)
         
         if(SYSTEM_PYTHON_EXE_PATH STREQUAL Python3_EXECUTABLE)
                 message(FATAL_ERROR "Python3 executable is the same as the system one, this is not expected")
