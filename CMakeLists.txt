@@ -6,13 +6,19 @@ project(diaglib VERSION 1.0
 
 #Include CPack to install the package
 include(CPack)
+set(CPACK_SOURCE_GENERATOR "SOURCE_TGZ")
+set(CPACK_SOURCE_IGNORE_FILES /*.git* /*ipynb* /*build* /*vscode*)
+
 #Include this to get the standard variables for installation paths
 include(GNUInstallDirs)
+
 #Include this to automatically make the configuration file
 include(CMakePackageConfigHelpers)
+
 #Include Ctest for testing
 include(CTest)
-#Include prject macros
+
+#Include project specific macros
 include(${CMAKE_SOURCE_DIR}/cmake_macros.cmake)
 
 

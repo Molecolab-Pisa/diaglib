@@ -503,7 +503,7 @@ contains
         integer(ip), intent(in) :: m
 !! Number of reference vectors
         integer(ip), intent(in) :: k
-!! Number of vectors to orthogonalize again \(x\)
+!! Number of vectors to orthogonalize against \(x\)
         real(dp), dimension(n, m), intent(in) :: x
 !! Reference vectors
         real(dp), dimension(n, k), intent(inout) :: u

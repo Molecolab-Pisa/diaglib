@@ -2,8 +2,7 @@ if(NOT Python3_EXECUTABLE)
         message(FATAL_ERROR "No python interpreter found for installation")
 endif()
 
-pipinstall(${CMAKE_CURRENT_SOURCE_DIR})
-
+add_custom_target(pyDiaglib ALL COMMAND ${Python3_EXECUTABLE} -m pip install ${CMAKE_CURRENT_SOURCE_DIR})
 
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src"
         DESTINATION ${CMAKE_INSTALL_PREFIX})

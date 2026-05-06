@@ -4,6 +4,7 @@ add_library(diaglib_c SHARED
         lobpcg_driver_c.f90
         davidson_nosym_driver_c.f90
         smogd_driver_c.f90
+        dgl_orthogonalizations_c.f90
 )
 
 target_include_directories(diaglib_c PUBLIC 

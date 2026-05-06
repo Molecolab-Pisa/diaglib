@@ -73,25 +73,25 @@ class diaglib:
         self.__NONE = ctypes.cast(None,NONE)
 
         # Definisci la funzione Fortran
-        self.lib.dgl_davidson_driver_c.argtypes = [
+        self.lib.dgl_davidson_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, PRECND, METVEC,
             ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cBool),
             cBool, cDouble, cInt, cInt, cDouble, cInt, cCharP
         ]
 
-        self.lib.dgl_lobpcg_driver_c.argtypes = [
+        self.lib.dgl_lobpcg_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, PRECND, METVEC,
             ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cBool),
             cBool, cDouble, cInt, cDouble, cInt, cCharP
         ]
 
-        self.lib.dgl_davidson_nosym_driver_c.argtypes = [
+        self.lib.dgl_davidson_nosym_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, MATVEC, PRECND, cCharP,
             ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cBool),
             cBool, cDouble, cInt, cInt, cDouble, cInt, cCharP
         ]
 
-        self.lib.dgl_smogd_driver_c.argtypes = [
+        self.lib.dgl_smogd_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, MATVEC, MATVEC, MATVEC, LRPREC,
             ctypes.POINTER(cDouble), ctypes.POINTER(cDouble), ctypes.POINTER(cBool),
             cBool, cDouble, cInt, cInt, cInt, cCharP
@@ -107,7 +107,7 @@ class diaglib:
             metvec = self.__METVEC(metvec)
         ok = ctypes.c_bool(False)
 
-        self.lib.dgl_davidson_driver_c(
+        self.lib.dgl_davidson_driver(
             self.n, self.n_targ, self.n_max,
             matvec, precnd, metvec,
             eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
@@ -133,7 +133,7 @@ class diaglib:
             metvec = self.__METVEC(metvec)
         ok = ctypes.c_bool(False)
 
-        self.lib.dgl_lobpcg_driver_c(
+        self.lib.dgl_lobpcg_driver(
             self.n, self.n_targ, self.n_max,
             matvec, precnd, metvec,
             eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
@@ -155,7 +155,7 @@ class diaglib:
         precnd = self.__PRECND(precnd)
         ok = ctypes.c_bool(False)
 
-        self.lib.dgl_davidson_nosym_driver_c(
+        self.lib.dgl_davidson_nosym_driver(
             self.n, self.n_targ, self.n_max,
             matvec_r, matvec_l, precnd,
             ctypes.c_char_p(bytes(side,"utf-8")),
@@ -181,7 +181,7 @@ class diaglib:
         lrprec = self.__LRPREC(lrprec)
         ok = ctypes.c_bool(False)
 
-        self.lib.dgl_smogd_driver_c(
+        self.lib.dgl_smogd_driver(
             2*self.n, self.n_targ, self.n_max,
             apbmul, ambmul, spdmul, smdmul, lrprec,
             eig.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),

@@ -3,7 +3,49 @@
 
 #include <stdbool.h>
 
-extern void dgl_davidson_driver_c(
+extern void dgl_ortho_cd(
+#ifdef DGL_INT_KIND_4
+    int n,
+    int m,
+#elif DGL_INT_KIND_8
+    long int n,
+    long int m,
+#endif
+    double* u,
+    double growth,
+    bool* ok
+);
+
+extern void dgl_ortho_vs_x(
+#ifdef DGL_INT_KIND_4
+    int n,
+    int m,
+    int k,
+#elif DGL_INT_KIND_8
+    long int n,
+    long int m,
+    long int k,
+#endif
+    double* x,
+    double* u
+);
+
+extern void dgl_b_ortho_vs_x(
+#ifdef DGL_INT_KIND_4
+    int n,
+    int m,
+    int k,
+#elif DGL_INT_KIND_8
+    long int n,
+    long int m,
+    long int k,
+#endif
+    double* x,
+    double* bx,
+    double* u
+);
+
+extern void dgl_davidson_driver(
 #ifdef DGL_INT_KIND_4
     int n,
     int n_targ,
@@ -38,7 +80,7 @@ extern void dgl_davidson_driver_c(
 );
 
     
-void dgl_lobpcg_driver_c(
+extern void dgl_lobpcg_driver(
 #ifdef DGL_INT_KIND_4
     int n,
     int n_targ,
@@ -70,7 +112,7 @@ void dgl_lobpcg_driver_c(
     const char* memory_unit
 );
 
-void dgl_davidson_nosym_driver_c(
+extern void dgl_davidson_nosym_driver(
 #ifdef DGL_INT_KIND_4
     int n,
     int n_targ,
@@ -106,7 +148,7 @@ void dgl_davidson_nosym_driver_c(
     const char* memory_unit
 );
 
-void dgl_smogd_driver_c(
+extern void dgl_smogd_driver(
 #ifdef DGL_INT_KIND_4
     int n2,
     int n_targ,
