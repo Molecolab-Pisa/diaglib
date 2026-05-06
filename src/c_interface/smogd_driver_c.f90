@@ -11,7 +11,7 @@ contains
                               spdmul, smdmul, lrprec, eig, evec, ok, &
                               verbose, tol, max_iter, dav_iter, &
                               memory, memory_unit) &
-        bind(C, name="dgl_smogd_driver_c")
+        bind(C, name="dgl_smogd_driver")
         implicit none
 
         ! C-compatible arguments

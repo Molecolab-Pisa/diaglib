@@ -9,7 +9,7 @@ contains
 
     subroutine davidson_driver_c(n, n_targ, n_max, matvec, precnd, metvec, eig, evec, ok, &
                                  verbose, tol, max_iter, dav_iter, shift, memory, memory_unit) &
-        bind(C, name="dgl_davidson_driver_c")
+        bind(C, name="dgl_davidson_driver")
         implicit none
 
         ! C-compatible arguments

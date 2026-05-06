@@ -315,7 +315,7 @@ int test_davidson(){
       evec[i + j * n] = (j == i) ? 1.0 : 0.0;
     }
   }
-  dgl_davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
+  dgl_davidson_driver(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
                    verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
   
   fix_phase(n,n_targ,evec);
@@ -354,7 +354,7 @@ int test_davidson_generalized(){
       evec[i + j * n] = (j == i) ? 1.0 : 0.0;
     }
   }
-  dgl_davidson_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
+  dgl_davidson_driver(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
                    verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
   
   fix_phase(n,n_targ,evec);
@@ -395,7 +395,7 @@ int test_lobpcg(){
   
   ok = false;
   
-  dgl_lobpcg_driver_c(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
+  dgl_lobpcg_driver(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
                    verbose, tol, max_iter, shift, memory, memory_unit);
 
   fix_phase(n,n_targ,evec);
@@ -436,7 +436,7 @@ int test_lobpcg_generalized(){
   
   ok = false;
   
-  dgl_lobpcg_driver_c(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
+  dgl_lobpcg_driver(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
                    verbose, tol, max_iter, shift, memory, memory_unit);
 
   fix_phase(n,n_targ,evec);
@@ -480,7 +480,7 @@ int test_davidson_nosym_davidson(){
     for (int i = 0; i < n; ++i)
       evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
   
-  dgl_davidson_nosym_driver_c(n, n_targ, n_max, matvec_r_c, matvec_l_c, precnd_c, side,
+  dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_c, matvec_l_c, precnd_c, side,
                               eig, evec, evec_l, &ok,
                               verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
   fix_phase(n,n_targ,evec);
@@ -523,7 +523,7 @@ int test_smogd(){
   
   ok = false;
   
-  dgl_smogd_driver_c(n2, n_targ, n_max, apbmul_c, ambmul_c, spdmul_c, smdmul_c, 
+  dgl_smogd_driver(n2, n_targ, n_max, apbmul_c, ambmul_c, spdmul_c, smdmul_c, 
                  lrprec_c, eig, evec2, &ok,
                  verbose, tol, max_iter, dav_iter, memory, memory_unit);
   

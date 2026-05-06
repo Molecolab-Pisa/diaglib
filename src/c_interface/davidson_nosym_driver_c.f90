@@ -11,7 +11,7 @@ contains
                                        eig, evec_1, evec_2, ok, &
                                        verbose, tol, max_iter, dav_iter, &
                                        shift, memory, memory_unit) &
-        bind(C, name="dgl_davidson_nosym_driver_c")
+        bind(C, name="dgl_davidson_nosym_driver")
         implicit none
 
         ! C-compatible arguments

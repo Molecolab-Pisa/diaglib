@@ -9,7 +9,7 @@ contains
 
     subroutine lobpcg_driver_c(n, n_targ, n_max, matvec, precnd, metvec, eig, evec, ok, &
                                verbose, tol, max_iter, shift, memory, memory_unit) &
-        bind(C, name="dgl_lobpcg_driver_c")
+        bind(C, name="dgl_lobpcg_driver")
         implicit none
 
         ! C-compatible arguments
