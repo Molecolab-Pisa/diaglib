@@ -1,0 +1,28 @@
+[extra.ford]
+project = "DiagLib"
+project_github = "https://github.com/Molecolab-Pisa/diaglib"
+summary = "### A collection of matrix-free iterative eigensolvers"
+author = """
+I. Giannì,
+T. Nottoli,
+R. Alessandro,
+D. Cianchino,
+L. Lapi,
+F. Pes,
+A. Levitt,
+F. Lipparini
+"""
+author_description = "MolecoTheory subgroup of MolecoLab and collaborators"
+email = "filippo.lipparini@unipi.it"
+
+src_dir = ["../src"]
+output_dir = "../doc"
+page_dir = "./pages"
+media_dir = "."
+
+graph = false
+sort = "type-alpha"
+max_frontpage_items = 4
+#display = "public protected private"
+
+warn = false
