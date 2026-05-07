@@ -10,9 +10,11 @@ add_library(diaglib SHARED
         dgl_interface.f90
 )
 
+# Set where the .mod files will be placed
 set_target_properties(diaglib PROPERTIES
         Fortran_MODULE_DIRECTORY ${CMAKE_INSTALL_INCLUDEDIR})
 
+# Include the directory with the .mod files
 target_include_directories(diaglib PUBLIC 
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -43,11 +45,13 @@ install(EXPORT diaglibTargets
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
 
+# Install the script to find Diaglib as an external package
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/diaglibConfig.cmake"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
 )
 
+# Install the directory with the .mod files
 install(DIRECTORY 
         ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/..)
