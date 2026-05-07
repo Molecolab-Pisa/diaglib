@@ -15,12 +15,10 @@ F. Lipparini
 author_description = "MolecoTheory subgroup of MolecoLab and collaborators"
 email = "filippo.lipparini@unipi.it"
 
-src_dir = ["../src","../test"]
+src_dir = ["../src"]
 output_dir = "../doc"
 page_dir = "./pages"
 media_dir = "."
-
-exclude_dir = "../src/c_interface"
 
 graph = false
 sort = "type-alpha"

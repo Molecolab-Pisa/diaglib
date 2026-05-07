@@ -1,13 +1,17 @@
 ---
-title: User Guide
+title: Manual
 ---
 
-### Notes
- 
- Some important thing that will have to be included:
+# Welcome to DiagLib Manual 1.0
 
- - DiagLib is built by default a a shared library. It is to be interfaced with Fortran code by using the module [[dgl_interface]], which exposes all the solvers contained in DiagLib plus the orthogonalization primitives.
- - Some tests are built together with the library. A reference can be run to solve the exact problems with lapack procedure ([[reference]] executable). This produces a file that will be read compared with the results from the DiagLib solvers using the [[test_fortran]] executable
+DiagLib is a collection of matrix-free iterative eigensolvers. It is wrtitten in Fortran (compliant with Fortran2003 standard). It is compiled a shared library by the name `libdiaglib.so`. A secondary library, necessary to use DiagLib from C, is also produced (`libdiaglib_c.so`). Finally also a python interface (`pyDiaglib`) is provided and installed in an on-the-fly virtual enviroment as a `pip` package.
 
- - All solvers accept external procedures that have to be provided by the user. I currently do not know wheter its better like this or to have all procedures passed as pointers.
- - Some solvers accept optional procedures, like the metric-vector product in [[davidson_driver]]. In this case, one can not directly pass the procedure. Insted one must pass a **pointer** associated to the desired procedure.
+### Features
+The current release of DiagLib features 4 algorithms:
+
+- Davidson algorithm for the solution Symmetric, Standard and Generalized, eigenvalue problems
+- LOBPCG algorithm for the solution Symmetric, Standard and Generalized, eigenvalue problems (similarly performant but memory limited in comparison to Davidson)
+- Davidson algorithm for the solution of Non-Symmetrix eigenvalue problems
+- Swapped Metric Orthogonal Generalized Davidson (SMOGD) algorithm (solves the [Linear Respons equations in CASSCF](https://doi.org/10.1021/acs.jpca.5c03618))
+
+These algorithms make use of very stable primitives for the orthogonalization and orthonormalization of set of vectors ([[ortho_vs_x]],[[ortho_cd]]). These are also provided as part of DiagLib.

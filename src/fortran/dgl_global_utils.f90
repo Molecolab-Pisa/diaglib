@@ -5,10 +5,10 @@ module dgl_global_utils
 !
 #ifdef DGL_INT_KIND_8
     integer, parameter :: ip = selected_int_kind(15)
-!! Global variable holding kind for integer(ip)s
+!! Global variable holding kind for integer(ip)
 #elif DGL_INT_KIND_4
     integer, parameter :: ip = selected_int_kind(8)
-!! Globla variable holding kind for integer(ip)s
+!! Global variable holding kind for integer(ip)
 #endif
     integer, parameter :: dp = selected_real_kind(15)
 !! Global variable holding kind for double precision
