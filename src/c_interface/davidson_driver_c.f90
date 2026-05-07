@@ -79,7 +79,7 @@ contains
 
     subroutine matvec_wrapper(n, m, x, ax)
         implicit none
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
         call matvec_ptr(n, m, x, ax)
@@ -87,7 +87,7 @@ contains
 
     subroutine precnd_wrapper(n, m, shift, r, z)
         implicit none
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: shift
         real(dp), intent(in) :: r(n, m)
         real(dp), intent(inout) :: z(n, m)

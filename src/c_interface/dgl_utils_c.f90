@@ -3,6 +3,7 @@ module dgl_utils_c
     use iso_c_binding
 
     integer, parameter :: dp = dgl_real
+    integer, parameter :: ip = dgl_int
 
     interface check_pointer
         module procedure check_funptr

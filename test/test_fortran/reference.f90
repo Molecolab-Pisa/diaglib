@@ -5,12 +5,12 @@ program reference
     use utility
     implicit none
 
-    integer :: lwork = 10000, ilwork = 10000, info
+    integer(ip) :: lwork = 10000, ilwork = 10000, info
     real(dp), allocatable :: a(:, :), b(:, :), copy(:, :), cont(:, :)
     real(dp), allocatable :: eig(:, :)
     real(dp), allocatable :: evec(:, :, :)
     real(dp), allocatable :: work(:)
-    integer, allocatable :: iwork(:)
+    integer(ip), allocatable :: iwork(:)
 
     allocate (a(n, n), b(n, n), copy(n, n), cont(n, n))
     allocate (eig(n, 2), evec(n, n, 2))
@@ -98,9 +98,9 @@ end program reference
 
 subroutine get_sym_matrix(n, mat)
 
-    use utility, only: dp, i, j, one
+    use utility, only: ip, dp, i, j, one
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
@@ -114,9 +114,9 @@ end subroutine get_sym_matrix
 
 subroutine get_asym_matrix(n, mat)
 
-    use utility, only: dp, i, j, one
+    use utility, only: ip, dp, i, j, one
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, n
@@ -129,9 +129,9 @@ end subroutine get_asym_matrix
 
 subroutine get_sym_metric(n, mat)
 
-    use utility, only: dp, i, j, one
+    use utility, only: ip, dp, i, j, one
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
@@ -145,9 +145,9 @@ end subroutine get_sym_metric
 
 subroutine get_apb_matrix(n, mat)
 
-    use utility, only: dp, i, j, one, five
+    use utility, only: ip, dp, i, j, one, five
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
@@ -161,9 +161,9 @@ end subroutine get_apb_matrix
 
 subroutine get_amb_matrix(n, mat)
 
-    use utility, only: dp, i, j, two
+    use utility, only: ip, dp, i, j, two
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
@@ -177,9 +177,9 @@ end subroutine get_amb_matrix
 
 subroutine get_spd_matrix(n, mat)
 
-    use utility, only: dp, i, j, one
+    use utility, only: ip, dp, i, j, one
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
@@ -195,9 +195,9 @@ end subroutine get_spd_matrix
 
 subroutine get_smd_matrix(n, mat)
 
-    use utility, only: dp, i, j, one
+    use utility, only: ip, dp, i, j, one
     implicit none
-    integer, intent(in) :: n
+    integer(ip), intent(in) :: n
     real(dp) :: mat(n, n)
     do i = 1, n
         do j = 1, i - 1
@@ -212,8 +212,9 @@ subroutine get_smd_matrix(n, mat)
 end subroutine get_smd_matrix
 
 subroutine check_lapack(info)
+    use utility, only : ip
     implicit none
-    integer, intent(in) :: info
+    integer(ip), intent(in) :: info
 
     if (info .ne. 0) then
         write (*, "(t3,a)") "Lapack Failed"

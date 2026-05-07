@@ -18,13 +18,9 @@ target_include_directories(diaglib PUBLIC
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# Linking proper BLAS
-if(MKL_FOUND)
-        target_link_libraries(diaglib PUBLIC MKL::MKL)
-else()
-        target_link_libraries(diaglib PUBLIC BLAS::BLAS)
-        target_link_libraries(diaglib PUBLIC LAPACK::LAPACK)
-endif()
+# Linking BLAS and LAPACK
+target_link_libraries(diaglib PUBLIC BLAS::BLAS)
+target_link_libraries(diaglib PUBLIC LAPACK::LAPACK)
 
 
 # Linking proper OpenMP

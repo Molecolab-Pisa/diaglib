@@ -69,35 +69,35 @@ contains
     end subroutine smogd_driver_c
 
     subroutine apb_wrapper(n, m, x, ax)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
         call apb_ptr(n, m, x, ax)
     end subroutine
 
     subroutine amb_wrapper(n, m, x, ax)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
         call amb_ptr(n, m, x, ax)
     end subroutine
 
     subroutine spd_wrapper(n, m, x, ax)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
         call spd_ptr(n, m, x, ax)
     end subroutine
 
     subroutine smd_wrapper(n, m, x, ax)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
         call smd_ptr(n, m, x, ax)
     end subroutine
 
     subroutine prec_wrapper(n, m, fac, xp, xm, yp, ym)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: fac
         real(dp), intent(in) :: xp(n, m), xm(n, m)
         real(dp), intent(inout) :: yp(n, m), ym(n, m)

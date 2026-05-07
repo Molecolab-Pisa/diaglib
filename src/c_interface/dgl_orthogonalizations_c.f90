@@ -13,7 +13,7 @@ contains
 #elif DGL_INT_KIND_8
         integer(C_LONG), value, intent(in) :: n
         integer(C_LONG), value, intent(in) :: m
-#endif DGL_INT_KIND_4
+#endif
         real(C_DOUBLE), dimension(n, m), intent(inout) :: u
         real(C_DOUBLE), intent(out) :: growth
         logical(C_BOOL), intent(out) :: ok
@@ -37,7 +37,7 @@ contains
         integer(C_LONG), value, intent(in) :: n
         integer(C_LONG), value, intent(in) :: m
         integer(C_LONG), value, intent(in) :: k
-#endif DGL_INT_KIND_4
+#endif
 
         real(C_DOUBLE), dimension(n, m), intent(in) :: x
         real(C_DOUBLE), dimension(n, k), intent(inout) :: u
@@ -57,7 +57,7 @@ contains
         integer(C_LONG), value, intent(in) :: n
         integer(C_LONG), value, intent(in) :: m
         integer(C_LONG), value, intent(in) :: k
-#endif DGL_INT_KIND_4
+#endif
 
         real(C_DOUBLE), dimension(n, m), intent(in) :: x
         real(C_DOUBLE), dimension(n, m), intent(in) :: bx

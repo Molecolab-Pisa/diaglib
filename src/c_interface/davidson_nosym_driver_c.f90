@@ -82,7 +82,7 @@ contains
     end subroutine davidson_nosym_driver_c
 
     subroutine matvec_l_wrapper(n, m, x, ax)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
 !
@@ -91,7 +91,7 @@ contains
     end subroutine
 
     subroutine matvec_r_wrapper(n, m, x, ax)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
 !
@@ -100,7 +100,7 @@ contains
     end subroutine
 
     subroutine precnd_wrapper(n, m, shift, r, z)
-        integer, intent(in) :: n, m
+        integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: shift
         real(dp), intent(in) :: r(n, m)
         real(dp), intent(inout) :: z(n, m)

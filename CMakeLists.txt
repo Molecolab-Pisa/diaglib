@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15...4.0)
+cmake_minimum_required(VERSION 3.15...4.1)
 
 project(diaglib VERSION 1.0
         DESCRIPTION "A collection of iterative, matrix-free eigensolvers"
@@ -51,44 +51,23 @@ endif()
 
 # If wanted force double precision integers
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind of integers used in DiagLib")
-
-# Set required size of integers for BLAS, MKL and internal integers
 set(BLA_SIZEOF_INTEGER ${DGL_INTEGER_KIND})
+set(BLA_VENDOR CACHE STRING "Vendor of BLAS/LAPACK found")
+
+# Set required size of integers for BLAS, LAPACK and internal integers
 if (DGL_INTEGER_KIND EQUAL 8)
-        set(MKL_INTERFACE_FULL intel_ilp64)
         add_compile_definitions(DGL_INT_KIND_8)
         message(STATUS "Using 64-bit integers")
+        #set(CMAKE_Fortran_FLAGS "-fdefault-integer-8 ${CMAKE_Fortran_FLAGS}")
+        add_compile_options(-fdefault-integer-8)
 else()
-        set(MKL_INTERFACE_FULL intel_lp64)
         add_compile_definitions(DGL_INT_KIND_4)
         message(STATUS "Using 32-bit integers")
 endif()
 
-# Set required parameters for BLAS
-set(BLA_THREAD CACHE STRING "Choice between SEQ or OMP BLAS")
-set(BLA_VENDOR CACHE STRING "Choice of BLAS vendor")
-
-
-if(NOT BLA_VENDOR)
-        find_package(MKL QUIET)
-        if (NOT MKL_FOUND)
-                find_package(BLAS REQUIRED)
-                find_package(LAPACK REQUIRED)
-        else()
-                message(STATUS "MKL_VERSION: ${MKL_VERSION}")
-                message(STATUS "MKL_ROOT: ${MKL_ROOT}")
-                message(STATUS "MKL_ARCH: ${MKL_ARCH}")
-                message(STATUS "MKL_LINK: ${MKL_LINK}")
-                message(STATUS "MKL_INTERFACE_FULL: ${MKL_INTERFACE_FULL}")
-                message(STATUS "MKL_THREADING: ${MKL_THREADING}")
-                message(STATUS "MKL_MPI: ${MKL_MPI}")
-        endif()
-elseif(BLA_VENDOR MATCHES "Intel")
-        find_package(MKL REQUIRED)
-else()
-        find_package(BLAS REQUIRED)
-        find_package(LAPACK REQUIRED)
-endif()
+# Find BLAS and LAPACK
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
 
 # Find OpenMP
 find_package(OpenMP REQUIRED)
