@@ -11,7 +11,7 @@ Pisa, november 2022
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7680658.svg)](https://doi.org/10.5281/zenodo.7680658)
 
 ## License
-diaglib is licensed under the LGPL v2.1 license
+diaglib is licensed under the Mozilla Public license 2.0
 
 ## Description
 diaglib - a fortran library of matrix-free iterative algorithm to
