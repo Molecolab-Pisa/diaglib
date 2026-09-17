@@ -554,16 +554,7 @@ contains
                                                evec_t, ok, evec_2=evec_t2, dgl_tol=1.0e-9_dp, dgl_info=info)
             end select
             label = trim(label)//", linearly dependent residuals"
-!
-! with a metric, the expansion space can degenerate to the point that the new vectors cannot be
-! made orthogonal to it at all (which happens, for this extreme problem, with some BLAS
-! libraries): reporting dgl_err_ortho, instead of returning wrong eigenpairs, is then the
-! expected behaviour
-!
-            if (generalized .and. info .eq. dgl_err_ortho) then
-                write (6, f_string) trim(label)//": orthogonalization reported as impossible (accepted)"
-                n_tests = n_tests + 1
-            else if (generalized) then
+            if (generalized) then
                 call check_result(trim(label), ok, info, maxval(abs(eig_t(:n_targ_t) - ref_gen)) .lt. 1.0e-9_dp)
             else
                 call check_result(trim(label), ok, info, maxval(abs(eig_t(:n_targ_t) - ref_std)) .lt. 1.0e-9_dp)

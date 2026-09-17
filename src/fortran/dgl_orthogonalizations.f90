@@ -537,11 +537,11 @@ contains
 ! As in the "twice is enough" algorithm (Kahan, Parlett), if the projection removes most of the
 ! norm of a vector, the projection is repeated, which makes the result orthogonal to the other
 ! vectors up to round-off errors of the order of machine precision times its norm before the
-! second projection. The vector is linearly dependent only if the second projection leaves
-! nothing but such errors.
-! Even very small parts of a vector that survive the second projection are kept: they are
-! mostly made of the round-off errors of the first projection, which are distributed like the
-! entries of the original vector, and are more useful to expand the space than a random vector.
+! second projection. The vector is linearly dependent if the second projection leaves nothing
+! but such errors, or if the projections left nothing but round-off of its original norm.
+! Small parts of a vector that survive the projections are kept, as they are mostly made of
+! the round-off errors of the first projection, which are distributed like the entries of the
+! original vector, and are more useful to expand the space than a random vector.
 !
         implicit none
         type(dgl_context), intent(inout) :: ctx
@@ -560,7 +560,7 @@ contains
 !! Vectors to orthonormalize
 !
         integer(ip) :: j, pass, n_random
-        real(dp) :: u_norm, prev_norm
+        real(dp) :: u_norm, prev_norm, start_norm
         logical :: accepted
         real(dp), allocatable :: xu(:), uu(:)
 !
@@ -579,6 +579,7 @@ contains
                     go to 100
                 end if
 !
+                start_norm = prev_norm
                 accepted = .false.
                 if (prev_norm .gt. zero) then
                     do pass = 1, 2
@@ -597,6 +598,12 @@ contains
                         else
                             accepted = u_norm .gt. real(m + j, dp)*epsilon(one)*prev_norm
                         end if
+!
+! a vector of which the projections left nothing but round-off of its original norm is
+! linearly dependent on x (or on the previous vectors): what is left is round-off with
+! components along them, which normalizing would turn into a vector inside their span
+!
+                        if (u_norm .le. real(m + k, dp)*epsilon(one)*start_norm) accepted = .false.
                         if (accepted .and. u_norm .gt. zero) exit
                         accepted = .false.
                         prev_norm = u_norm
