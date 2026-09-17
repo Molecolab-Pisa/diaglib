@@ -1,15 +1,19 @@
 module dgl_orthogonalizations
 !* Module for all the orthogonalization procedures.
 ! These are internal routines of the drivers and are not part of the public interface.
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_nan
     use dgl_global_utils
     implicit none
 !
     real(dp), parameter, private :: tol_ortho = two*epsilon(one)
 !! Convergence thresholds for orthogonalizations
+    real(dp), parameter, private :: keep_ratio = 0.5_dp
+!! In replace_dependent, a projection that keeps less than this fraction of the norm of a vector
+!! is repeated; if also the second one does, the vector is considered linearly dependent
 !
 contains
 !
-    subroutine ortho(n, m, u, w)
+    subroutine ortho(ctx, n, m, u, w)
 !! Orthogonalization routine based on QR decomposition.
 !! Orthogonalizes \(m\) vectors of lenght \(n\) contained in \(u\).
 !! \[ u^Tu = \textbf{I} \]
@@ -22,6 +26,7 @@ contains
 !! to U. This is useful when U and AU are built together without explicitly
 !! performing the matrix vector multiplication.
         implicit none
+        type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
 !! Lenght of the input vectors
@@ -39,21 +44,21 @@ contains
         real(dp) :: lwork_query(1)
         integer(ip) :: lwork_qr, info_qr
 !
-        call mallocate(n, m, v)
+        call mallocate(ctx, n, m, v)
 !
 ! use a local workspace, so that this routine does not depend on
 ! the global lapack work arrays allocated by the drivers.
 !
-        call mallocate(min(n, m), tau_qr)
-        if (dgl_failed()) go to 100
+        call mallocate(ctx, min(n, m), tau_qr)
+        if (dgl_failed(ctx)) go to 100
         v = u
         call dgeqrf(n, m, u, n, tau_qr, lwork_query, -1_ip, info_qr)
         lwork_qr = max(1_ip, int(lwork_query(1), ip))
-        call mallocate(lwork_qr, work_qr)
-        if (dgl_failed()) go to 100
+        call mallocate(ctx, lwork_qr, work_qr)
+        if (dgl_failed(ctx)) go to 100
         call dgeqrf(n, m, u, n, tau_qr, work_qr, lwork_qr, info_qr)
         if (info_qr .ne. 0) then
-            call dgl_error("ortho: QR factorization failed", dgl_err_lapack)
+            call dgl_error(ctx, "ortho: QR factorization failed", dgl_err_lapack)
             go to 100
         end if
 !
@@ -64,12 +69,12 @@ contains
         u = v
 !
 100     continue
-        call mfree(work_qr)
-        call mfree(tau_qr)
-        call mfree(v)
+        call mfree(ctx, work_qr)
+        call mfree(ctx, tau_qr)
+        call mfree(ctx, v)
     end subroutine ortho
 !
-    subroutine b_ortho(n, m, u, bu)
+    subroutine b_ortho(ctx, n, m, u, bu)
 !! Subroutine to B-orthogonalize \(m\) vectors of lenght \(n\)
 !! using the Cholesky factorization of their overlap.
 !! \[ u^TBu = \textbf{I} \]
@@ -80,6 +85,8 @@ contains
 !! More details on the orthoganlization scheme are available in the documentation
 !! of the [[ortho_cd]] procedure
         implicit none
+        type(dgl_context), intent(inout) :: ctx
+        integer(ip) :: info
 !
         integer(ip), intent(in) :: n
 !! Lenght of the vectors
@@ -102,8 +109,8 @@ contains
         logical, parameter :: use_svd = .false.
 !
 !
-        call mallocate(m, m, metric)
-        if (dgl_failed()) go to 100
+        call mallocate(ctx, m, m, metric)
+        if (dgl_failed(ctx)) go to 100
 !
         call dgemm('t', 'n', m, m, n, one, u, n, bu, n, zero, metric, m)
 !
@@ -112,18 +119,18 @@ contains
 ! debug option: use svd to b-orthonormalize, by computing
 ! b**(-1/2)
 !
-            call mallocate(m, sigma)
-            call mallocate(m, m, u_svd)
-            call mallocate(m, m, vt_svd)
-            call mallocate(n, m, temp)
-            if (dgl_failed()) go to 100
+            call mallocate(ctx, m, sigma)
+            call mallocate(ctx, m, m, u_svd)
+            call mallocate(ctx, m, m, vt_svd)
+            call mallocate(ctx, n, m, temp)
+            if (dgl_failed(ctx)) go to 100
 !
             call dgesvd('a', 'a', m, m, metric, m, sigma, u_svd, m, vt_svd, m, lwork_query, -1_ip, info_svd)
             lwork_svd = max(1_ip, int(lwork_query(1), ip))
-            call mallocate(lwork_svd, work_svd)
-            if (dgl_failed()) go to 100
+            call mallocate(ctx, lwork_svd, work_svd)
+            if (dgl_failed(ctx)) go to 100
             call dgesvd('a', 'a', m, m, metric, m, sigma, u_svd, m, vt_svd, m, work_svd, lwork_svd, info_svd)
-            call mfree(work_svd)
+            call mfree(ctx, work_svd)
 !
 ! compute sigma**(-1/2)
 !
@@ -163,7 +170,7 @@ contains
 !
             call dpotrf('l', m, metric, m, info)
             if (info .ne. 0) then
-                call dgl_error("b_ortho: the metric is not positive definite", dgl_err_ortho)
+                call dgl_error(ctx, "b_ortho: the metric is not positive definite", dgl_err_ortho)
                 go to 100
             end if
 !
@@ -174,12 +181,12 @@ contains
         end if
 !
 100     continue
-        call mfree(sigma)
-        call mfree(u_svd)
-        call mfree(vt_svd)
-        call mfree(temp)
-        call mfree(work_svd)
-        call mfree(metric)
+        call mfree(ctx, sigma)
+        call mfree(ctx, u_svd)
+        call mfree(ctx, vt_svd)
+        call mfree(ctx, temp)
+        call mfree(ctx, work_svd)
+        call mfree(ctx, metric)
 !
     end subroutine b_ortho
 !
@@ -200,7 +207,7 @@ contains
         return
     end subroutine diag_shift
 !
-    subroutine ortho_cd(n, m, u, growth, ok)
+    subroutine ortho_cd(ctx, n, m, u, growth, ok)
 !! Subroutine to orthogonalize \(m\) vectors of lenght \(n\)
 !! using the Cholesky factorization of their overlap.
 !! \[ u^Tu = \textbf{I} \]
@@ -220,6 +227,8 @@ contains
 !! more robust routines (QR or SVD) in case of failure.
 !
         implicit none
+        type(dgl_context), intent(inout) :: ctx
+        integer(ip) :: info
 !
         integer(ip), intent(in) :: n
 !! Lenght of the vectors
@@ -250,9 +259,9 @@ contains
 ! get memory for the metric.
 !
         ok = .false.
-        call mallocate(m, m, metric)
-        call mallocate(m, m, msave)
-        if (dgl_failed()) go to 100
+        call mallocate(ctx, m, m, metric)
+        call mallocate(ctx, m, m, msave)
+        if (dgl_failed(ctx)) go to 100
 !
         metric = zero
         macro_done = .false.
@@ -345,155 +354,83 @@ contains
         ok = .true.
 !
 100     continue
-        call mfree(metric)
-        call mfree(msave)
+        call mfree(ctx, metric)
+        call mfree(ctx, msave)
 !
     end subroutine ortho_cd
 !
-    subroutine biortho_vs_x(n, m, k, xl, xr, ul, ur)
-!* Given four sets: \(x_l(n,m)\), \(x_r(n,m)\) and \(u_l(n,k)\), \(u_r(n,k)\)
-! of vectors, where \(x_l\) and \(x_r\) are assumed to be orthogonal,
-! orthogonalize \(u_l\) against \(x_l\) and
-! \(u_r\) against \(x_r\).
+    subroutine biortho_eigvecs(ctx, n, m, v_l, v_r)
+!* Biorthonormalize a set of left and right eigenvectors, so that
+! \[ v_l^Tv_r = \textbf{I}. \]
 !
-! Furthermore, orthonormalize \(u_l\) and \(u_r\).
-!
-        implicit none
-!
-        integer(ip), intent(in) :: n, m, k
-        real(dp), dimension(n, m), intent(in) :: xl, xr
-        real(dp), dimension(n, k), intent(inout) :: ul, ur
-!
-! local variables:
-!
-        integer(ip) :: it
-        real(dp) :: xu_norm(2), growth
-        logical :: done, ok
-        real(dp), allocatable :: xu(:, :)
-!
-        integer(ip), parameter :: maxit = 20
-!
-        call mallocate(m, k, xu)
-        if (dgl_failed()) go to 100
-!
-        done = .false.
-        it = 0
-!
-        do while (.not. done)
-            it = it + 1
-            if (it .gt. maxit) then
-                call dgl_error('biortho_vs_x failed.', dgl_err_ortho)
-                go to 100
-            end if
-!
-! biorthogonalize ul and ur to xr and xl:
-!
-            call dgemm('t', 'n', m, k, n, one, xl, n, ur, n, zero, xu, m)
-            call dgemm('n', 'n', n, k, m, -one, xr, n, xu, m, one, ur, n)
-            call dgemm('t', 'n', m, k, n, one, xr, n, ul, n, zero, xu, m)
-            call dgemm('n', 'n', n, k, m, -one, xl, n, xu, m, one, ul, n)
-!
-! now, orthogonalize ur and ul.
-!
-            call ortho_cd(n, k, ul, growth, ok)
-            if (.not. ok) call dgl_error('biortho_vs_x: ortho_cd failed.', dgl_err_ortho)
-            xu_norm(1) = growth*epsilon(one)
-            call ortho_cd(n, k, ur, growth, ok)
-            if (.not. ok) call dgl_error('biortho_vs_x: ortho_cd failed.', dgl_err_ortho)
-            xu_norm(2) = growth*epsilon(one)
-            if (dgl_failed()) go to 100
-!
-            done = xu_norm(1) .lt. tol_ortho .and. xu_norm(2) .lt. tol_ortho
-        end do
-!
-! make the left and right eigenvectors biorthogonal using the singular value
-! decomposition
-!
-        call svd_biortho(n, k, ul, ur)
-!
-100     continue
-        call mfree(xu)
-    end subroutine biortho_vs_x
-!
-    subroutine svd_biortho(n, m, u_l, u_r)
-!*  Given two set of vectors, biorthogonalize them by computing the SVD decomposition
-! of the overlap matrix and then solving
-! \[
-! metric = u_l^Tu_r \\
-! metric = U \Sigma V^T \\
-! u_l = u_l V^T \\
-! u_r = u_r U
-! \]
-! Resulting vectors obey:
-! \[ u_l^Tu_r = \textbf{I} \]
+! Left and right eigenvectors that belong to different eigenvalues are already orthogonal
+! (up to the convergence error), so they must not be mixed, as, e.g., an SVD of the overlap
+! would do. The overlap is instead factorized as
+! \[ v_l^Tv_r = LU, \]
+! with \(L\) lower triangular and \(U\) unit upper triangular, and
+! \[ v_r = v_r U^{-1}, \quad v_l = v_l L^{-T}. \]
+! The off-diagonal elements of the factors are of the order of the convergence error, unless
+! some eigenvalues are degenerate: in this case, the vectors of the degenerate subspace are
+! also biorthogonalized among themselves. Finally, the right eigenvectors are normalized, and
+! the left ones scaled accordingly.
 !
         implicit none
+        type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
 !! Lenght of the vectors
         integer(ip), intent(in) :: m
 !! Number of vectors
-        real(dp), dimension(n, m), intent(inout) :: u_l
-!! First set of vectors
-        real(dp), dimension(n, m), intent(inout) :: u_r
-!! Second set of vectors
+        real(dp), dimension(n, m), intent(inout) :: v_l
+!! Left eigenvectors
+        real(dp), dimension(n, m), intent(inout) :: v_r
+!! Right eigenvectors
 !
-        integer(ip) :: i
-        real(dp) :: fac
+        integer(ip) :: i, j
+        real(dp) :: thresh, fac
+        real(dp), allocatable :: over(:, :)
 !
-        real(dp), allocatable :: over(:, :), u(:, :), s(:), vt(:, :), tmp(:, :), work_svd(:)
-        real(dp) :: lwork_query(1)
-        integer(ip) :: lwork_svd, info_svd
+        call mallocate(ctx, m, m, over)
+        if (dgl_failed(ctx)) go to 100
 !
-! allocate memory.
+! compute the overlap and factorize it in place (crout, without pivoting, which would
+! reorder the eigenvectors):
 !
-        call mallocate(m, m, over)
-        call mallocate(m, s)
-        call mallocate(m, m, u)
-        call mallocate(m, m, vt)
-        call mallocate(n, m, tmp)
-        if (dgl_failed()) go to 100
+        call dgemm('t', 'n', m, m, n, one, v_l, n, v_r, n, zero, over, m)
 !
-! compute the overlap:
+        do j = 1, m
+            do i = j, m
+                over(i, j) = over(i, j) - dot_product(over(i, 1:j - 1), over(1:j - 1, j))
+            end do
 !
-        call dgemm('t', 'n', m, m, n, one, u_l, n, u_r, n, zero, over, m)
+! a vanishing pivot means that the left and right eigenvectors are (numerically) orthogonal,
+! i.e., that the eigenvalue is defective: they cannot be biorthonormalized.
 !
-! compute its singular value decomposition:
+            thresh = 1.0e2_dp*epsilon(one)*dnrm2(n, v_l(1, j), 1_ip)*dnrm2(n, v_r(1, j), 1_ip)
+            if (abs(over(j, j)) .le. thresh) then
+                call dgl_error(ctx, 'biortho_eigvecs: left and right eigenvectors are orthogonal.', dgl_err_ortho)
+                go to 100
+            end if
 !
-        call dgesvd('a', 'a', m, m, over, m, s, u, m, vt, m, lwork_query, -1_ip, info_svd)
-        lwork_svd = max(1_ip, int(lwork_query(1), ip))
-        call mallocate(lwork_svd, work_svd)
-        if (dgl_failed()) go to 100
-        call dgesvd('a', 'a', m, m, over, m, s, u, m, vt, m, work_svd, lwork_svd, info_svd)
-        if (info_svd .ne. 0) then
-            call dgl_error('svd_biortho: SVD failed.', dgl_err_lapack)
-            go to 100
-        end if
+            do i = j + 1, m
+                over(j, i) = (over(j, i) - dot_product(over(j, 1:j - 1), over(1:j - 1, i)))/over(j, j)
+            end do
+        end do
 !
-! compute l*u and r*v
+! v_r = v_r U^-1, v_l = v_l L^-T
 !
-        call dgemm('n', 'n', n, m, m, one, u_l, n, u, m, zero, tmp, n)
-        u_l = tmp
-        call dgemm('n', 't', n, m, m, one, u_r, n, vt, m, zero, tmp, n)
-        u_r = tmp
+        call dtrsm('r', 'u', 'n', 'u', n, m, one, over, m, v_r, n)
+        call dtrsm('r', 'l', 't', 'n', n, m, one, over, m, v_l, n)
 !
-! scale with square root of singular values
-! here, dropping redundant vectors could be a good idea...
-!
-        do i = 1, m
-            fac = one/sqrt(s(i))
-            u_l(:, i) = fac*u_l(:, i)
-            u_r(:, i) = fac*u_r(:, i)
+        do j = 1, m
+            fac = dnrm2(n, v_r(1, j), 1_ip)
+            v_r(:, j) = v_r(:, j)/fac
+            v_l(:, j) = v_l(:, j)*fac
         end do
 !
 100     continue
-        call mfree(work_svd)
-        call mfree(over)
-        call mfree(u)
-        call mfree(s)
-        call mfree(vt)
-        call mfree(tmp)
-    end subroutine svd_biortho
+        call mfree(ctx, over)
+    end subroutine biortho_eigvecs
 !
     real(dp) function norm_est(m, a)
 !* Compute a cheap estimate of the norm of a lower triangular matrix.
@@ -533,8 +470,102 @@ contains
         return
     end function norm_est
 !
-    subroutine ortho_vs_x(n, m, k, x, u)
+    subroutine replace_dependent(ctx, n, m, k, x, bx, u)
+!* Orthonormalize the vectors \(u(n,k)\) one at a time with Gram-Schmidt, projecting each of
+! them against \(x(n,m)\), \( u_j = u_j - x (bx^Tu_j) \), and against the previous
+! vectors of \(u\). The vectors that are numerically linearly dependent are replaced with random
+! vectors, which are orthonormalized in the same way.
+!
+! Linearly dependent vectors, e.g., preconditioned residuals that span fewer directions than
+! their number, cannot be orthonormalized as a block: the orthonormalization amplifies the
+! round-off noise, which then is no longer orthogonal to \(x\).
+! A vector is found to be dependent with the "twice is enough" criterion (Kahan, Parlett):
+! if the projection removes most of its norm, the projection is repeated, and if the second
+! one also removes most of what was left, what was left was only round-off noise.
+! This does not depend on how small the independent part of a vector is, as long as it is
+! not round-off noise: small but genuine components, which can speed up the convergence,
+! are kept.
+!
         implicit none
+        type(dgl_context), intent(inout) :: ctx
+!
+        integer(ip), intent(in) :: n
+!! Lenght of the vectors
+        integer(ip), intent(in) :: m
+!! Number of reference vectors
+        integer(ip), intent(in) :: k
+!! Number of vectors to orthonormalize
+        real(dp), dimension(n, m), intent(in) :: x
+!! Reference vectors
+        real(dp), dimension(n, m), intent(in) :: bx
+!! Vectors that define the projector: \(x\), or \(Bx\) for a B-orthogonalization
+        real(dp), dimension(n, k), intent(inout) :: u
+!! Vectors to orthonormalize
+!
+        integer(ip) :: j, pass, n_random
+        real(dp) :: u_norm, prev_norm
+        logical :: accepted
+        real(dp), allocatable :: xu(:), uu(:)
+!
+        integer(ip), parameter :: maxit = 10
+!
+        call mallocate(ctx, m, xu)
+        call mallocate(ctx, k, uu)
+        if (dgl_failed(ctx)) go to 100
+!
+        do j = 1, k
+            n_random = 0
+            do
+                prev_norm = dnrm2(n, u(1, j), 1_ip)
+                if (ieee_is_nan(prev_norm)) then
+                    call dgl_error(ctx, 'the vectors to orthogonalize contain NaN.', dgl_err_ortho)
+                    go to 100
+                end if
+!
+                accepted = .false.
+                if (prev_norm .gt. zero) then
+                    do pass = 1, 2
+!
+! u_j = u_j - x (bx^t u_j) - u_(1:j-1) (u_(1:j-1)^t u_j)
+!
+                        call dgemv('t', n, m, one, bx, n, u(1, j), 1_ip, zero, xu, 1_ip)
+                        call dgemv('n', n, m, -one, x, n, xu, 1_ip, one, u(1, j), 1_ip)
+                        if (j .gt. 1) then
+                            call dgemv('t', n, j - 1, one, u, n, u(1, j), 1_ip, zero, uu, 1_ip)
+                            call dgemv('n', n, j - 1, -one, u, n, uu, 1_ip, one, u(1, j), 1_ip)
+                        end if
+                        u_norm = dnrm2(n, u(1, j), 1_ip)
+                        if (u_norm .gt. zero .and. u_norm .ge. keep_ratio*prev_norm) then
+                            accepted = .true.
+                            exit
+                        end if
+                        prev_norm = u_norm
+                    end do
+                end if
+!
+                if (accepted) exit
+!
+! u_j is linearly dependent: replace it with a random vector.
+!
+                n_random = n_random + 1
+                if (n_random .gt. maxit) then
+                    call dgl_error(ctx, 'unable to replace linearly dependent vectors.', dgl_err_ortho)
+                    go to 100
+                end if
+                call random_number(u(:, j))
+                u(:, j) = u(:, j) - 0.5_dp
+            end do
+            u(:, j) = u(:, j)/u_norm
+        end do
+!
+100     continue
+        call mfree(ctx, xu)
+        call mfree(ctx, uu)
+    end subroutine replace_dependent
+!
+    subroutine ortho_vs_x(ctx, n, m, k, x, u)
+        implicit none
+        type(dgl_context), intent(inout) :: ctx
 !* Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
 ! is assumed to be orthogonal, orthogonalize \(u\) against \(x\).
 !
@@ -575,16 +606,16 @@ contains
 ! allocate space for the overlap between x and u.
 !
         ok = .false.
-        call mallocate(m, k, xu)
-        if (dgl_failed()) go to 100
+        call mallocate(ctx, m, k, xu)
+        if (dgl_failed(ctx)) go to 100
         done = .false.
         it = 0
 !
-! start with an initial orthogonalization to improve conditioning.
+! start by orthonormalizing u, one vector at a time, which also replaces the vectors that are
+! (numerically) linearly dependent with random vectors.
 !
-        if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
-        if (.not. ok .or. useqr) call ortho(n, k, u)
-        if (dgl_failed()) go to 100
+        call replace_dependent(ctx, n, m, k, x, x, u)
+        if (dgl_failed(ctx)) go to 100
 !
 ! iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -598,9 +629,9 @@ contains
 !
 ! now, orthonormalize u.
 !
-            if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
-            if (.not. ok .or. useqr) call ortho(n, k, u)
-            if (dgl_failed()) go to 100
+            if (.not. useqr) call ortho_cd(ctx, n, k, u, growth, ok)
+            if (.not. ok .or. useqr) call ortho(ctx, n, k, u)
+            if (dgl_failed(ctx)) go to 100
 !
 ! the orthogonalization has introduced an error that makes the new
 ! vector no longer fully orthogonal to x. assuming that u was
@@ -615,23 +646,27 @@ contains
             else
                 xu_norm = growth*epsilon(one)
             end if
+            if (ieee_is_nan(xu_norm)) then
+                call dgl_error(ctx, 'ortho_vs_x: the orthogonalization produced NaN.', dgl_err_ortho)
+                go to 100
+            end if
             done = xu_norm .lt. tol_ortho
 !
 ! if things went really wrong, abort.
 !
             if (it .gt. maxit) then
-                call dgl_error('catastrophic failure of ortho_vs_x', dgl_err_ortho)
+                call dgl_error(ctx, 'catastrophic failure of ortho_vs_x', dgl_err_ortho)
                 go to 100
             end if
         end do
 !
 100     continue
-        call mfree(xu)
+        call mfree(ctx, xu)
 !
         return
     end subroutine ortho_vs_x
 !
-    subroutine b_ortho_vs_x(n, m, k, x, bx, u)
+    subroutine b_ortho_vs_x(ctx, n, m, k, x, bx, u)
 !*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
 ! is assumed to be orthogonal, B-orthogonalize \(u\) against \(x\).
 ! furthermore, orthonormalize \(u\).
@@ -642,6 +677,7 @@ contains
 ! a (tight) threshold.
 !
         implicit none
+        type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
 !! Lenght of the vectors
@@ -670,16 +706,16 @@ contains
 ! allocate space for the overlap between x and u.
 !
         ok = .false.
-        call mallocate(m, k, xu)
-        if (dgl_failed()) go to 100
+        call mallocate(ctx, m, k, xu)
+        if (dgl_failed(ctx)) go to 100
         done = .false.
         it = 0
 !
-! start with an initial orthogonalization to improve conditioning.
+! start by orthonormalizing u, one vector at a time, which also replaces the vectors that are
+! (numerically) linearly dependent with random vectors.
 !
-        if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
-        if (.not. ok .or. useqr) call ortho(n, k, u)
-        if (dgl_failed()) go to 100
+        call replace_dependent(ctx, n, m, k, x, bx, u)
+        if (dgl_failed(ctx)) go to 100
 !
 ! iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -693,9 +729,9 @@ contains
 !
 ! now, orthonormalize u.
 !
-            if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
-            if (.not. ok .or. useqr) call ortho(n, k, u)
-            if (dgl_failed()) go to 100
+            if (.not. useqr) call ortho_cd(ctx, n, k, u, growth, ok)
+            if (.not. ok .or. useqr) call ortho(ctx, n, k, u)
+            if (dgl_failed(ctx)) go to 100
 !
 ! compute the overlap between the orthonormalized u and x and decide
 ! whether the orthogonalization procedure converged.
@@ -710,18 +746,22 @@ contains
             else
                 xu_norm = growth*epsilon(one)
             end if
+            if (ieee_is_nan(xu_norm)) then
+                call dgl_error(ctx, 'b_ortho_vs_x: the orthogonalization produced NaN.', dgl_err_ortho)
+                go to 100
+            end if
             done = xu_norm .lt. tol_ortho
 !
 ! if things went really wrong, abort.
 !
             if (it .gt. maxit) then
-                call dgl_error('catastrophic failure of b_ortho_vs_x', dgl_err_ortho)
+                call dgl_error(ctx, 'catastrophic failure of b_ortho_vs_x', dgl_err_ortho)
                 go to 100
             end if
         end do
 !
 100     continue
-        call mfree(xu)
+        call mfree(ctx, xu)
 !
     end subroutine b_ortho_vs_x
 

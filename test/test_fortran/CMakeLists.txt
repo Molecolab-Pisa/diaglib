@@ -1,6 +1,6 @@
 # make a reference for comparison
 add_executable(dgl_reference
-        ${PROJECT_SOURCE_DIR}/src/fortran/dgl_kinds.f90
+        ${PROJECT_SOURCE_DIR}/src/fortran/dgl_interface.f90
         ${PROJECT_SOURCE_DIR}/src/fortran/dgl_lapack.f90
         utility.f90
         reference.f90
@@ -12,8 +12,8 @@ add_executable(dgl_test
         direct_matvecs.f90
 )
 
-target_compile_options(dgl_reference PRIVATE ${DGL_Fortran_F2003} ${DGL_Fortran_OPTIONS})
-target_compile_options(dgl_test PRIVATE ${DGL_Fortran_F2003} ${DGL_Fortran_OPTIONS})
+target_compile_options(dgl_reference PRIVATE ${DGL_Fortran_F2008} ${DGL_Fortran_OPTIONS})
+target_compile_options(dgl_test PRIVATE ${DGL_Fortran_F2008} ${DGL_Fortran_OPTIONS})
 
 # Keep the .mod files of the two executables separate, as they share utility.f90
 set_target_properties(dgl_reference PROPERTIES Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod_reference)

@@ -1,18 +1,16 @@
 add_library(diaglib SHARED
-        dgl_kinds.f90
+        dgl_interface.f90
         dgl_lapack.f90
         dgl_global_utils.f90
         dgl_orthogonalizations.f90
         dgl_minor_utils.f90
-        dgl_external_interfaces.f90
         davidson_driver.f90
         davidson_nosym_driver.f90
         lobpcg_driver.f90
         smogd_driver.f90
-        dgl_interface.f90
 )
 
-target_compile_options(diaglib PRIVATE ${DGL_Fortran_F2003} ${DGL_Fortran_OPTIONS})
+target_compile_options(diaglib PRIVATE ${DGL_Fortran_F2008} ${DGL_Fortran_OPTIONS})
 
 # Set where the .mod files will be placed, and let the installed library
 # find its dependencies (libraries in the same directory, BLAS/LAPACK)
@@ -45,7 +43,8 @@ install(TARGETS diaglib
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Install the .mod files
-install(DIRECTORY 
-        ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}/
+# Install the .mod file of the public module. The drivers are submodules of dgl_interface,
+# so that it does not depend on the internal modules, which are not installed.
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_INCLUDEDIR}/dgl_interface.mod
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

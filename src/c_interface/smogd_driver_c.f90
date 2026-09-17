@@ -1,9 +1,15 @@
 module mod_smogd_driver_c
     use dgl_utils_c
     implicit none
-
-    ! Procedure pointer
-    procedure(), private, pointer :: apb_ptr, amb_ptr, spd_ptr, smd_ptr, prec_ptr
+!
+! The C routines of the current call are stored in module variables, as the Fortran driver
+! calls them through the wrappers below. To allow calling the drivers from inside a callback,
+! they are saved at the beginning of each call and restored at the end; to allow calling the
+! drivers from different OpenMP threads at the same time, they are threadprivate.
+!
+    type(C_FUNPTR), private, save :: apb_c = C_NULL_FUNPTR, amb_c = C_NULL_FUNPTR, spd_c = C_NULL_FUNPTR, &
+                                     smd_c = C_NULL_FUNPTR, prec_c = C_NULL_FUNPTR
+!$omp threadprivate(apb_c, amb_c, spd_c, smd_c, prec_c)
 
 contains
 
@@ -33,10 +39,11 @@ contains
 !! are blank padded, longer ones truncated, NULL gives the default unit
         logical :: verbose_f, ok_f
         integer(ip) :: info_f
-
+        type(C_FUNPTR) :: saved(5)
+!
         memory_unit_f = c_ptr_to_f_string(memory_unit)
-
-        ! Associa i puntatori
+        verbose_f = verbose
+!
         ok = .false.
         info = dgl_err_input
         if (.not. pointer_ok(apbmul, "apbmul")) return
@@ -44,66 +51,79 @@ contains
         if (.not. pointer_ok(spdmul, "spdmul")) return
         if (.not. pointer_ok(smdmul, "smdmul")) return
         if (.not. pointer_ok(lrprec, "lrprec")) return
-        call c_f_procpointer(apbmul, apb_ptr)
-        call c_f_procpointer(ambmul, amb_ptr)
-        call c_f_procpointer(spdmul, spd_ptr)
-        call c_f_procpointer(smdmul, smd_ptr)
-        call c_f_procpointer(lrprec, prec_ptr)
-
-        verbose_f = verbose
-
-        ! Call to the driver
-        call dgl_smogd_driver(n2, n_targ, n_max, apb_wrapper, amb_wrapper, &
-                              spd_wrapper, smd_wrapper, prec_wrapper, &
+!
+        saved = [apb_c, amb_c, spd_c, smd_c, prec_c]
+        apb_c = apbmul
+        amb_c = ambmul
+        spd_c = spdmul
+        smd_c = smdmul
+        prec_c = lrprec
+!
+        call dgl_smogd_driver(n2, n_targ, n_max, apb_wrapper, amb_wrapper, spd_wrapper, smd_wrapper, prec_wrapper, &
                               eig, evec, ok_f, &
-                              dgl_info=info_f, &
-                              dgl_verbose=verbose_f, &
-                              dgl_max_iter=max_iter, &
-                              dgl_dav_iter=dav_iter, &
-                              dgl_tol=tol, &
-                              dgl_memory=memory, &
-                              dgl_memory_unit=memory_unit_f &
-                              )
-
+                              dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                              dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit_f, dgl_info=info_f)
+!
+        apb_c = saved(1)
+        amb_c = saved(2)
+        spd_c = saved(3)
+        smd_c = saved(4)
+        prec_c = saved(5)
+!
         ok = ok_f
         info = info_f
 
     end subroutine smogd_driver_c
 
     subroutine apb_wrapper(n, m, x, ax)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
-        call apb_ptr(n, m, x, ax)
-    end subroutine
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(apb_c, f)
+        call f(n, m, x, ax)
+    end subroutine apb_wrapper
 
     subroutine amb_wrapper(n, m, x, ax)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
-        call amb_ptr(n, m, x, ax)
-    end subroutine
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(amb_c, f)
+        call f(n, m, x, ax)
+    end subroutine amb_wrapper
 
     subroutine spd_wrapper(n, m, x, ax)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
-        call spd_ptr(n, m, x, ax)
-    end subroutine
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(spd_c, f)
+        call f(n, m, x, ax)
+    end subroutine spd_wrapper
 
     subroutine smd_wrapper(n, m, x, ax)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
-        call smd_ptr(n, m, x, ax)
-    end subroutine
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(smd_c, f)
+        call f(n, m, x, ax)
+    end subroutine smd_wrapper
 
     subroutine prec_wrapper(n, m, fac, xp, xm, yp, ym)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: fac
         real(dp), intent(in) :: xp(n, m), xm(n, m)
         real(dp), intent(inout) :: yp(n, m), ym(n, m)
-        call prec_ptr(n, m, fac, xp, xm, yp, ym)
-    end subroutine
+        procedure(c_lrprec), pointer :: f
+        call c_f_procpointer(prec_c, f)
+        call f(n, m, fac, xp, xm, yp, ym)
+    end subroutine prec_wrapper
 
 end module mod_smogd_driver_c

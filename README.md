@@ -43,6 +43,16 @@ where n,m are integer(dgl_int) and x(n,m) and ax(n,m) are real(dgl_real)
 arrays. as using the first eigenvalue in a shift-and-invert spirit is very
 common, a real(dgl_real) scalar shift is also passed to precnd.
 
+the optional shift argument of the drivers (not available for smo-gd) is only
+added to the eigenvalues when they are printed, e.g., to print total energies
+when the matrix does not include a constant energy contribution: it does not
+change the computation nor the returned eigenvalues.
+
+diaglib keeps no global state: a driver can be called from inside the
+user-provided routines of another driver call, and different threads can call
+the drivers at the same time (the C and python interfaces need OpenMP for this),
+provided that the user-provided routines allow it.
+
 all implementations favor numerical stability over efficiency and are
 targeted at applications in molecular quantum chemistry, such as in
 (full) ci or augmented hessian calculations, where typically m << n.
@@ -51,7 +61,8 @@ targeted at applications in molecular quantum chemistry, such as in
 - a Fortran and a C compiler, CMake (3.15 or newer; 3.22 or newer to select
   a BLAS/LAPACK library with 64-bit integers automatically)
 - BLAS and LAPACK
-- optionally, OpenMP (only used for wall-clock timings)
+- optionally, OpenMP (used for wall-clock timings, and to call the C interface
+  from different threads at the same time)
 - for the python interface, python 3.9 or newer with numpy
 
 ## Building and installing
@@ -73,7 +84,9 @@ main options:
 
 ## Usage
 - Fortran: `use dgl_interface`, which provides the drivers, the kinds
-  `dgl_int` and `dgl_real` and the error codes. The installed CMake package can be
+  `dgl_int` and `dgl_real` and the error codes. `dgl_interface.mod` is the only
+  module file installed: it has to be used with the same compiler (and version)
+  that built the library. The installed CMake package can be
   used with `find_package(diaglib)` and the target `diaglib::diaglib`.
 - C and C++: `#include "diaglib.h"`, which provides the drivers, the integer
   type `dgl_int` and the error codes, and link `libdiaglib_c` (CMake target

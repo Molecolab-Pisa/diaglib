@@ -11,9 +11,10 @@ module dgl_minor_utils
 !
 contains
 !
-    subroutine check_guess(n, m, evec)
+    subroutine check_guess(ctx, n, m, evec)
 !! Utility routine that checks orthogonality of the input vectors to a diagonalization driver
         implicit none
+        type(dgl_context), intent(inout) :: ctx
         integer(ip), intent(in) :: n
 !!
         integer(ip), intent(in) :: m
@@ -33,14 +34,14 @@ contains
 ! no luck. make a random guess, then orthonormalize it.
 !
             call random_number(evec)
-            call ortho_cd(n, m, evec, growth, ok)
-            if (.not. ok) call ortho(n, m, evec)
+            call ortho_cd(ctx, n, m, evec, growth, ok)
+            if (.not. ok) call ortho(ctx, n, m, evec)
         else
 !
 ! compute the overlap and check that the vectors are orthonormal.
 !
-            call mallocate(m, m, overlap)
-            if (.not. dgl_failed()) then
+            call mallocate(ctx, m, m, overlap)
+            if (.not. dgl_failed(ctx)) then
                 call dgemm('t', 'n', m, m, n, one, evec, n, evec, n, zero, overlap, m)
                 diag_norm = zero
                 out_norm = zero
@@ -58,12 +59,12 @@ contains
 !
 ! orthogonalize the guess:
 !
-                    call ortho_cd(n, m, evec, growth, ok)
-                    if (.not. ok) call ortho(n, m, evec)
+                    call ortho_cd(ctx, n, m, evec, growth, ok)
+                    if (.not. ok) call ortho(ctx, n, m, evec)
                 end if
             end if
 !
-            call mfree(overlap)
+            call mfree(ctx, overlap)
 
         end if
 !

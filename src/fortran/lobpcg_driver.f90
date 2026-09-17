@@ -1,59 +1,45 @@
-module mod_lobpcg_driver
+submodule(dgl_interface) dgl_lobpcg
     use dgl_global_utils
     use dgl_orthogonalizations, only: ortho_vs_x, b_ortho, b_ortho_vs_x
     use dgl_minor_utils
-    use dgl_external_interfaces, only: matvec_, metvec_, precnd_
 !
     implicit none
 !
 contains
 !
-    subroutine lobpcg_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
-                             dgl_verbose, dgl_max_iter, dgl_tol, &
-                             dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
-!! # Driver for LOBPCG symmetric diagonalization
-!! Can solve both standard and generalized eigenvalue problems.
-!! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
-!! @note
-!! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
-!! @endnote
+    module subroutine dgl_lobpcg_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
+                                        dgl_verbose, dgl_max_iter, dgl_tol, &
+                                        dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
+!
+! the arguments are documented in the interface, in dgl_interface.f90. They are repeated
+! here, instead of using "module procedure", so that all compilers check the calls to
+! the user-supplied routines.
+!
         implicit none
-        integer(ip), intent(in) :: n
-!! Size of the matrix to be diagonalized
-        integer(ip), intent(in) :: n_targ
-!! Number of required eigenpairs.
-        integer(ip), intent(in) :: n_max
-!! Maximum size of the search space. Should be >= n_targ.
-        real(dp), dimension(n_max), intent(inout) :: eig
-!! Computed eigenvalues
-        real(dp), dimension(n, n_max), intent(inout) :: evec
-!! Computed eigenvectors. In input, it should contain a guess for the eigenvectors
+        integer(dgl_int), intent(in) :: n
+        integer(dgl_int), intent(in) :: n_targ
+        integer(dgl_int), intent(in) :: n_max
+        real(dgl_real), dimension(n_max), intent(inout) :: eig
+        real(dgl_real), dimension(n, n_max), intent(inout) :: evec
         logical, intent(inout) :: ok
-!! True if davidson converged
-        procedure(matvec_) :: matvec
-!! External subroutine that performs the matrix-vector multiplication
-        procedure(precnd_) :: precnd
-!! External subroutine that applies a preconditioner
+        procedure(dgl_matvec) :: matvec
+        procedure(dgl_precnd) :: precnd
         logical, optional, intent(in) :: dgl_verbose
-!! Verbose mode. Default = .false.
-        integer(ip), optional, intent(in) :: dgl_max_iter
-!! Maximum number of allowed iterations. Default = \(100\)
-        integer(ip), optional, intent(in) :: dgl_memory
-!! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+        integer(dgl_int), optional, intent(in) :: dgl_max_iter
+        integer(dgl_int), optional, intent(in) :: dgl_memory
         character(len=2), optional, intent(in) :: dgl_memory_unit
-!! Unit of memory. Default = MB
-        real(dp), optional, intent(in) :: dgl_tol
-!! Convergence threshold on residuals norms. Default = \(10^{-7}\)
-        real(dp), optional, intent(in) :: dgl_shift
-!! Diagonal level shifting parameter. Default = \(0.\)
-        procedure(metvec_), pointer, optional :: metvec
-!! Pointer to External subroutine that applies the metric-vector multiplication
-        integer(ip), optional, intent(out) :: dgl_info
-!! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
-!! If not present, DiagLib stops the program when an error occurs.
+        real(dgl_real), optional, intent(in) :: dgl_tol
+        real(dgl_real), optional, intent(in) :: dgl_shift
+        procedure(dgl_matvec), pointer, optional :: metvec
+        integer(dgl_int), optional, intent(out) :: dgl_info
 !
 ! local variables:
 ! ================
+        type(dgl_context) :: ctx
+!! State of this call: memory bookkeeping, error status and verbosity
+        real(dp), allocatable :: work(:)
+        integer(ip) :: lwork, info
+        real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), t_mv(2), t_tot(2)
         logical :: verbose_in
         integer(ip) :: max_iter, memory
         real(dp) :: tol, shift
@@ -108,12 +94,11 @@ contains
 ! START EXECUTION
 ! ================
 !
-        call dgl_clear_error()
         ok = .false.
 !
 ! Stupidity check
 !
-        if (3*n_max .ge. n) call dgl_error( &
+        if (3*n_max .ge. n) call dgl_error(ctx,  &
             "Requested more than a third of the total number of eigenvalues: expansions space would break down!", &
             dgl_err_input)
 !
@@ -122,7 +107,7 @@ contains
         generalized = .false.
         if (present(metvec)) then
             if (.not. associated(metvec)) then
-                call dgl_error("Non associated pointer to metric-vector product routine", dgl_err_input)
+                call dgl_error(ctx, "Non associated pointer to metric-vector product routine", dgl_err_input)
             else
                 generalized = .true.
             end if
@@ -139,8 +124,8 @@ contains
 !
 ! check the input
 !
-        call dgl_check_input(n, n_targ, n_max, max_iter, tol, memory)
-        if (dgl_failed()) go to 999
+        call dgl_check_input(ctx, n, n_targ, n_max, max_iter, tol, memory)
+        if (dgl_failed(ctx)) go to 999
 !
 ! set size of the expansion space
 !
@@ -151,38 +136,42 @@ contains
         else
             n_arrs = lda*2 + n_max*3
         end if
-        call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
+        call dgl_init(ctx, n, n_arrs, memory, memory_unit, verbose_in)
+        t_tot = zero
+        t_diag = zero
+        t_ortho = zero
+        t_mv = zero
 !
 ! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(lda)
-        call mallocate(lwork, work)
+        call mallocate(ctx, lwork, work)
 !
 ! allocate memory for the expansion space, the corresponding
 ! matrix-multiplied vectors and the residuals:
 !
-        call mallocate(n, lda, space)
-        call mallocate(n, lda, aspace)
-        call mallocate(n, n_max, residuals)
-        if (generalized) call mallocate(n, lda, bspace)
+        call mallocate(ctx, n, lda, space)
+        call mallocate(ctx, n, lda, aspace)
+        call mallocate(ctx, n, n_max, residuals)
+        if (generalized) call mallocate(ctx, n, lda, bspace)
 
 !
 ! allocate memory for the reduced matrix and its eigenvalues:
 !
-        call mallocate(lda, lda, a_red)
-        call mallocate(lda, e_red)
+        call mallocate(ctx, lda, lda, a_red)
+        call mallocate(ctx, lda, e_red)
 !
 ! allocate memory for temporary copies of x, ax, and bx:
 !
-        call mallocate(n, n_max, x_new)
-        call mallocate(n, n_max, ax_new)
-        if (generalized) call mallocate(n, n_max, bx_new)
+        call mallocate(ctx, n, n_max, x_new)
+        call mallocate(ctx, n, n_max, ax_new)
+        if (generalized) call mallocate(ctx, n, n_max, bx_new)
 !
 ! allocate memory for convergence check
 !
-        call mallocate(n_max, done)
-        call mallocate(2_ip, n_max, r_norm)
-        if (dgl_failed()) go to 900
+        call mallocate(ctx, n_max, done)
+        call mallocate(ctx, 2_ip, n_max, r_norm)
+        if (dgl_failed(ctx)) go to 900
 !
 ! clean out:
 !
@@ -197,8 +186,8 @@ contains
 ! whether it is orthonormal.
 ! if evec is zero, create a random guess.
 !
-        call check_guess(n, n_max, evec)
-        if (dgl_failed()) go to 900
+        call check_guess(ctx, n, n_max, evec)
+        if (dgl_failed(ctx)) go to 900
 !
 ! if required, compute b*evec and b-orthogonalize the guess
 !
@@ -209,7 +198,7 @@ contains
             t_mv = t_mv + t2 - t1
 
             call get_time(t1)
-            call b_ortho(n, n_max, evec, bx_new)
+            call b_ortho(ctx, n, n_max, evec, bx_new)
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
         end if
@@ -224,24 +213,14 @@ contains
         call get_time(t2)
         t_mv = t_mv + t2 - t1
 !
-!
-! apply the level shift: A + shift*I, or A + shift*B for a generalized problem
-!
-        if (abs(shift) .gt. num_thresh) then
-            if (generalized) then
-                call daxpy(n*n_max, shift, bspace, 1_ip, aspace, 1_ip)
-            else
-                call daxpy(n*n_max, shift, space, 1_ip, aspace, 1_ip)
-            end if
-        end if
         call dgemm('t', 'n', n_max, n_max, n, one, space, n, aspace, n, zero, a_red, lda)
 !
         call get_time(t1)
         call dsyev('v', 'l', n_max, a_red, lda, e_red, work, lwork, info)
         call get_time(t2)
         t_diag = t_diag + t2 - t1
-        if (info .ne. 0) call dgl_error("diagonalization of the reduced matrix failed", dgl_err_lapack)
-        if (dgl_failed()) go to 900
+        if (info .ne. 0) call dgl_error(ctx, "diagonalization of the reduced matrix failed", dgl_err_lapack)
+        if (dgl_failed(ctx)) go to 900
         eig = e_red(1:n_max)
 !
 ! get the ritz vectors:
@@ -276,19 +255,19 @@ contains
 !
         ind_x = 1
         ind_w = ind_x + n_max
-        call precnd(n, n_max, shift - eig(ind_x), residuals(1, ind_x), space(1, ind_w))
+        call precnd(n, n_max, -eig(ind_x), residuals(1, ind_x), space(1, ind_w))
 !
 ! orthogonalize:
 !
         call get_time(t1)
         if (generalized) then
-            call b_ortho_vs_x(n, n_max, n_max, space, bspace, space(1, ind_w))
+            call b_ortho_vs_x(ctx, n, n_max, n_max, space, bspace, space(1, ind_w))
         else
-            call ortho_vs_x(n, n_max, n_max, space, space(1, ind_w))
+            call ortho_vs_x(ctx, n, n_max, n_max, space, space(1, ind_w))
         end if
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
-        if (dgl_failed()) go to 900
+        if (dgl_failed(ctx)) go to 900
 !
 ! we are now ready to start the main loop.
 ! initialize a few parameters
@@ -311,7 +290,7 @@ contains
                t5, '------------------------------------------------------------------')
 1040    format(t9, i4, 2x, i4, f24.12, 2d12.4, l3)
 !
-        if (verbose) then
+        if (verbose_in) then
             if (generalized) then
                 write (6, 1020) tol
             else
@@ -332,7 +311,7 @@ contains
                 t_mv = t_mv + t2 - t1
 
                 call get_time(t1)
-                call b_ortho(n, n_act, space(1, ind_w), bspace(1, ind_w))
+                call b_ortho(ctx, n, n_act, space(1, ind_w), bspace(1, ind_w))
                 call get_time(t2)
                 t_ortho = t_ortho + t2 - t1
             end if
@@ -341,14 +320,6 @@ contains
             call matvec(n, n_act, space(1, ind_w), aspace(1, ind_w))
             call get_time(t2)
             t_mv = t_mv + t2 - t1
-!
-            if (abs(shift) .gt. num_thresh) then
-                if (generalized) then
-                    call daxpy(n*n_act, shift, bspace(1, ind_w), 1_ip, aspace(1, ind_w), 1_ip)
-                else
-                    call daxpy(n*n_act, shift, space(1, ind_w), 1_ip, aspace(1, ind_w), 1_ip)
-                end if
-            end if
 !
 ! build the reduced matrix and diagonalize it:
 !
@@ -363,8 +334,8 @@ contains
 !
 ! if dsyev failed, print an error message and abort (this should not happen)
 !
-            if (info .ne. 0) call dgl_error("diagonalization of the reduced matrix failed", dgl_err_lapack)
-            if (dgl_failed()) go to 900
+            if (info .ne. 0) call dgl_error(ctx, "diagonalization of the reduced matrix failed", dgl_err_lapack)
+            if (dgl_failed(ctx)) go to 900
             eig = e_red(1:n_max)
 !
 ! update x and ax, and, if required, bx:
@@ -408,9 +379,9 @@ contains
 !
 ! print some information and check for convergence:
 !
-            if (verbose) then
+            if (verbose_in) then
                 do i_eig = 1, n_targ
-                    write (6, 1040) it, i_eig, eig(i_eig) - shift, r_norm(:, i_eig), done(i_eig)
+                    write (6, 1040) it, i_eig, eig(i_eig) + shift, r_norm(:, i_eig), done(i_eig)
                 end do
                 write (6, *)
             end if
@@ -434,12 +405,12 @@ contains
 ! -x in the basis of (x,p,w), and then by orthogonalizing then to
 ! the coefficients u_x of x_new.
 !
-            call mallocate(ld_current, n_max, u_x)
-            call mallocate(ld_current, n_act, u_p)
-            if (dgl_failed()) go to 900
+            call mallocate(ctx, ld_current, n_max, u_x)
+            call mallocate(ctx, ld_current, n_act, u_p)
+            if (dgl_failed(ctx)) go to 900
 !
-            call get_coeffs(lda, ld_current, n_max, n_act, a_red, u_x, u_p)
-            if (dgl_failed()) go to 900
+            call get_coeffs(ctx, lda, ld_current, n_max, n_act, a_red, u_x, u_p)
+            if (dgl_failed(ctx)) go to 900
 !
 ! p  = space  * u_p
 ! ap = aspace * u_p
@@ -456,8 +427,8 @@ contains
                 call dcopy(n_act*n, evec, 1_ip, bspace(1, ind_p), 1_ip)
             end if
 !
-            call mfree(u_x)
-            call mfree(u_p)
+            call mfree(ctx, u_x)
+            call mfree(ctx, u_p)
 !
 ! now, move x_new and ax_new into space and aspace.
 !
@@ -469,19 +440,19 @@ contains
 !
 ! compute the preconditioned residuals w:
 !
-            call precnd(n, n_act, shift - eig(1), residuals(1, ind_x), space(1, ind_w))
+            call precnd(n, n_act, -eig(1), residuals(1, ind_x), space(1, ind_w))
 !
 ! orthogonalize w against x and p, and then orthonormalize it:
 !
             call get_time(t1)
             if (generalized) then
-                call b_ortho_vs_x(n, n_max + n_act, n_act, space, bspace, space(1, ind_w))
+                call b_ortho_vs_x(ctx, n, n_max + n_act, n_act, space, bspace, space(1, ind_w))
             else
-                call ortho_vs_x(n, n_max + n_act, n_act, space, space(1, ind_w))
+                call ortho_vs_x(ctx, n, n_max + n_act, n_act, space, space(1, ind_w))
             end if
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
-            if (dgl_failed()) go to 900
+            if (dgl_failed(ctx)) go to 900
 !
         end do
 !
@@ -489,37 +460,33 @@ contains
 !
         if (.not. ok) call dcopy(n*n_max, x_new, 1_ip, evec, 1_ip)
 !
-! return the eigenvalues of the unshifted problem
-!
-        eig = eig - shift
-!
 ! deallocate memory and return.
 !
 900     continue
-        call mfree(u_x)
-        call mfree(u_p)
-        call mfree(work)
-        call mfree(space)
-        call mfree(aspace)
-        call mfree(residuals)
-        call mfree(a_red)
-        call mfree(e_red)
-        call mfree(x_new)
-        call mfree(ax_new)
-        call mfree(done)
-        call mfree(r_norm)
+        call mfree(ctx, u_x)
+        call mfree(ctx, u_p)
+        call mfree(ctx, work)
+        call mfree(ctx, space)
+        call mfree(ctx, aspace)
+        call mfree(ctx, residuals)
+        call mfree(ctx, a_red)
+        call mfree(ctx, e_red)
+        call mfree(ctx, x_new)
+        call mfree(ctx, ax_new)
+        call mfree(ctx, done)
+        call mfree(ctx, r_norm)
         if (generalized) then
-            call mfree(bspace)
-            call mfree(bx_new)
+            call mfree(ctx, bspace)
+            call mfree(ctx, bx_new)
         end if
 !
-        call dgl_check_memleak()
+        call dgl_check_memleak(ctx)
 !
 ! if required, print timings
 !
         call get_time(t2)
         t_tot = t2 - t_tot
-        if (verbose) then
+        if (verbose_in) then
             if (generalized) then
                 write (6, 1002)
             else
@@ -531,8 +498,8 @@ contains
 ! report the error status (or stop, if dgl_info is not present)
 !
 999     continue
-        if (dgl_failed()) ok = .false.
-        call dgl_return_info(dgl_info)
+        if (dgl_failed(ctx)) ok = .false.
+        call dgl_return_info(ctx, dgl_info)
 !
 1001    format(t3, 'timings for LOBPCG (cpu/wall): ')
 1002    format(t3, 'timings for Generalized LOBPCG (cpu/wall): ')
@@ -543,10 +510,11 @@ contains
                t3, '  total:                         ', 2f12.4)
 !
 
-    end subroutine lobpcg_driver
+    end subroutine dgl_lobpcg_driver
 !
-    subroutine get_coeffs(lda, ld_current, n_max, n_act, a_red, u_x, u_p)
+    subroutine get_coeffs(ctx, lda, ld_current, n_max, n_act, a_red, u_x, u_p)
         implicit none
+        type(dgl_context), intent(inout) :: ctx
 !
 ! given the eigenvetors of the reduced matrix in a_red, extract
 ! the expansion coefficients for x_new (u_x) and assemble the
@@ -584,7 +552,7 @@ contains
 !
 ! orthogonalize:
 !
-        call ortho_vs_x(ld_current, n_max, n_act, u_x, u_p)
+        call ortho_vs_x(ctx, ld_current, n_max, n_act, u_x, u_p)
 !
 ! all done.
 !
@@ -592,5 +560,5 @@ contains
 !
     end subroutine get_coeffs
 
-end module mod_lobpcg_driver
+end submodule dgl_lobpcg
 

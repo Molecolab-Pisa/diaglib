@@ -1,9 +1,14 @@
 module mod_davidson_driver_c
     use dgl_utils_c
     implicit none
-
-    ! Procedure pointer
-    procedure(), private, pointer :: matvec_ptr, precnd_ptr, metvec_ptr
+!
+! The C routines of the current call are stored in module variables, as the Fortran driver
+! calls them through the wrappers below. To allow calling the drivers from inside a callback,
+! they are saved at the beginning of each call and restored at the end; to allow calling the
+! drivers from different OpenMP threads at the same time, they are threadprivate.
+!
+    type(C_FUNPTR), private, save :: matvec_c = C_NULL_FUNPTR, precnd_c = C_NULL_FUNPTR, metvec_c = C_NULL_FUNPTR
+!$omp threadprivate(matvec_c, precnd_c, metvec_c)
 
 contains
 
@@ -31,50 +36,41 @@ contains
 !! are blank padded, longer ones truncated, NULL gives the default unit
         logical :: verbose_f, ok_f
         integer(ip) :: info_f
+        type(C_FUNPTR) :: saved_matvec, saved_precnd, saved_metvec
+        procedure(dgl_matvec), pointer :: metvec_p
 !
         memory_unit_f = c_ptr_to_f_string(memory_unit)
+        verbose_f = verbose
 !
-!       ! Associate pointers
         ok = .false.
         info = dgl_err_input
         if (.not. pointer_ok(matvec, "matvec")) return
         if (.not. pointer_ok(precnd, "precnd")) return
-        call c_f_procpointer(matvec, matvec_ptr)
-        call c_f_procpointer(precnd, precnd_ptr)
-
-        ! Bool conversion
-        verbose_f = verbose
-
-        ! Main driver call
+!
+        saved_matvec = matvec_c
+        saved_precnd = precnd_c
+        saved_metvec = metvec_c
+        matvec_c = matvec
+        precnd_c = precnd
+        metvec_c = metvec
+!
         if (c_associated(metvec)) then
-
-            call c_f_procpointer(metvec, metvec_ptr)
-            call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, &
-                                     eig, evec, ok_f, &
-                                     dgl_info=info_f, &
-                                     dgl_verbose=verbose_f, &
-                                     dgl_max_iter=max_iter, &
-                                     dgl_dav_iter=dav_iter, &
-                                     dgl_shift=shift, &
-                                     dgl_tol=tol, &
-                                     dgl_memory=memory, &
-                                     dgl_memory_unit=memory_unit_f, &
-                                     metvec=metvec_ptr &
-                                     )
+            metvec_p => metvec_wrapper
+            call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, eig, evec, ok_f, &
+                                     dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                                     dgl_shift=shift, dgl_tol=tol, dgl_memory=memory, &
+                                     dgl_memory_unit=memory_unit_f, metvec=metvec_p, dgl_info=info_f)
         else
-            call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, &
-                                     eig, evec, ok_f, &
-                                     dgl_info=info_f, &
-                                     dgl_verbose=verbose_f, &
-                                     dgl_max_iter=max_iter, &
-                                     dgl_dav_iter=dav_iter, &
-                                     dgl_shift=shift, &
-                                     dgl_tol=tol, &
-                                     dgl_memory=memory, &
-                                     dgl_memory_unit=memory_unit_f &
-                                     )
+            call dgl_davidson_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, eig, evec, ok_f, &
+                                     dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                                     dgl_shift=shift, dgl_tol=tol, dgl_memory=memory, &
+                                     dgl_memory_unit=memory_unit_f, dgl_info=info_f)
         end if
-        ! Bool conversion
+!
+        matvec_c = saved_matvec
+        precnd_c = saved_precnd
+        metvec_c = saved_metvec
+!
         ok = ok_f
         info = info_f
 !
@@ -85,8 +81,20 @@ contains
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
-        call matvec_ptr(n, m, x, ax)
-    end subroutine
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(matvec_c, f)
+        call f(n, m, x, ax)
+    end subroutine matvec_wrapper
+
+    subroutine metvec_wrapper(n, m, x, bx)
+        implicit none
+        integer(ip), intent(in) :: n, m
+        real(dp), intent(in) :: x(n, m)
+        real(dp), intent(inout) :: bx(n, m)
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(metvec_c, f)
+        call f(n, m, x, bx)
+    end subroutine metvec_wrapper
 
     subroutine precnd_wrapper(n, m, shift, r, z)
         implicit none
@@ -94,7 +102,9 @@ contains
         real(dp), intent(in) :: shift
         real(dp), intent(in) :: r(n, m)
         real(dp), intent(inout) :: z(n, m)
-        call precnd_ptr(n, m, shift, r, z)
-    end subroutine
+        procedure(c_precnd), pointer :: f
+        call c_f_procpointer(precnd_c, f)
+        call f(n, m, shift, r, z)
+    end subroutine precnd_wrapper
 
 end module mod_davidson_driver_c

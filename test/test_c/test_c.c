@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include "diaglib.h"
 
 //
@@ -369,6 +372,13 @@ static void test_nosym(const char* side, bool random_guess) {
     max_res = fmax(max_res, residual(first, N, evec + i * N, eig[i]));
     if (lr) max_res = fmax(max_res, residual(matvec_l_c, N, evec_2 + i * N, eig[i]));
   }
+  // left and right eigenvectors have to be biorthonormal (the error is added to the residual)
+  for (int i = 0; i < N_TARG && ok && lr; ++i)
+    for (int j = 0; j < N_TARG; ++j) {
+      double dot = 0.0;
+      for (int k = 0; k < N; ++k) dot += evec_2[k + i * N] * evec[k + j * N];
+      max_res = fmax(max_res, fabs(dot - (i == j ? 1.0 : 0.0)));
+    }
   snprintf(label, sizeof label, "non-symmetric Davidson (%s)", side);
   check(label, random_guess, ok, info, eig, ref_sym, max_res);
 }
@@ -402,6 +412,91 @@ static void test_errors(void) {
   check_error("error: not enough memory", info, DGL_ERR_MEMORY);
 }
 
+// DiagLib called from inside a callback: nested_matvec_c solves a smaller problem with
+// a different matvec (after a call with invalid input), and then applies the matrix of
+// matvec_c. The callbacks of the outer call have to be restored after every nested call.
+static int nested_calls = 0, nested_failed = 0;
+
+static void nested_matvec_c(dgl_int* n, dgl_int* m, double* x, double* ax) {
+  enum { N_IN = 100, N_TARG_IN = 2, N_MAX_IN = 4 };
+  double eig[N_MAX_IN], evec[N_IN * N_MAX_IN];
+  bool ok = true;
+  dgl_int info = -99;
+  nested_calls++;
+  memset(evec, 0, sizeof evec);
+  for (int j = 0; j < N_MAX_IN; ++j) evec[j + j * N_IN] = 1.0;
+  dgl_davidson_driver(N_IN, N_MAX_IN + 1, N_MAX_IN, apbmul_c, precnd_c, NULL, eig, evec, &ok, &info, false, 1e-8,
+                      100, 20, 0.0, 1, "GB");
+  bool passed = !ok && info == DGL_ERR_INPUT;
+  dgl_davidson_driver(N_IN, N_TARG_IN, N_MAX_IN, apbmul_c, precnd_c, NULL, eig, evec, &ok, &info, false, 1e-8,
+                      100, 20, 0.0, 1, "GB");
+  passed = passed && ok && info == DGL_SUCCESS && residual(apbmul_c, N_IN, evec, eig[0]) < 1e-6;
+  if (!passed) nested_failed++;
+  matvec_c(n, m, x, ax);
+}
+
+static void test_nested(void) {
+  double eig[N_MAX], evec[N * N_MAX], max_res = 0.0;
+  bool ok = false;
+  dgl_int info = -99;
+  init_guess(N, evec, false);
+  dgl_davidson_driver(N, N_TARG, N_MAX, nested_matvec_c, precnd_c, metvec_c, eig, evec, &ok, &info, false, TOL, 100,
+                      20, 0.0, 1, "GB");
+  for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, residual(matvec_c, N, evec + i * N, eig[i]));
+  printf("nested calls: %d, failed: %d\n", nested_calls, nested_failed);
+  if (nested_calls == 0 || nested_failed > 0) ok = false;
+  check("generalized Davidson, nested calls", false, ok, info, eig, ref_sym, max_res);
+}
+
+#ifdef _OPENMP
+// DiagLib called at the same time from different threads, with different callbacks:
+// the even tasks solve the problem of matvec_c, the odd ones the one of twice that matrix.
+static void matvec2_c(dgl_int* n, dgl_int* m, double* x, double* ax) {
+  matvec_c(n, m, x, ax);
+  for (dgl_int i = 0; i < *n * *m; ++i) ax[i] *= 2.0;
+}
+
+static void precnd2_c(dgl_int* n, dgl_int* m, double* shift, double* r, double* z) {
+  double half_shift = 0.5 * *shift;
+  precnd_c(n, m, &half_shift, r, z);
+  for (dgl_int i = 0; i < *n * *m; ++i) z[i] *= 0.5;
+}
+
+static void test_threads(void) {
+  enum { N_TASKS = 8 };
+  bool ok[N_TASKS];
+  dgl_int info[N_TASKS];
+  double max_err[N_TASKS];
+  #pragma omp parallel for num_threads(4) schedule(dynamic, 1)
+  for (int task = 0; task < N_TASKS; ++task) {
+    double eig[N_MAX], *evec = malloc(N * N_MAX * sizeof(double));
+    double scale = task % 2 == 0 ? 1.0 : 2.0;
+    matvec_t mv = task % 2 == 0 ? matvec_c : matvec2_c;
+    void (*pc)(dgl_int*, dgl_int*, double*, double*, double*) = task % 2 == 0 ? precnd_c : precnd2_c;
+    init_guess(N, evec, false);
+    ok[task] = false;
+    info[task] = -99;
+    if (task % 4 < 2)
+      dgl_davidson_driver(N, N_TARG, N_MAX, mv, pc, NULL, eig, evec, &ok[task], &info[task], false, TOL, 100, 20,
+                          0.0, 1, "GB");
+    else
+      dgl_lobpcg_driver(N, N_TARG, N_MAX, mv, pc, NULL, eig, evec, &ok[task], &info[task], false, TOL, 100, 0.0, 1,
+                        "GB");
+    max_err[task] = 0.0;
+    for (int i = 0; i < N_TARG; ++i) max_err[task] = fmax(max_err[task], fabs(eig[i] - scale * ref_sym[i]));
+    free(evec);
+  }
+  for (int task = 0; task < N_TASKS; ++task) {
+    bool pass = ok[task] && info[task] == DGL_SUCCESS && max_err[task] < EIG_THRESH;
+    n_tests++;
+    if (!pass) n_failed++;
+    printf("%-45s task %d: ok=%d info=%ld max eigenvalue error=%.1e -> %s\n",
+           task % 4 < 2 ? "Davidson, concurrent calls" : "LOBPCG, concurrent calls", task, ok[task], (long)info[task],
+           max_err[task], pass ? "PASSED" : "FAILED");
+  }
+}
+#endif
+
 //
 // main program: test davidson, non-symmetric davidson, lobpcg and smogd.
 //
@@ -423,6 +518,12 @@ int main(void) {
     test_smogd(random_guess);
   }
   test_errors();
+  test_nested();
+#ifdef _OPENMP
+  test_threads();
+#else
+  printf("OpenMP not available: concurrent calls are not tested\n");
+#endif
 
   printf("Summary: %d failed tests out of %d.\n", n_failed, n_tests);
   return n_failed == 0 ? 0 : 1;

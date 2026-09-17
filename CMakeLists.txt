@@ -33,20 +33,20 @@ set(CMAKE_Fortran_PREPROCESS ON)
 
 # Compiler options for the DiagLib targets. They are added to the targets, so that the
 # flags chosen by the user (CMAKE_<LANG>_FLAGS, CMAKE_<LANG>_FLAGS_<CONFIG>) are preserved.
-# DGL_Fortran_F2003/DGL_Fortran_F2018 select the language standard.
+# DGL_Fortran_F2008/DGL_Fortran_F2018 select the language standard.
 option(DGL_NATIVE_ARCH "Optimize for the build machine (the binaries will not be portable)" OFF)
 
 set(DGL_Fortran_OPTIONS "")
 set(DGL_C_OPTIONS "")
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    set(DGL_Fortran_F2003 -std=f2003)
+    set(DGL_Fortran_F2008 -std=f2008)
     set(DGL_Fortran_F2018 -std=f2018)
     list(APPEND DGL_Fortran_OPTIONS -pedantic "$<$<CONFIG:Debug>:-Wall;-Wextra;-fcheck=all;-fbacktrace>")
     if(DGL_NATIVE_ARCH)
         list(APPEND DGL_Fortran_OPTIONS -march=native)
     endif()
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
-    set(DGL_Fortran_F2003 "SHELL:-stand f03")
+    set(DGL_Fortran_F2008 "SHELL:-stand f08")
     set(DGL_Fortran_F2018 "SHELL:-stand f18")
     list(APPEND DGL_Fortran_OPTIONS "$<$<CONFIG:Debug>:-warn;all;-check;all;-traceback>")
     if(DGL_NATIVE_ARCH)

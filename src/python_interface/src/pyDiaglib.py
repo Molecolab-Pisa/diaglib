@@ -55,6 +55,7 @@ class diaglib:
     n_targ:   number of required eigenpairs
     n_max:    size of the arrays of eigenvalues and eigenvectors (n_max >= n_targ)
     The other arguments are the options of the drivers, with the same defaults as in Fortran.
+    shift is only added to the eigenvalues when they are printed (verbose=True).
     """
 
     def __init__(self, lib_path, n, n_targ, n_max,
@@ -249,6 +250,7 @@ class diaglib:
         """Non-symmetric Davidson. side: "R", "L" or "LR".
         eig: (n_max,); evec1: (n, n_max), right eigenvectors for "R" and "LR", left ones for "L";
         evec2: (n, n_max), left eigenvectors, only used (and required) for "LR", may be None otherwise.
+        For "LR", if converged, the first n_targ vectors are biorthonormal: evec2[:, i] @ evec1[:, j] = delta_ij.
         Returns True if converged."""
         if side not in ("R", "L", "LR"):
             raise ValueError(f"side must be 'R', 'L' or 'LR', not {side!r}")

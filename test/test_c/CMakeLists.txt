@@ -14,6 +14,14 @@ if(DGL_MATH_LIBRARY)
         target_link_libraries(dgl_test_c PRIVATE ${DGL_MATH_LIBRARY})
 endif()
 
+# Test concurrent calls from different threads, if DiagLib has been built with OpenMP
+if(OpenMP_Fortran_FOUND)
+        find_package(OpenMP COMPONENTS C)
+        if(OpenMP_C_FOUND)
+                target_link_libraries(dgl_test_c PRIVATE OpenMP::OpenMP_C)
+        endif()
+endif()
+
 # Run test
 add_test(NAME dgl_test_c COMMAND dgl_test_c)
 set_tests_properties(dgl_test_c PROPERTIES ENVIRONMENT "${DGL_TEST_ENVIRONMENT}")

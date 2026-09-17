@@ -1,81 +1,49 @@
-module mod_davidson_nosym_driver
+submodule(dgl_interface) dgl_davidson_nosym
     use dgl_global_utils
-    use dgl_orthogonalizations, only: ortho, ortho_vs_x
+    use dgl_orthogonalizations, only: ortho, ortho_vs_x, biortho_eigvecs
     use dgl_minor_utils
-    use dgl_external_interfaces, only: matvec_, metvec_, precnd_
 !
     implicit none
 !
 contains
 !
-    subroutine davidson_nosym_driver(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
-                                     eig, evec_1, ok, evec_2, &
-                                     dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                                     dgl_shift, dgl_memory, dgl_memory_unit, dgl_info)
-!! # Driver for Davidson-Liu non-symmetric diagonalization
-!! Non-symmetric davidson diagonalization is commonly encountered in EOM-CC theory.
-!! This driver can eveluate both Left and Right eigenvectors.
-!! Only standard eigenvalue problems.
-!! @note
-!! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
-!! @endnote
-!!
-!!
-!! Lapack does not order the eigenvalues of the reduced (non-symmetric) matrix: the ritz pairs
-!! are sorted by increasing real part, and the n_max lowest real ones are kept.
-!! To follow each root through the iterations, also in case of root flipping or near
-!! degeneracies, the kept ritz pairs are then assigned to the slots (the positions in eig and
-!! the columns of the eigenvectors) of the previous iteration by maximum overlap.
-!! Convergence is checked on the n_targ lowest roots, whatever slot they are in, and the
-!! results are returned sorted by increasing eigenvalue.
+    module subroutine dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
+                                                eig, evec_1, ok, evec_2, &
+                                                dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
+                                                dgl_shift, dgl_memory, dgl_memory_unit, dgl_info)
+!
+! the arguments are documented in the interface, in dgl_interface.f90. They are repeated
+! here, instead of using "module procedure", so that all compilers check the calls to
+! the user-supplied routines.
+!
         implicit none
-        integer(ip), intent(in) :: n
-!! Size of the matrix to be diagonalized
-        integer(ip), intent(in) :: n_targ
-!! Number of required eigenpairs.
-        integer(ip), intent(in) :: n_max
-!! Maximum size of the search space. Should be >= n_targ
+        integer(dgl_int), intent(in) :: n
+        integer(dgl_int), intent(in) :: n_targ
+        integer(dgl_int), intent(in) :: n_max
         character(len=2), intent(in) :: side
-!! String to decide which eigenvectors to compute and whether to compute
-!! both. Possible values are "R ", "L " or "LR"
-        real(dp), dimension(n_max), intent(inout) :: eig
-!! Computed eigenvalues
-        real(dp), dimension(n, n_max), intent(inout) :: evec_1
-!! First set of computed vectors. In input it should contain a guess
-!! If side="LR" contains the Right ones
-        real(dp), dimension(n, n_max), optional, intent(inout) :: evec_2
-!! Second set of computed vectors. First set of converged vectors is used as guess.
-!! If side="LR" contains the Left ones
+        real(dgl_real), dimension(n_max), intent(inout) :: eig
+        real(dgl_real), dimension(n, n_max), intent(inout) :: evec_1
+        real(dgl_real), dimension(n, n_max), optional, intent(inout) :: evec_2
         logical, intent(inout) :: ok
-!! True if davidson converged
-        procedure(matvec_) :: matvec_r
-!! External subroutine that performs the matrix-vector multiplication for
-!! right eigenvectors
-        procedure(matvec_) :: matvec_l
-!! External subroutine that performs the matrix-vector multiplication for
-!! left eigenvectors
-        procedure(precnd_) :: precnd
-!! External subroutine that applies a preconditioner
+        procedure(dgl_matvec) :: matvec_r
+        procedure(dgl_matvec) :: matvec_l
+        procedure(dgl_precnd) :: precnd
         logical, optional, intent(in) :: dgl_verbose
-!! Verbose mode. Default = .false.
-        integer(ip), optional, intent(in) :: dgl_max_iter
-!! Maximum number of allowed iterations. Default = \(100\)
-        integer(ip), optional, intent(in) :: dgl_dav_iter
-!! Maximum number of iterations before Davidson restart. Default = \(25\)
-        integer(ip), optional, intent(in) :: dgl_memory
-!! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+        integer(dgl_int), optional, intent(in) :: dgl_max_iter
+        integer(dgl_int), optional, intent(in) :: dgl_dav_iter
+        integer(dgl_int), optional, intent(in) :: dgl_memory
         character(len=2), optional, intent(in) :: dgl_memory_unit
-!! Unit of memory. Default = MB
-        real(dp), optional, intent(in) :: dgl_tol
-!! Convergence threshold on residuals norms. Default = \(10^{-7}\)
-        real(dp), optional, intent(in) :: dgl_shift
-!! Diagonal level shifting parameter. Default = \(0.\)
-        integer(ip), optional, intent(out) :: dgl_info
-!! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
-!! If not present, DiagLib stops the program when an error occurs.
+        real(dgl_real), optional, intent(in) :: dgl_tol
+        real(dgl_real), optional, intent(in) :: dgl_shift
+        integer(dgl_int), optional, intent(out) :: dgl_info
 !
 ! local variables:
 ! ================
+        type(dgl_context) :: ctx
+!! State of this call: memory bookkeeping, error status and verbosity
+        real(dp), allocatable :: work(:)
+        integer(ip) :: lwork, info
+        real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), t_mv(2), t_tot(2)
         logical :: verbose_in
         integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
@@ -151,14 +119,13 @@ contains
 ! START EXECUTION
 ! ================
 !
-        call dgl_clear_error()
         ok = .false.
 !
 ! Stupidity checks:
 !
 ! Check dimension VS. number of eigs requested
 !
-        if (2*n_max .ge. n) call dgl_error( &
+        if (2*n_max .ge. n) call dgl_error(ctx,  &
             "Requested more than half of the total number of eigenvalues: expansions space would break down!", &
             dgl_err_input)
 !
@@ -174,7 +141,7 @@ contains
 !
 ! check the input
 !
-        call dgl_check_input(n, n_targ, n_max, max_iter, tol, memory)
+        call dgl_check_input(ctx, n, n_targ, n_max, max_iter, tol, memory)
 !
 ! no expansion space smaller than dgl_min_dav_iter iterations is deemed acceptable
 !
@@ -203,12 +170,12 @@ contains
             current_side = "R"
             davidson_runs = 2
             if (.not. present(evec_2)) then
-                call dgl_error("Missing required array for storing left eigenvectors", dgl_err_input)
+                call dgl_error(ctx, "Missing required array for storing left eigenvectors", dgl_err_input)
             end if
         case default
-            call dgl_error("Invalid value for side, options are: 'L ', 'R ' or 'LR'", dgl_err_input)
+            call dgl_error(ctx, "Invalid value for side, options are: 'L ', 'R ' or 'LR'", dgl_err_input)
         end select
-        if (dgl_failed()) go to 999
+        if (dgl_failed(ctx)) go to 999
 !
 ! computing actual size of the expansion space, checking that
 ! the input makes sense.
@@ -224,46 +191,50 @@ contains
 ! to later exstimate required memory in dgl_init
 !
         n_arrs = lda*2 + n_max
-        call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
+        call dgl_init(ctx, n, n_arrs, memory, memory_unit, verbose_in)
+        t_tot = zero
+        t_diag = zero
+        t_ortho = zero
+        t_mv = zero
 !
 ! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(lda)
-        call mallocate(lwork, work)
+        call mallocate(ctx, lwork, work)
 !
 ! allocate memory for for expansion space, the corresponding
 ! matrix-multiplied vectors and the residuals
 !
-        call mallocate(n, lda, space)
-        call mallocate(n, lda, aspace)
-        call mallocate(n, n_max, residuals)
+        call mallocate(ctx, n, lda, space)
+        call mallocate(ctx, n, lda, aspace)
+        call mallocate(ctx, n, n_max, residuals)
 !
 ! allocate memory for convergency check
 !
-        call mallocate(n_max, done)
-        call mallocate(2_ip, n_max, r_norm)
+        call mallocate(ctx, n_max, done)
+        call mallocate(ctx, 2_ip, n_max, r_norm)
 !
 ! allocate memory for the reduced matrix, its eigenvalues with real &
 ! imaginary parts, and its left & right eigenvectors
 !
-        call mallocate(lda, lda, a_red)
-        call mallocate(lda, lda, a_copy)
-        call mallocate(2*lda, e_red_re)
-        call mallocate(2*lda, e_red_im)
-        call mallocate(lda, lda, evec_red)
+        call mallocate(ctx, lda, lda, a_red)
+        call mallocate(ctx, lda, lda, a_copy)
+        call mallocate(ctx, 2*lda, e_red_re)
+        call mallocate(ctx, 2*lda, e_red_im)
+        call mallocate(ctx, lda, lda, evec_red)
 !
 ! allocate space to follow the roots through the iterations
 !
-        call mallocate(lda, n_max, ovl_w)
-        call mallocate(n_max, n_max, ovl)
-        call mallocate(lda, n_max, evec_temp)
-        call mallocate(lda, eig_temp)
-        call mallocate(n_max, slot_cand)
-        call mallocate(n_max, rank_slot)
-        call mallocate(n_max, conv)
+        call mallocate(ctx, lda, n_max, ovl_w)
+        call mallocate(ctx, n_max, n_max, ovl)
+        call mallocate(ctx, lda, n_max, evec_temp)
+        call mallocate(ctx, lda, eig_temp)
+        call mallocate(ctx, n_max, slot_cand)
+        call mallocate(ctx, n_max, rank_slot)
+        call mallocate(ctx, n_max, conv)
 !
-        call mallocate(n_max, lda, scratch)
-        if (dgl_failed()) go to 900
+        call mallocate(ctx, n_max, lda, scratch)
+        if (dgl_failed(ctx)) go to 900
 !
 ! set the tolerance and compute a useful constant to compute rms norms:
 !
@@ -276,8 +247,8 @@ contains
 ! weather it is orthonormal.
 ! if evec is zero, create a random guess
 !
-        call check_guess(n, n_max, evec_1)
-        if (dgl_failed()) go to 900
+        call check_guess(ctx, n, n_max, evec_1)
+        if (dgl_failed(ctx)) go to 900
 !
 ! Move guess into the expansion spaces
 !
@@ -310,7 +281,7 @@ contains
 !
 ! print header
 !
-            if (verbose) write (6, 1030) current_side, tol, current_side
+            if (verbose_in) write (6, 1030) current_side, tol, current_side
 !
 ! main loop
 !
@@ -332,7 +303,6 @@ contains
                 end select
                 call get_time(t2)
                 t_mv = t_mv + t2 - t1
-                if (abs(shift) .gt. num_thresh) call daxpy(n*n_act, shift, space(1, i_beg), 1_ip, aspace(1, i_beg), 1_ip)
 
 !
 ! get the reduced matrix
@@ -367,8 +337,8 @@ contains
                 end select
                 call get_time(t2)
                 t_diag = t_diag + t2 - t1
-                if (info .ne. 0) call dgl_error("diagonalization of reduced space failed.", dgl_err_lapack)
-                if (dgl_failed()) go to 900
+                if (info .ne. 0) call dgl_error(ctx, "diagonalization of reduced space failed.", dgl_err_lapack)
+                if (dgl_failed(ctx)) go to 900
 !
 ! lapack does not sort the eigenvalues: sort all the ritz pairs by increasing real part,
 ! moving the ones with a non-negligible imaginary part after the real ones.
@@ -382,7 +352,7 @@ contains
                     if (abs(e_red_im(j)) .gt. tol_im) found_im = .true.
                 end do
 !
-                if (found_im .and. verbose) then
+                if (found_im .and. verbose_in) then
                     print *
                     call dgl_warning("==========================================")
                     call dgl_warning("Complex contribution in sought eigenvalues")
@@ -453,10 +423,10 @@ contains
 !
 ! print some information, with the roots in increasing order
 !
-                if (verbose) then
+                if (verbose_in) then
                     do k = 1, n_targ
                         i_eig = rank_slot(k)
-                        write (6, 1040) it, k, eig(i_eig) - shift, r_norm(:, i_eig), conv(i_eig)
+                        write (6, 1040) it, k, eig(i_eig) + shift, r_norm(:, i_eig), conv(i_eig)
                     end do
                     write (6, *)
                 end if
@@ -479,7 +449,7 @@ contains
 !
                 else
 !
-                    if (verbose) write (6, '(t7,a)') 'Restarting Davidson'
+                    if (verbose_in) write (6, '(t7,a)') 'Restarting Davidson'
                     n_act = n_max
 !
 ! put current eigenvectors into the first position of tne
@@ -502,8 +472,8 @@ contains
 ! orthogonalize non orthogonal eigenvectors and propagate
 ! to their application
 !
-                    call ortho(n, n_max, space, aspace)
-                    if (dgl_failed()) go to 900
+                    call ortho(ctx, n, n_max, space, aspace)
+                    if (dgl_failed(ctx)) go to 900
 !
 ! reconstruct first block of the reduced matrix
 !
@@ -534,7 +504,7 @@ contains
                 n_act = n_act_new
                 n_frozen = n_max - n_act
                 ind = n_max - n_act + 1
-                call precnd(n, n_act, shift - minval(eig(ind:n_max)), residuals(1, ind), space(1, i_beg))
+                call precnd(n, n_act, -minval(eig(ind:n_max)), residuals(1, ind), space(1, i_beg))
 !
 ! orthogonalize the new vectors to the existing ones of the respective other
 ! space and orthogonalize set of new vectors among each other
@@ -542,13 +512,13 @@ contains
 ! Gram-Schmit orthogonalization of residual to the respective subspace
 !
                 call get_time(t1)
-                call ortho_vs_x(n, ld_current, n_act, space, space(1, i_beg))
+                call ortho_vs_x(ctx, n, ld_current, n_act, space, space(1, i_beg))
                 call get_time(t2)
 !
                 t_ortho = t_ortho + t2 - t1
-                if (dgl_failed()) go to 900
+                if (dgl_failed(ctx)) go to 900
 !
-                if (verbose) write (6, 1050) n_targ, n_act, n_frozen
+                if (verbose_in) write (6, 1050) n_targ, n_act, n_frozen
 !
             end do
             ok = ok .and. run_ok
@@ -575,7 +545,7 @@ contains
 !
 ! if required, print timings
 !
-            if (verbose) then
+            if (verbose_in) then
                 print *
                 write (6, 1100) t_mv, t_diag, t_ortho, t_tot
                 print *
@@ -593,9 +563,9 @@ contains
 ! use evec_1 as guess for evec_2
 !
                     call dcopy(n*n_max, evec_1, 1_ip, evec_2, 1_ip)
-                    call ortho_cd(n, n_max, evec_2, yy, ok_ortho)
-                    if (.not. ok_ortho) call ortho(n, n_max, evec_2)
-                    if (dgl_failed()) go to 900
+                    call ortho_cd(ctx, n, n_max, evec_2, yy, ok_ortho)
+                    if (.not. ok_ortho) call ortho(ctx, n, n_max, evec_2)
+                    if (dgl_failed(ctx)) go to 900
                     call dcopy(n*n_max, evec_2, 1_ip, space, 1_ip)
 !
                     current_side = "L"
@@ -611,9 +581,16 @@ contains
                         print "(*(d10.2))", eig_r(:n_targ)
                         print "(*(d10.2))", eig(:n_targ)
                         print "(*(d10.2))", eig_r(:n_targ) - eig(:n_targ)
-                        call dgl_error("Eigenvalues in the consecutive computation of "// &
+                        call dgl_error(ctx, "Eigenvalues in the consecutive computation of "// &
                                        "right and left eigenpairs do not match.", dgl_err_mismatch)
                         go to 900
+                    end if
+!
+! biorthonormalize the converged left and right eigenvectors
+!
+                    if (ok) then
+                        call biortho_eigvecs(ctx, n, n_targ, evec_2, evec_1)
+                        if (dgl_failed(ctx)) go to 900
                     end if
 !
                 end if
@@ -621,40 +598,36 @@ contains
             end if
         end do
 !
-! return the eigenvalues of the unshifted problem
-!
-        eig = eig - shift
-!
 ! deallocate memory
 !
 900     continue
-        call mfree(work)
-        call mfree(space)
-        call mfree(aspace)
-        call mfree(residuals)
-        call mfree(r_norm)
-        call mfree(done)
-        call mfree(a_red)
-        call mfree(a_copy)
-        call mfree(e_red_re)
-        call mfree(e_red_im)
-        call mfree(evec_red)
-        call mfree(ovl_w)
-        call mfree(ovl)
-        call mfree(evec_temp)
-        call mfree(eig_temp)
-        call mfree(slot_cand)
-        call mfree(rank_slot)
-        call mfree(conv)
-        call mfree(scratch)
+        call mfree(ctx, work)
+        call mfree(ctx, space)
+        call mfree(ctx, aspace)
+        call mfree(ctx, residuals)
+        call mfree(ctx, r_norm)
+        call mfree(ctx, done)
+        call mfree(ctx, a_red)
+        call mfree(ctx, a_copy)
+        call mfree(ctx, e_red_re)
+        call mfree(ctx, e_red_im)
+        call mfree(ctx, evec_red)
+        call mfree(ctx, ovl_w)
+        call mfree(ctx, ovl)
+        call mfree(ctx, evec_temp)
+        call mfree(ctx, eig_temp)
+        call mfree(ctx, slot_cand)
+        call mfree(ctx, rank_slot)
+        call mfree(ctx, conv)
+        call mfree(ctx, scratch)
 !
-        call dgl_check_memleak()
+        call dgl_check_memleak(ctx)
 !
 ! report the error status (or stop, if dgl_info is not present)
 !
 999     continue
-        if (dgl_failed()) ok = .false.
-        call dgl_return_info(dgl_info)
+        if (dgl_failed(ctx)) ok = .false.
+        call dgl_return_info(ctx, dgl_info)
 !
 1100    format(t3, '  timings for non-symmetric Davidson (cpu/wall) : ', /, &
                t3, '  matrix-vector multiplications   : ', 2f12.4, /, &
@@ -677,7 +650,7 @@ contains
                t5, '----------------------------------------')
 !
 !
-    end subroutine davidson_nosym_driver
+    end subroutine dgl_davidson_nosym_driver
 
     subroutine follow_roots(n, ld, n_max, lda, space, x_old, evec_red, w_re, w_im, &
                             ovl_w, ovl, slot_cand, evec_temp, w_temp)
@@ -860,4 +833,4 @@ contains
 !
     end subroutine swap_eigenpairs
 
-end module mod_davidson_nosym_driver
+end submodule dgl_davidson_nosym

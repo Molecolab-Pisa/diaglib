@@ -161,6 +161,8 @@ if __name__ == "__main__":
             res = [residual(first, evec1[:, i], eig[i]) for i in range(N_TARG)]
             if side == "LR":
                 res += [residual(AR.T, evec2[:, i], eig[i]) for i in range(N_TARG)]
+                # biorthonormality error, added to the residuals
+                res.append(np.max(np.abs(evec2[:, :N_TARG].T @ evec1[:, :N_TARG] - np.eye(N_TARG))))
             check(f"non-symmetric Davidson ({side}), {kind}", ok, eig, ref_sym, res)
 
         eig, evec = guess(2 * N, random_guess)

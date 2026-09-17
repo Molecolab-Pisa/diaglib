@@ -16,6 +16,10 @@ program test_fortran
 !!    is restarted several times, also when computing the left eigenvectors after the right ones.
 !! 4. invalid input has to be reported through dgl_info, and values of dav_iter that are too
 !!    small or too large have to be handled.
+!! 5. DiagLib is called from inside a matrix-vector callback: the nested calls must not
+!!    interfere with the outer one.
+!! 6. all the drivers that use (b_)ortho_vs_x are run on a tridiagonal matrix, starting from
+!!    unit vectors, so that the preconditioned residuals are linearly dependent.
 !!
     use dgl_interface
     use direct_matvecs
@@ -95,6 +99,14 @@ program test_fortran
 !
     call test_input_errors()
     call test_dav_iter()
+!
+! 5. nested calls
+!
+    call test_nested()
+!
+! 6. linearly dependent preconditioned residuals
+!
+    call test_dependent_residuals()
 !
 ! close the output file:
 !
@@ -327,6 +339,7 @@ contains
             case ("LR")
                 same = compare_eigs(n, n_targ, eig, evec, trim(reference)//", Right")
                 same = compare_eigs(n, n_targ, eig, evec_2, trim(reference)//", Left") .and. same
+                same = check_biortho(n, n_targ, evec_2, evec) .and. same
             end select
             call dump_eigpairs(lutest, n, n_targ, eig, evec, trim(label))
         end if
@@ -450,6 +463,106 @@ contains
         call check_error("not enough memory", info, dgl_err_memory)
 !
     end subroutine test_input_errors
+!
+    subroutine test_dependent_residuals()
+!
+! the new vectors cannot all be orthonormalized: the dependent ones have to be replaced
+!
+        implicit none
+        integer(ip), parameter :: n_t = 200, n_targ_t = 2, n_max_t = 4
+        real(dp), parameter :: ref_std(n_targ_t) = [9.9004942533754781e-01_dp, 1.9999506574411643e+00_dp]
+        real(dp), parameter :: ref_gen(n_targ_t) = [9.9749058444760297e-01_dp, 1.9999999999999993e+00_dp]
+        real(dp) :: eig_t(n_max_t), evec_t(n_t, n_max_t), evec_t2(n_t, n_max_t)
+        procedure(dgl_matvec), pointer :: mx_tri_p
+        integer(ip) :: info, i_test, k
+        logical :: generalized
+        character(len=80) :: label
+!
+        mx_tri_p => mx_tri
+        do i_test = 1, 6
+            evec_t = zero
+            do k = 1, n_max_t
+                evec_t(k, k) = one
+            end do
+            evec_t2 = evec_t
+            generalized = i_test .eq. 2 .or. i_test .eq. 4
+            select case (i_test)
+            case (1)
+                label = "Davidson"
+                call dgl_davidson_driver(n_t, n_targ_t, n_max_t, ax_tri, dx_tri, eig_t, evec_t, ok, &
+                                         dgl_tol=1.0e-9_dp, dgl_info=info)
+            case (2)
+                label = "Generalized Davidson"
+                call dgl_davidson_driver(n_t, n_targ_t, n_max_t, ax_tri, dx_tri, eig_t, evec_t, ok, &
+                                         metvec=mx_tri_p, dgl_tol=1.0e-9_dp, dgl_info=info)
+            case (3)
+                label = "LOBPCG"
+                call dgl_lobpcg_driver(n_t, n_targ_t, n_max_t, ax_tri, dx_tri, eig_t, evec_t, ok, &
+                                       dgl_tol=1.0e-9_dp, dgl_info=info)
+            case (4)
+                label = "Generalized LOBPCG"
+                call dgl_lobpcg_driver(n_t, n_targ_t, n_max_t, ax_tri, dx_tri, eig_t, evec_t, ok, &
+                                       metvec=mx_tri_p, dgl_tol=1.0e-9_dp, dgl_info=info)
+            case (5)
+                label = "non-symmetric Davidson (R)"
+                call dgl_davidson_nosym_driver(n_t, n_targ_t, n_max_t, ax_tri, ax_tri, dx_tri, "R ", eig_t, &
+                                               evec_t, ok, dgl_tol=1.0e-9_dp, dgl_info=info)
+            case (6)
+                label = "non-symmetric Davidson (LR)"
+                call dgl_davidson_nosym_driver(n_t, n_targ_t, n_max_t, ax_tri, ax_tri, dx_tri, "LR", eig_t, &
+                                               evec_t, ok, evec_2=evec_t2, dgl_tol=1.0e-9_dp, dgl_info=info)
+            end select
+            label = trim(label)//", linearly dependent residuals"
+            if (generalized) then
+                call check_result(trim(label), ok, info, maxval(abs(eig_t(:n_targ_t) - ref_gen)) .lt. 1.0e-9_dp)
+            else
+                call check_result(trim(label), ok, info, maxval(abs(eig_t(:n_targ_t) - ref_std)) .lt. 1.0e-9_dp)
+            end if
+        end do
+    end subroutine test_dependent_residuals
+!
+    subroutine test_nested()
+!
+! generalized Davidson with a matvec that calls DiagLib itself
+!
+        implicit none
+        integer(ip) :: info
+        logical :: same
+!
+        write (6, f_string) 'testing Generalized Davidson, DiagLib called in the matvec:'
+        call init_eigenpairs(n, n_max, eig, evec, ok, .false.)
+        call dgl_davidson_driver(n, n_targ, n_max, ax_nested, dx, eig, evec, ok, metvec=mx_p, &
+                                 dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, dgl_tol=tol, &
+                                 dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+        same = .false.
+        if (ok .and. info .eq. dgl_success) same = compare_eigs(n, n_targ, eig, evec, "Symmetric Generalized")
+        write (6, "(t3,a,i0,a,i0)") "nested calls: ", nested_calls, ", failed: ", nested_failed
+        call check_result("Generalized Davidson, DiagLib called in the matvec", ok, info, &
+                          same .and. nested_calls .gt. 0 .and. nested_failed .eq. 0)
+    end subroutine test_nested
+!
+    logical function check_biortho(ld, m, v_l, v_r) result(passed)
+!
+! left and right eigenvectors have to be biorthonormal, with normalized right eigenvectors
+!
+        implicit none
+        integer(ip), intent(in) :: ld, m
+        real(dp), intent(in) :: v_l(ld, m), v_r(ld, m)
+        real(dp) :: err_bi, err_norm
+        integer(ip) :: i, j
+!
+        err_bi = zero
+        err_norm = zero
+        do j = 1, m
+            do i = 1, m
+                err_bi = max(err_bi, abs(dot_product(v_l(:, i), v_r(:, j)) - merge(one, zero, i .eq. j)))
+            end do
+            err_norm = max(err_norm, abs(norm2(v_r(:, j)) - one))
+        end do
+        write (6, "(t3,a,d8.2,a,d8.2)") "max biorthonormality error: ", err_bi, &
+            "   max norm error of the right vectors: ", err_norm
+        passed = err_bi .lt. 1.0e-10_dp .and. err_norm .lt. 1.0e-10_dp
+    end function check_biortho
 !
     subroutine check_error(label, info, expected)
         implicit none

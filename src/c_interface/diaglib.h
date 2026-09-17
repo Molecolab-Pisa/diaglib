@@ -49,7 +49,7 @@ extern void dgl_davidson_driver(
     double tol,
     dgl_int max_iter,
     dgl_int dav_iter,
-    double shift,
+    double shift,       /* only added to the printed eigenvalues */
     dgl_int memory,
     const char* memory_unit
 );
@@ -68,7 +68,7 @@ extern void dgl_lobpcg_driver(
     bool verbose,
     double tol,
     dgl_int max_iter,
-    double shift,
+    double shift,       /* only added to the printed eigenvalues */
     dgl_int memory,
     const char* memory_unit
 );
@@ -83,14 +83,15 @@ extern void dgl_davidson_nosym_driver(
     const char* side,
     double* eig,
     double* evec_1,
-    double* evec_2,     /* only used if side is "LR", may be NULL otherwise */
+    double* evec_2,     /* only used if side is "LR", may be NULL otherwise. if converged, the first
+                           n_targ left (evec_2) and right (evec_1) vectors are biorthonormal */
     bool* ok,
     dgl_int* info,
     bool verbose,
     double tol,
     dgl_int max_iter,
     dgl_int dav_iter,
-    double shift,
+    double shift,       /* only added to the printed eigenvalues */
     dgl_int memory,
     const char* memory_unit
 );

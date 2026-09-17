@@ -23,6 +23,12 @@ target_compile_options(diaglib_c PRIVATE ${DGL_Fortran_F2018} ${DGL_Fortran_OPTI
 # Link actual diaglib
 target_link_libraries(diaglib_c PRIVATE diaglib)
 
+# OpenMP makes the stored callbacks threadprivate, so that the drivers can be called
+# from different threads at the same time
+if(OpenMP_Fortran_FOUND)
+        target_link_libraries(diaglib_c PRIVATE OpenMP::OpenMP_Fortran)
+endif()
+
 # Let the installed library find libdiaglib in the same directory
 set_target_properties(diaglib_c PROPERTIES
         INSTALL_RPATH "$ORIGIN"

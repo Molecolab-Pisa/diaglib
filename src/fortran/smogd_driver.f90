@@ -1,154 +1,48 @@
-module mod_smogd_driver
+submodule(dgl_interface) dgl_smogd
     use dgl_global_utils
     use dgl_orthogonalizations, only: b_ortho, b_ortho_vs_x
     use dgl_minor_utils
-    use dgl_external_interfaces, only: smogd_matvec, smogd_precnd
 !
     implicit none
 !
 contains
 !
-    subroutine smogd_driver(n2, n_targ, n_max, apbmul, ambmul, &
-                            spdmul, smdmul, lrprec, eig, evec, ok, &
-                            dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                            dgl_memory, dgl_memory_unit, dgl_info)
-!!# Driver for the efficient solution to the Linear-Response CASSCF problem
-!! \begin{equation}
-!! \begin{bmatrix} \begin{pmatrix}
-!! A & B \\
-!! B & A
-!! \end{pmatrix}
-!! -
-!! \omega
-!! \begin{pmatrix}
-!! S & D \\
-!! -D & -S
-!! \end{pmatrix} \end{bmatrix}
-!! \begin{pmatrix}
-!! Y \\
-!! Z
-!! \end{pmatrix}
-!! =
-!! \begin{pmatrix}
-!! 0 \\
-!! 0
-!! \end{pmatrix},
-!! \label{eq:respeq}
-!! \end{equation}
-!!
-!! Where A, B, S are symmetric matrices and D is antysimmetric.
-!!
-!! If \(\begin{bmatrix} w, \begin{pmatrix} Y \\ Z \end{pmatrix} \end{bmatrix}\) are a solution,
-!! then \(\begin{bmatrix} -w, \begin{pmatrix} Z \\ Y \end{pmatrix} \end{bmatrix}\) is also a solution.
-!!
-!! Following J. Chem. Phys., 118, 522 (2003), we enforce this property in
-!! the iterative procedure by expanding the eigenvector as
-!!
-!! \begin{equation}
-!! \begin{pmatrix} Y \\ Z \end{pmatrix} =
-!! \begin{pmatrix} b^+ \\ b^+ \end{pmatrix} +
-!! \begin{pmatrix} b^- \\ -b^- \end{pmatrix}
-!! \end{equation}
-!!
-!! This routine performs the Swapped Metric-Orthogonal -- Generalized Davidsion,
-!! therefore solves the associate problem:
-!!
-!!\begin{equation}
-!! \begin{bmatrix}
-!! \begin{pmatrix}
-!! S & D \\
-!! -D & -S
-!! \end{pmatrix}
-!! -
-!! \frac{1}{\omega}
-!! \begin{pmatrix}
-!! A & B \\
-!! B & A
-!! \end{pmatrix}
-!! \end{bmatrix}
-!! \begin{pmatrix}
-!! Y \\
-!! Z
-!! \end{pmatrix}
-!! =
-!! \begin{pmatrix}
-!! 0 \\
-!! 0
-!! \end{pmatrix},
-!! \label{eq:respeq_smogd}
-!!\end{equation}
-!!
-!! using the casida matrix, which is symmetric and positive definite, as
-!! the metric. This allows us to use expansion vectors that are orthogonal
-!! with respect to the dot product defined by the metric, which in turn
-!! results in a Rayleigh-Ritz procedure that requires the solution of a
-!! symmetric standard eigenvalue problem
-!!
-!! \begin{equation}
-!! \begin{pmatrix}
-!! 0 & s^T \\
-!! s & 0
-!! \end{pmatrix}
-!! \begin{pmatrix}
-!! u^+ \\
-!! u^-
-!! \end{pmatrix}
-!! =
-!! \frac{1}{\omega}
-!! \begin{pmatrix}
-!! u^+ \\
-!! u^-
-!! \end{pmatrix},
-!! \label{eq:krylov}
-!! \end{equation}
-!!
-!! which can be reduced to a half-sized eigenvalue problem
-!!
-!! \(s^T s u^+ = \left(\frac{1}{\omega}\right)^2 u^+ \\
-!! u^- = \frac{1}{\omega} Su^+\)
-!!
-!! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
+    module subroutine dgl_smogd_driver(n2, n_targ, n_max, apbmul, ambmul, &
+                                       spdmul, smdmul, lrprec, eig, evec, ok, &
+                                       dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
+                                       dgl_memory, dgl_memory_unit, dgl_info)
+!
+! the arguments are documented in the interface, in dgl_interface.f90. They are repeated
+! here, instead of using "module procedure", so that all compilers check the calls to
+! the user-supplied routines.
+!
         implicit none
-        integer(ip), intent(in) :: n2
-!! Totals size of the generalized eigenvalue
-        integer(ip), intent(in) :: n_targ
-!! Number of required eigenpairs.
-        integer(ip), intent(in) :: n_max
-!! Maximum size of the search space. Should be >= n_targ.
-        real(dp), dimension(n_max), intent(inout) :: eig
-!! Computed eigenvalues
-        real(dp), dimension(n2, n_max), intent(inout) :: evec
-!! Computed eigenvectors. In input, it should contain a guess for the eigenvectors
+        integer(dgl_int), intent(in) :: n2
+        integer(dgl_int), intent(in) :: n_targ
+        integer(dgl_int), intent(in) :: n_max
+        real(dgl_real), dimension(n_max), intent(inout) :: eig
+        real(dgl_real), dimension(n2, n_max), intent(inout) :: evec
         logical, intent(inout) :: ok
-!! True if davidson converged
-        procedure(smogd_matvec) :: apbmul
-!! External subroutine that performs the matrix-vector multiplication with A+B
-        procedure(smogd_matvec) :: ambmul
-!! External subroutine that performs the matrix-vector multiplication with A-B
-        procedure(smogd_matvec) :: spdmul
-!! External subroutine that performs the matrix-vector multiplication with S+D
-        procedure(smogd_matvec) :: smdmul
-!! External subroutine that performs the matrix-vector multiplication with S-D
-        procedure(smogd_precnd) :: lrprec
-!! External subroutine that applies a preconditioner to both plus and minus vectors
+        procedure(dgl_matvec) :: apbmul
+        procedure(dgl_matvec) :: ambmul
+        procedure(dgl_matvec) :: spdmul
+        procedure(dgl_matvec) :: smdmul
+        procedure(dgl_smogd_precnd) :: lrprec
         logical, optional, intent(in) :: dgl_verbose
-!! Verbose mode. Default = .false.
-        integer(ip), optional, intent(in) :: dgl_dav_iter
-!! Maximum number of iterations before Davidson restart. Default = \(25\)
-        integer(ip), optional, intent(in) :: dgl_max_iter
-!! Maximum number of allowed iterations. Default = \(100\)
-        integer(ip), optional, intent(in) :: dgl_memory
-!! Maximum memory that DiagLib is allowed to use. Default = \(80\)MBs
+        integer(dgl_int), optional, intent(in) :: dgl_dav_iter
+        integer(dgl_int), optional, intent(in) :: dgl_max_iter
+        integer(dgl_int), optional, intent(in) :: dgl_memory
         character(len=2), optional, intent(in) :: dgl_memory_unit
-!! Unit of memory. Default = MBs
-        real(dp), optional, intent(in) :: dgl_tol
-!! Convergence threshold on residuals norms. Default = \(10^{-7}\)
-        integer(ip), optional, intent(out) :: dgl_info
-!! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
-!! If not present, DiagLib stops the program when an error occurs.
+        real(dgl_real), optional, intent(in) :: dgl_tol
+        integer(dgl_int), optional, intent(out) :: dgl_info
 !
 ! local variables:
 ! ================
+        type(dgl_context) :: ctx
+!! State of this call: memory bookkeeping, error status and verbosity
+        real(dp), allocatable :: work(:)
+        integer(ip) :: lwork, info
+        real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), t_mv(2), t_tot(2)
         logical :: verbose_in
         integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol
@@ -208,15 +102,14 @@ contains
 ! START EXECUTION
 ! ================
 !
-        call dgl_clear_error()
         ok = .false.
 !
 ! Stupidity checks
 !
-        if (mod(n2, 2_ip) .ne. 0) call dgl_error( &
+        if (mod(n2, 2_ip) .ne. 0) call dgl_error(ctx,  &
             "Size of the total problem is not even, something is really wrong with your input", dgl_err_input)
 !
-        if (4*n_max .ge. n2) call dgl_error( &
+        if (4*n_max .ge. n2) call dgl_error(ctx,  &
             "Requested more than half of the total number of eigenvalues: expansions space would break down!", &
             dgl_err_input)
 !
@@ -231,7 +124,7 @@ contains
 !
 ! check the input
 !
-        call dgl_check_input(n2, n_targ, n_max, max_iter, tol, memory)
+        call dgl_check_input(ctx, n2, n_targ, n_max, max_iter, tol, memory)
 !
 ! no expansion space smaller than dgl_min_dav_iter iterations is deemed acceptable
 !
@@ -240,7 +133,7 @@ contains
                                              "the minimum value is used instead")
             dav_iter = dgl_min_dav_iter
         end if
-        if (dgl_failed()) go to 999
+        if (dgl_failed(ctx)) go to 999
 !
 !
 ! compute the actual size of the expansion space, checking that
@@ -260,48 +153,52 @@ contains
 ! to later exstimate required memory in dgl_init
 !
         n_arrs = lda*6 + n_max*6
-        call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
+        call dgl_init(ctx, n, n_arrs, memory, memory_unit, verbose_in)
+        t_tot = zero
+        t_diag = zero
+        t_ortho = zero
+        t_mv = zero
 !
 ! start by allocating memory for the various lapack routines
 !
         lwork = get_mem_lapack(lda)
-        call mallocate(lwork, work)
+        call mallocate(ctx, lwork, work)
 !
 ! allocate memory for the expansion space, the corresponding
 ! matrix-multiplied vectors and the residual:
 !
-        call mallocate(n, lda, vp)
-        call mallocate(n, lda, vm)
-        call mallocate(n, lda, lvp)
-        call mallocate(n, lda, lvm)
-        call mallocate(n, lda, bvp)
-        call mallocate(n, lda, bvm)
-        call mallocate(n, n_max, rp)
-        call mallocate(n, n_max, rm)
+        call mallocate(ctx, n, lda, vp)
+        call mallocate(ctx, n, lda, vm)
+        call mallocate(ctx, n, lda, lvp)
+        call mallocate(ctx, n, lda, lvm)
+        call mallocate(ctx, n, lda, bvp)
+        call mallocate(ctx, n, lda, bvm)
+        call mallocate(ctx, n, n_max, rp)
+        call mallocate(ctx, n, n_max, rm)
 !
 ! allocate memory for convergence check
 !
-        call mallocate(n_max, done)
-        call mallocate(2_ip, n_max, r_norm)
+        call mallocate(ctx, n_max, done)
+        call mallocate(ctx, 2_ip, n_max, r_norm)
 !
 ! allocate memory for the reduced matrix and its eigenvalues:
 !
-        call mallocate(lda, lda, s_copy)
-        call mallocate(lda, lda, s_red_2)
-        call mallocate(lda, lda, s_red)
-        call mallocate(lda2, e_red)
+        call mallocate(ctx, lda, lda, s_copy)
+        call mallocate(ctx, lda, lda, s_red_2)
+        call mallocate(ctx, lda, lda, s_red)
+        call mallocate(ctx, lda2, e_red)
 !
 ! allocate memory for the plus and minus eigenvector components:
 !
-        call mallocate(lda, n_max, up)
-        call mallocate(lda, n_max, um)
-        call mallocate(n, n_max, eigp)
-        call mallocate(n, n_max, eigm)
-        call mallocate(n, n_max, bp)
-        call mallocate(n, n_max, bm)
+        call mallocate(ctx, lda, n_max, up)
+        call mallocate(ctx, lda, n_max, um)
+        call mallocate(ctx, n, n_max, eigp)
+        call mallocate(ctx, n, n_max, eigm)
+        call mallocate(ctx, n, n_max, bp)
+        call mallocate(ctx, n, n_max, bm)
 !
-        call mallocate(n_max, lda, scratch)
-        if (dgl_failed()) go to 900
+        call mallocate(ctx, n_max, lda, scratch)
+        if (dgl_failed(ctx)) go to 900
 !
 ! set the tolerances and compute a useful constant to compute rms norms:
 !
@@ -354,7 +251,7 @@ contains
                t5, '------------------------------------------------------------------')
 1040    format(t9, i4, 2x, i4, f24.12, 2d12.4, l3)
 !
-        if (verbose) write (6, 1030) tol
+        if (verbose_in) write (6, 1030) tol
 !
         do it = 1, max_iter
 !
@@ -374,8 +271,8 @@ contains
 !
             call get_time(t1)
 !
-            call b_ortho(n, n_act, vp(1, i_beg), lvp(1, i_beg))
-            call b_ortho(n, n_act, vm(1, i_beg), lvm(1, i_beg))
+            call b_ortho(ctx, n, n_act, vp(1, i_beg), lvp(1, i_beg))
+            call b_ortho(ctx, n, n_act, vm(1, i_beg), lvm(1, i_beg))
 !
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
@@ -407,8 +304,8 @@ contains
             call dsyev('v', 'u', ld_current, s_red_2, lda, e_red, work, lwork, info)
             call get_time(t2)
             t_diag = t_diag + t2 - t1
-            if (info .ne. 0) call dgl_error("diagonalization of the reduced matrix failed", dgl_err_lapack)
-            if (dgl_failed()) go to 900
+            if (info .ne. 0) call dgl_error(ctx, "diagonalization of the reduced matrix failed", dgl_err_lapack)
+            if (dgl_failed(ctx)) go to 900
 !
 ! extract the eigenvalues and compute the ritz approximation to the
 ! eigenvectors
@@ -469,7 +366,7 @@ contains
 !
 ! print some information:
 !
-            if (verbose) then
+            if (verbose_in) then
                 do i_eig = 1, n_targ
                     write (6, 1040) it, i_eig, one/eig(i_eig), r_norm(:, i_eig), done(i_eig)
                 end do
@@ -490,7 +387,7 @@ contains
 !
             else
 !
-                if (verbose) write (6, '(t7,a)') 'Restarting davidson.'
+                if (verbose_in) write (6, '(t7,a)') 'Restarting davidson.'
 !
 ! put current eigenvectors into the first position of the
 ! expansion space
@@ -500,8 +397,8 @@ contains
 !
                 lvp(:, :n_max) = bp
                 lvm(:, :n_max) = bm
-                call b_ortho(n, n_max, vp, lvp)
-                call b_ortho(n, n_max, vm, lvm)
+                call b_ortho(ctx, n, n_max, vp, lvp)
+                call b_ortho(ctx, n, n_max, vm, lvm)
 !
                 call dgemm('n', 'n', n, n_max, ld_current, one, bvp, n, um, lda, zero, bp, n)
                 call dgemm('n', 'n', n, n_max, ld_current, one, bvm, n, up, lda, zero, bm, n)
@@ -544,14 +441,14 @@ contains
 !
             call get_time(t1)
 !
-            call b_ortho_vs_x(n, ld_current, n_act, vp, lvp, vp(1, i_beg))
-            call b_ortho_vs_x(n, ld_current, n_act, vm, lvm, vm(1, i_beg))
+            call b_ortho_vs_x(ctx, n, ld_current, n_act, vp, lvp, vp(1, i_beg))
+            call b_ortho_vs_x(ctx, n, ld_current, n_act, vm, lvm, vm(1, i_beg))
 !
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
-            if (dgl_failed()) go to 900
+            if (dgl_failed(ctx)) go to 900
 !
-            if (verbose) write (6, 1050) n_targ, n_act, n_frozen
+            if (verbose_in) write (6, 1050) n_targ, n_act, n_frozen
 !
         end do
 !
@@ -568,38 +465,38 @@ contains
         call get_time(t1)
         t_tot = t1 - t_tot
 !
-        if (verbose) write (6, 1000) t_mv, t_diag, t_ortho, t_tot
+        if (verbose_in) write (6, 1000) t_mv, t_diag, t_ortho, t_tot
 !
-        call mfree(work)
-        call mfree(vp)
-        call mfree(vm)
-        call mfree(lvp)
-        call mfree(lvm)
-        call mfree(bvp)
-        call mfree(bvm)
-        call mfree(rp)
-        call mfree(rm)
-        call mfree(r_norm)
-        call mfree(done)
-        call mfree(s_copy)
-        call mfree(s_red_2)
-        call mfree(s_red)
-        call mfree(e_red)
-        call mfree(up)
-        call mfree(um)
-        call mfree(eigp)
-        call mfree(eigm)
-        call mfree(bp)
-        call mfree(bm)
-        call mfree(scratch)
+        call mfree(ctx, work)
+        call mfree(ctx, vp)
+        call mfree(ctx, vm)
+        call mfree(ctx, lvp)
+        call mfree(ctx, lvm)
+        call mfree(ctx, bvp)
+        call mfree(ctx, bvm)
+        call mfree(ctx, rp)
+        call mfree(ctx, rm)
+        call mfree(ctx, r_norm)
+        call mfree(ctx, done)
+        call mfree(ctx, s_copy)
+        call mfree(ctx, s_red_2)
+        call mfree(ctx, s_red)
+        call mfree(ctx, e_red)
+        call mfree(ctx, up)
+        call mfree(ctx, um)
+        call mfree(ctx, eigp)
+        call mfree(ctx, eigm)
+        call mfree(ctx, bp)
+        call mfree(ctx, bm)
+        call mfree(ctx, scratch)
 !
-        call dgl_check_memleak()
+        call dgl_check_memleak(ctx)
 !
 ! report the error status (or stop, if dgl_info is not present)
 !
 999     continue
-        if (dgl_failed()) ok = .false.
-        call dgl_return_info(dgl_info)
+        if (dgl_failed(ctx)) ok = .false.
+        call dgl_return_info(ctx, dgl_info)
 !
 1000    format(t3, 'timings for SMO-GD (cpu/wall):   ', /, &
                t3, '  matrix-vector multiplications: ', 2f12.4, /, &
@@ -614,6 +511,6 @@ contains
                t7, '# converged vectors: ', i4, /, &
                t5, '----------------------------------------')
 !
-    end subroutine smogd_driver
+    end subroutine dgl_smogd_driver
 
-end module mod_smogd_driver
+end submodule dgl_smogd

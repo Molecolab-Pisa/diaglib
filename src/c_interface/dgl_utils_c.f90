@@ -1,6 +1,7 @@
 module dgl_utils_c
     use dgl_interface
     use iso_c_binding
+    implicit none
 
     integer, parameter :: dp = dgl_real
     integer, parameter :: ip = dgl_int
@@ -17,6 +18,34 @@ module dgl_utils_c
     interface pointer_ok
         module procedure funptr_ok
         module procedure ptr_ok
+    end interface
+
+!
+! interfaces of the C routines supplied by the user, as declared in diaglib.h
+!
+    abstract interface
+        subroutine c_matvec(n, m, x, y) bind(C)
+            import :: c_ip, C_DOUBLE
+            integer(c_ip), intent(in) :: n, m
+            real(C_DOUBLE), intent(in) :: x(n, m)
+            real(C_DOUBLE), intent(inout) :: y(n, m)
+        end subroutine c_matvec
+!
+        subroutine c_precnd(n, m, shift, x, y) bind(C)
+            import :: c_ip, C_DOUBLE
+            integer(c_ip), intent(in) :: n, m
+            real(C_DOUBLE), intent(in) :: shift
+            real(C_DOUBLE), intent(in) :: x(n, m)
+            real(C_DOUBLE), intent(inout) :: y(n, m)
+        end subroutine c_precnd
+!
+        subroutine c_lrprec(n, m, fac, xp, xm, yp, ym) bind(C)
+            import :: c_ip, C_DOUBLE
+            integer(c_ip), intent(in) :: n, m
+            real(C_DOUBLE), intent(in) :: fac
+            real(C_DOUBLE), intent(in) :: xp(n, m), xm(n, m)
+            real(C_DOUBLE), intent(inout) :: yp(n, m), ym(n, m)
+        end subroutine c_lrprec
     end interface
 
 contains

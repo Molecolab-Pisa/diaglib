@@ -1,9 +1,14 @@
 module mod_davidson_nosym_driver_c
     use dgl_utils_c
     implicit none
-
-    ! Procedure pointer
-    procedure(), private, pointer :: matvec_r_ptr, matvec_l_ptr, precnd_ptr
+!
+! The C routines of the current call are stored in module variables, as the Fortran driver
+! calls them through the wrappers below. To allow calling the drivers from inside a callback,
+! they are saved at the beginning of each call and restored at the end; to allow calling the
+! drivers from different OpenMP threads at the same time, they are threadprivate.
+!
+    type(C_FUNPTR), private, save :: matvec_r_c = C_NULL_FUNPTR, matvec_l_c = C_NULL_FUNPTR, precnd_c = C_NULL_FUNPTR
+!$omp threadprivate(matvec_r_c, matvec_l_c, precnd_c)
 
 contains
 
@@ -36,83 +41,81 @@ contains
         logical :: verbose_f, ok_f
         integer(ip) :: info_f
         real(C_DOUBLE), pointer :: evec_2_f(:, :)
+        type(C_FUNPTR) :: saved_matvec_r, saved_matvec_l, saved_precnd
 !
         memory_unit_f = c_ptr_to_f_string(memory_unit)
         side_f = c_ptr_to_f_string(side)
+        verbose_f = verbose
 !
-!       ! Associate pointers
         ok = .false.
         info = dgl_err_input
         if (.not. pointer_ok(matvec_r, "matvec_r")) return
         if (.not. pointer_ok(matvec_l, "matvec_l")) return
         if (.not. pointer_ok(precnd, "precnd")) return
-        call c_f_procpointer(matvec_r, matvec_r_ptr)
-        call c_f_procpointer(matvec_l, matvec_l_ptr)
-        call c_f_procpointer(precnd, precnd_ptr)
-
-        verbose_f = verbose
-
-        ! Chiamata al driver
         if (trim(side_f) == "LR") then
             if (.not. pointer_ok(evec_2, "evec_2")) return
+        end if
+!
+        saved_matvec_r = matvec_r_c
+        saved_matvec_l = matvec_l_c
+        saved_precnd = precnd_c
+        matvec_r_c = matvec_r
+        matvec_l_c = matvec_l
+        precnd_c = precnd
+!
+        if (trim(side_f) == "LR") then
             call c_f_pointer(evec_2, evec_2_f, [n, n_max])
             call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
-                                           side_f, eig, evec_1, ok_f, &
-                                           evec_2=evec_2_f, &
-                                           dgl_info=info_f, &
-                                           dgl_verbose=verbose_f, &
-                                           dgl_max_iter=max_iter, &
-                                           dgl_dav_iter=dav_iter, &
-                                           dgl_shift=shift, &
-                                           dgl_tol=tol, &
-                                           dgl_memory=memory, &
-                                           dgl_memory_unit=memory_unit_f &
-                                           )
+                                           side_f, eig, evec_1, ok_f, evec_2=evec_2_f, &
+                                           dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                                           dgl_shift=shift, dgl_tol=tol, dgl_memory=memory, &
+                                           dgl_memory_unit=memory_unit_f, dgl_info=info_f)
         else
             call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
                                            side_f, eig, evec_1, ok_f, &
-                                           dgl_info=info_f, &
-                                           dgl_verbose=verbose_f, &
-                                           dgl_max_iter=max_iter, &
-                                           dgl_dav_iter=dav_iter, &
-                                           dgl_shift=shift, &
-                                           dgl_tol=tol, &
-                                           dgl_memory=memory, &
-                                           dgl_memory_unit=memory_unit_f &
-                                           )
+                                           dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                                           dgl_shift=shift, dgl_tol=tol, dgl_memory=memory, &
+                                           dgl_memory_unit=memory_unit_f, dgl_info=info_f)
         end if
-
+!
+        matvec_r_c = saved_matvec_r
+        matvec_l_c = saved_matvec_l
+        precnd_c = saved_precnd
+!
         ok = ok_f
         info = info_f
 
     end subroutine davidson_nosym_driver_c
 
-    subroutine matvec_l_wrapper(n, m, x, ax)
-        integer(ip), intent(in) :: n, m
-        real(dp), intent(in) :: x(n, m)
-        real(dp), intent(inout) :: ax(n, m)
-!
-        call matvec_l_ptr(n, m, x, ax)
-!
-    end subroutine
-
     subroutine matvec_r_wrapper(n, m, x, ax)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: x(n, m)
         real(dp), intent(inout) :: ax(n, m)
-!
-        call matvec_r_ptr(n, m, x, ax)
-!
-    end subroutine
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(matvec_r_c, f)
+        call f(n, m, x, ax)
+    end subroutine matvec_r_wrapper
+
+    subroutine matvec_l_wrapper(n, m, x, ax)
+        implicit none
+        integer(ip), intent(in) :: n, m
+        real(dp), intent(in) :: x(n, m)
+        real(dp), intent(inout) :: ax(n, m)
+        procedure(c_matvec), pointer :: f
+        call c_f_procpointer(matvec_l_c, f)
+        call f(n, m, x, ax)
+    end subroutine matvec_l_wrapper
 
     subroutine precnd_wrapper(n, m, shift, r, z)
+        implicit none
         integer(ip), intent(in) :: n, m
         real(dp), intent(in) :: shift
         real(dp), intent(in) :: r(n, m)
         real(dp), intent(inout) :: z(n, m)
-!
-        call precnd_ptr(n, m, shift, r, z)
-!
-    end subroutine
+        procedure(c_precnd), pointer :: f
+        call c_f_procpointer(precnd_c, f)
+        call f(n, m, shift, r, z)
+    end subroutine precnd_wrapper
 
 end module mod_davidson_nosym_driver_c

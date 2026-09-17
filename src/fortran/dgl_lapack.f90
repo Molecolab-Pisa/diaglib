@@ -4,7 +4,7 @@ module dgl_lapack
 ! BLAS/LAPACK library DiagLib is linked to: with these interfaces, the compiler checks that
 ! every call passes integers of the right kind (e.g., 1_ip and not 1), so that DiagLib
 ! does not need to change the default integer kind to be built with 64-bit integers.
-    use dgl_kinds, only: ip, dp
+    use dgl_interface, only: ip => dgl_int, dp => dgl_real
     implicit none
 !
     interface
@@ -30,6 +30,14 @@ module dgl_lapack
             integer(ip), intent(in) :: n, incx
             real(dp), intent(in) :: x(*)
         end function dnrm2
+!
+        subroutine dgemv(trans, m, n, alpha, a, lda, x, incx, beta, y, incy)
+            import :: ip, dp
+            character(len=1), intent(in) :: trans
+            integer(ip), intent(in) :: m, n, lda, incx, incy
+            real(dp), intent(in) :: alpha, beta, a(lda, *), x(*)
+            real(dp), intent(inout) :: y(*)
+        end subroutine dgemv
 !
         subroutine dgemm(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc)
             import :: ip, dp
