@@ -7,8 +7,15 @@ module dgl_orthogonalizations
 !
     real(dp), parameter, private :: tol_ortho = two*epsilon(one)
 !! Convergence thresholds for orthogonalizations
+    real(dp), parameter, private :: max_growth_cd = 1.0e10_dp
+!! Largest norm of the transformation applied in one iteration of the Cholesky-based
+!! orthonormalization: beyond it, the vectors are considered (numerically) linearly dependent,
+!! and the Gram-Schmidt fallback is used
+    integer(ip), parameter, private :: max_default_it = 3_ip
+!! Number of iterations of the default (Cholesky-based) route of orthonormalize_vs_x after
+!! which the Gram-Schmidt fallback is used
     real(dp), parameter, private :: keep_ratio = 0.5_dp
-!! In replace_dependent, a projection that keeps less than this fraction of the norm of a vector
+!! In gs_fallback, a projection that keeps less than this fraction of the norm of a vector
 !! is repeated
 !
 contains
@@ -209,13 +216,19 @@ contains
         return
     end subroutine diag_shift
 !
-    subroutine ortho_cd(ctx, n, m, u, growth, ok)
+    subroutine ortho_cd(ctx, n, m, u, growth, ok, max_growth, col_norms)
 !! Subroutine to orthogonalize \(m\) vectors of lenght \(n\)
 !! using the Cholesky factorization of their overlap.
 !! \[ u^Tu = \textbf{I} \]
 !! The metric is computed as \(metric = u^Tu \) and then by computing its cholesky
 !! decompositoin \( metric = LL^T \). The orthogonal vectors are obtained then
 !! by solving the triangular linear system \( u(ortho)L^T = u \).
+!!
+!! The metric is scaled by the norms of the vectors, which are the square roots of its diagonal
+!! elements, before it is factorized, and the scaling is applied to \(u\) together with the
+!! triangular factor: the result does not depend on the norms of the input vectors, and neither
+!! does the growth factor, which then only measures their conditioning. The norms are returned
+!! in col_norms, if present, so that the caller does not have to compute them.
 !!
 !! As cholesky decomposition is not the most stable way of orthogonalizing
 !! a set of vectors, the orthogonalization is refined iteratively.
@@ -226,7 +239,12 @@ contains
 !! to estimate the orthogonality error introduced by ortho_cd.
 !! While it is very unlikely to do so, this routine can fail.
 !! The status of this procedure is retured in orther to invoke
-!! more robust routines (QR or SVD) in case of failure.
+!! more robust routines in case of failure.
+!! If max_growth is present, the procedure also fails if the norm of the transformation of one
+!! iteration would be larger than max_growth, which means that the vectors are (numerically)
+!! linearly dependent: that transformation is not applied, so that u still spans the same space.
+!! Exactly dependent vectors also make the procedure fail, as the level-shifted iterations, which
+!! do not orthonormalize them, are never accepted.
 !
         implicit none
         type(dgl_context), intent(inout) :: ctx
@@ -242,20 +260,24 @@ contains
 !! Growth factor for the numerical error
         logical, intent(inout) :: ok
 !! Status of the procedure in output
+        real(dp), optional, intent(in) :: max_growth
+!! Maximum growth factor allowed
+        real(dp), optional, intent(out) :: col_norms(m)
+!! Norms of the vectors in input
 !
 ! local variables
 ! ===============
 !
-        integer(ip) :: it, it_micro
-        real(dp) :: error, alpha, unorm, shift
+        integer(ip) :: it, it_micro, i, j
+        real(dp) :: error, alpha, shift
         real(dp) :: rcond, l_norm, linv_norm
-        logical :: macro_done, micro_done
+        logical :: macro_done, micro_done, shifted
         integer(ip), parameter :: maxit = 10
 !
 ! local scratch
 ! =============
 !
-        real(dp), allocatable :: metric(:, :), msave(:, :)
+        real(dp), allocatable :: metric(:, :), msave(:, :), norms(:)
 !
 !
 ! get memory for the metric.
@@ -263,6 +285,7 @@ contains
         ok = .false.
         call mallocate(ctx, m, m, metric)
         call mallocate(ctx, m, m, msave)
+        call mallocate(ctx, m, norms)
         if (dgl_failed(ctx)) go to 100
 !
         metric = zero
@@ -280,6 +303,20 @@ contains
 !
             if (it .gt. maxit) go to 100
             call dgemm('t', 'n', m, m, n, one, u, n, u, n, zero, metric, m)
+!
+! norms of the vectors, and scaling of the metric. vectors that vanish (or contain NaN)
+! cannot be orthonormalized: return with an error status.
+!
+            do j = 1, m
+                norms(j) = sqrt(metric(j, j))
+            end do
+            if (it .eq. 1 .and. present(col_norms)) col_norms = norms
+            if (.not. all(norms .gt. zero)) go to 100
+            do j = 1, m
+                do i = 1, m
+                    metric(i, j) = metric(i, j)/(norms(i)*norms(j))
+                end do
+            end do
             msave = metric
 !
 ! compute the cholesky factorization of the metric.
@@ -288,10 +325,10 @@ contains
 !
 ! if dpotrf failed, try a second time, after level-shifting the diagonal of the metric.
 !
+            shifted = info .ne. 0
             if (info .ne. 0) then
 !
                 alpha = 100.0_dp
-                unorm = dnrm2(n*m, u, 1_ip)
                 it_micro = 0
                 micro_done = .false.
 !
@@ -305,7 +342,7 @@ contains
 !
                     if (it_micro .gt. maxit) go to 100
 !
-                    shift = max(epsilon(one)*alpha*unorm, tol_ortho)
+                    shift = max(epsilon(one)*alpha, tol_ortho)
                     metric = msave
                     call diag_shift(m, shift, metric)
                     call dpotrf('l', m, metric, m, info)
@@ -341,16 +378,26 @@ contains
 ! this error is saved in growth and used in ortho_vs_x to check how much
 ! ortho_cd spoiled the previously computed orthogonality to x.
 !
+            if (present(max_growth)) then
+                if (.not. linv_norm .le. max_growth) go to 100
+            end if
             growth = growth*linv_norm
 !
-! orthogonalize u by applying l^(-t)
+! orthogonalize u by applying (l^-1 d^-1)^t = d^-1 l^-t, where d holds the norms
 !
+            do j = 1, m
+                msave(:, j) = msave(:, j)/norms(j)
+            end do
             call dtrmm('r', 'l', 't', 'n', n, m, one, msave, m, u, n)
 !
 ! check the error:
 !
             error = epsilon(one)*rcond*rcond
-            macro_done = error .lt. tol_ortho
+!
+! an iteration that needed a level shift does not orthonormalize the vectors (e.g., zero
+! vectors stay zero): another one is always needed.
+!
+            macro_done = error .lt. tol_ortho .and. .not. shifted
         end do
 !
         ok = .true.
@@ -358,6 +405,7 @@ contains
 100     continue
         call mfree(ctx, metric)
         call mfree(ctx, msave)
+        call mfree(ctx, norms)
 !
     end subroutine ortho_cd
 !
@@ -472,11 +520,16 @@ contains
         return
     end function norm_est
 !
-    subroutine replace_dependent(ctx, n, m, k, x, bx, u)
-!* Orthonormalize the vectors \(u(n,k)\) one at a time with Gram-Schmidt, projecting each of
+    subroutine gs_fallback(ctx, n, m, k, x, bx, u)
+!* Fallback of the orthonormalization routines, used when the Cholesky-based orthonormalization
+! fails or would amplify the vectors too much (see max_growth), i.e., when the vectors are
+! (numerically) linearly dependent.
+!
+! Orthonormalize the vectors \(u(n,k)\) one at a time with Gram-Schmidt, projecting each of
 ! them against \(x(n,m)\), \( u_j = u_j - x (bx^Tu_j) \), and against the previous
 ! vectors of \(u\). The vectors that are numerically linearly dependent are replaced with random
 ! vectors, which are orthonormalized in the same way.
+! This is slower than the default route for long vectors, as it uses level-2 BLAS.
 !
 ! Linearly dependent vectors, e.g., preconditioned residuals that span fewer directions than
 ! their number, cannot be orthonormalized as a block: the orthonormalization amplifies the
@@ -568,12 +621,13 @@ contains
 100     continue
         call mfree(ctx, xu)
         call mfree(ctx, uu)
-    end subroutine replace_dependent
+    end subroutine gs_fallback
 !
     subroutine ortho_gs(ctx, n, k, u)
-!* Orthonormalize the vectors \(u(n,k)\) with Gram-Schmidt (see replace_dependent), replacing
-! the ones that are linearly dependent, or zero, with random vectors. Used for guess vectors
-! provided by the user, which can be incomplete (e.g., zero columns).
+!* Orthonormalize the vectors \(u(n,k)\), e.g., guess vectors provided by the user, which can be
+! incomplete (e.g., zero or repeated vectors). The Cholesky-based orthonormalization is used,
+! with the Gram-Schmidt fallback, which replaces the linearly dependent vectors with random
+! ones, if it fails.
         implicit none
         type(dgl_context), intent(inout) :: ctx
         integer(ip), intent(in) :: n
@@ -585,27 +639,15 @@ contains
 !
         real(dp) :: no_x(n, 0)
 !
-        call replace_dependent(ctx, n, 0_ip, k, no_x, no_x, u)
+        call orthonormalize_vs_x(ctx, n, 0_ip, k, no_x, no_x, u, "ortho_gs")
     end subroutine ortho_gs
 !
     subroutine ortho_vs_x(ctx, n, m, k, x, u)
+!* Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
+! is assumed to be orthonormal, orthogonalize \(u\) against \(x\), and orthonormalize \(u\).
+! See orthonormalize_vs_x.
         implicit none
         type(dgl_context), intent(inout) :: ctx
-!* Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
-! is assumed to be orthogonal, orthogonalize \(u\) against \(x\).
-!
-! If required, orthogonalize au to ax using the same linear
-! transformation, where ax and au are the results of the
-! application of a matrix \(a\) to both \(x\) and \(u\).
-!
-! Furthermore, orthonormalize \(u\) and, if required, apply the
-! same transformation to \(au\).
-!
-! This routine performs the \(u\) vs \(x\) orthogonalization and the
-! subsequent orthonormalization of \(u\) iteratively, until the
-! overlap between \(x\) and the orthogonalized \(u\) is smaller than
-! a (tight) threshold.
-!
         integer(ip), intent(in) :: n
 !! Lenght of the vectors
         integer(ip), intent(in) :: m
@@ -617,93 +659,15 @@ contains
         real(dp), dimension(n, k), intent(inout) :: u
 !! Vectors to orthogonalize
 !
-! local variables:
-! ================
-!
-        logical :: done, ok
-        integer(ip) :: it
-        real(dp) :: xu_norm, growth
-        real(dp), allocatable :: xu(:, :)
-!
-        integer(ip), parameter :: maxit = 10
-        logical, parameter :: useqr = .false.
-!
-! allocate space for the overlap between x and u.
-!
-        ok = .false.
-        call mallocate(ctx, m, k, xu)
-        if (dgl_failed(ctx)) go to 100
-        done = .false.
-        it = 0
-!
-! start by orthonormalizing u, one vector at a time, which also replaces the vectors that are
-! (numerically) linearly dependent with random vectors.
-!
-        call replace_dependent(ctx, n, m, k, x, x, u)
-        if (dgl_failed(ctx)) go to 100
-!
-! iteratively orthogonalize u against x, and then orthonormalize u.
-!
-        do while (.not. done)
-            it = it + 1
-!
-! u = u - x (x^t u)
-!
-            call dgemm('t', 'n', m, k, n, one, x, n, u, n, zero, xu, m)
-            call dgemm('n', 'n', n, k, m, -one, x, n, xu, m, one, u, n)
-!
-! now, orthonormalize u.
-!
-            if (.not. useqr) call ortho_cd(ctx, n, k, u, growth, ok)
-            if (.not. ok .or. useqr) call ortho(ctx, n, k, u)
-            if (dgl_failed(ctx)) go to 100
-!
-! the orthogonalization has introduced an error that makes the new
-! vector no longer fully orthogonal to x. assuming that u was
-! orthogonal to x to machine precision before, we estimate the
-! error with growth * eps, where growth is the product of the norms
-! of all the linear transformations applied to u.
-! if ortho_cd has failed, we just compute the overlap and its norm.
-!
-            if (.not. ok .or. useqr) then
-                call dgemm('t', 'n', m, k, n, one, x, n, u, n, zero, xu, m)
-                xu_norm = dnrm2(m*k, xu, 1_ip)
-            else
-                xu_norm = growth*epsilon(one)
-            end if
-            if (ieee_is_nan(xu_norm)) then
-                call dgl_error(ctx, 'ortho_vs_x: the orthogonalization produced NaN.', dgl_err_ortho)
-                go to 100
-            end if
-            done = xu_norm .lt. tol_ortho
-!
-! if things went really wrong, abort.
-!
-            if (it .gt. maxit) then
-                call dgl_error(ctx, 'catastrophic failure of ortho_vs_x', dgl_err_ortho)
-                go to 100
-            end if
-        end do
-!
-100     continue
-        call mfree(ctx, xu)
-!
-        return
+        call orthonormalize_vs_x(ctx, n, m, k, x, x, u, "ortho_vs_x")
     end subroutine ortho_vs_x
 !
     subroutine b_ortho_vs_x(ctx, n, m, k, x, bx, u)
 !*  Given two sets \(x(n,m)\) and \(u(n,k)\) of vectors, where \(x\)
-! is assumed to be orthogonal, B-orthogonalize \(u\) against \(x\).
-! furthermore, orthonormalize \(u\).
-!
-! This routine performs the \(u\) vs \(x\) orthogonalization and the
-! subsequent orthonormalization of \(u\) iteratively, until the
-! overlap between \(x\) and the orthogonalized \(u\) is smaller than
-! a (tight) threshold.
-!
+! is assumed to be B-orthonormal, B-orthogonalize \(u\) against \(x\), and orthonormalize \(u\).
+! See orthonormalize_vs_x.
         implicit none
         type(dgl_context), intent(inout) :: ctx
-!
         integer(ip), intent(in) :: n
 !! Lenght of the vectors
         integer(ip), intent(in) :: m
@@ -717,77 +681,136 @@ contains
         real(dp), dimension(n, k), intent(inout) :: u
 !! Vectors to orthogonalize
 !
+        call orthonormalize_vs_x(ctx, n, m, k, x, bx, u, "b_ortho_vs_x")
+    end subroutine b_ortho_vs_x
+!
+    subroutine orthonormalize_vs_x(ctx, n, m, k, x, bx, u, caller)
+!* Orthogonalize \(u(n,k)\) against \(x(n,m)\), \( u = u - x (bx^Tu) \), and orthonormalize \(u\),
+! iteratively, until the overlap between \(x\) and the orthonormalized \(u\) is smaller than a
+! (tight) threshold. With \(m = 0\), just orthonormalize \(u\).
+!
+! The vectors are first orthonormalized (ortho_cd), which makes them stay nearly orthonormal
+! after the projection, so that a single projection is usually enough.
+! Each iteration then projects \(u\) against \(x\) (level-3 BLAS) and orthonormalizes it again
+! with ortho_cd, which also returns the norms the vectors had after the projection.
+! The orthogonality error with respect to \(x\) is estimated as machine precision times the
+! growth factor, i.e., the norm of the transformation applied to \(u\) after the projection:
+! the inverse of the norms of the projected vectors, times the growth factor of ortho_cd.
+!
+! If the vectors are (numerically) linearly dependent, the gram-schmidt fallback (gs_fallback)
+! is used, which also replaces the dependent vectors with random vectors. This happens if:
+! - a vector vanishes after the projection;
+! - ortho_cd fails, e.g., because one of its transformations, which only depend on the
+!   conditioning of the normalized vectors, has a norm larger than max_growth_cd;
+! - the projection leaves nothing but round-off of a vector, i.e., the vector is linearly
+!   dependent on \(x\);
+! - the default route does not converge within max_default_it iterations.
+!
+        implicit none
+        type(dgl_context), intent(inout) :: ctx
+!
+        integer(ip), intent(in) :: n
+!! Lenght of the vectors
+        integer(ip), intent(in) :: m
+!! Number of reference vectors
+        integer(ip), intent(in) :: k
+!! Number of vectors to orthogonalize
+        real(dp), dimension(n, m), intent(in) :: x
+!! Reference vectors
+        real(dp), dimension(n, m), intent(in) :: bx
+!! \(x\), or the application of an external \(B\) matrix to \(x\)
+        real(dp), dimension(n, k), intent(inout) :: u
+!! Vectors to orthogonalize
+        character(len=*), intent(in) :: caller
+!! Name of the calling routine, for error messages
+!
 ! local variables:
 ! ================
 !
-        logical :: done, ok
+        logical :: done, ok, fallback, used_fallback
         integer(ip) :: it
-        real(dp) :: xu_norm, growth
-        real(dp), allocatable :: xu(:, :)
+        real(dp) :: growth, cd_growth
+        real(dp), allocatable :: xu(:, :), norm_old(:), norm_new(:)
 !
         integer(ip), parameter :: maxit = 10
-        logical, parameter :: useqr = .false.
 !
-! allocate space for the overlap between x and u.
-!
-        ok = .false.
         call mallocate(ctx, m, k, xu)
+        call mallocate(ctx, k, norm_old)
+        call mallocate(ctx, k, norm_new)
         if (dgl_failed(ctx)) go to 100
-        done = .false.
+!
+! orthonormalize the vectors: after the projection, they then stay nearly orthonormal, and
+! one projection is usually enough. ortho_cd also returns the norms of the vectors in input.
+!
+        call ortho_cd(ctx, n, k, u, cd_growth, ok, max_growth_cd, norm_old)
+        if (.not. ok) call gs_fallback(ctx, n, m, k, x, bx, u)
+        if (dgl_failed(ctx)) go to 100
+        norm_old = one
+        done = m .eq. 0
         it = 0
-!
-! start by orthonormalizing u, one vector at a time, which also replaces the vectors that are
-! (numerically) linearly dependent with random vectors.
-!
-        call replace_dependent(ctx, n, m, k, x, bx, u)
-        if (dgl_failed(ctx)) go to 100
-!
-! iteratively orthogonalize u against x, and then orthonormalize u.
+        used_fallback = .false.
 !
         do while (.not. done)
             it = it + 1
+!
+! if things went really wrong, abort.
+!
+            if (it .gt. maxit) then
+                call dgl_error(ctx, 'catastrophic failure of '//caller, dgl_err_ortho)
+                go to 100
+            end if
 !
 ! u = u - x (bx^t u)
 !
             call dgemm('t', 'n', m, k, n, one, bx, n, u, n, zero, xu, m)
             call dgemm('n', 'n', n, k, m, -one, x, n, xu, m, one, u, n)
 !
-! now, orthonormalize u.
+! orthonormalize the projected vectors: the norms they had before being orthonormalized,
+! returned in norm_new, are needed to estimate the orthogonality error, and to detect the
+! vectors that are linearly dependent on x
 !
-            if (.not. useqr) call ortho_cd(ctx, n, k, u, growth, ok)
-            if (.not. ok .or. useqr) call ortho(ctx, n, k, u)
+            call ortho_cd(ctx, n, k, u, cd_growth, ok, max_growth_cd, norm_new)
             if (dgl_failed(ctx)) go to 100
+            fallback = .not. ok
+            if (ok) fallback = any(norm_new .le. real(m + k, dp)*epsilon(one)*norm_old)
 !
-! compute the overlap between the orthonormalized u and x and decide
-! whether the orthogonalization procedure converged.
+! the vectors are (numerically) linearly dependent: use the gram-schmidt fallback, which
+! returns orthonormal vectors, and check the result in the next iteration.
 !
-! note that, if we use ortho_cd, we estimate the norm of the overlap
-! using the growth factor returned in growth.
-! see ortho_vs_x for more information.
-!
-            if (.not. ok .or. useqr) then
-                call dgemm('t', 'n', m, k, n, one, bx, n, u, n, zero, xu, m)
-                xu_norm = dnrm2(m*k, xu, 1_ip)
-            else
-                xu_norm = growth*epsilon(one)
+            if (fallback) then
+                call gs_fallback(ctx, n, m, k, x, bx, u)
+                if (dgl_failed(ctx)) go to 100
+                used_fallback = .true.
+                cycle
             end if
-            if (ieee_is_nan(xu_norm)) then
-                call dgl_error(ctx, 'b_ortho_vs_x: the orthogonalization produced NaN.', dgl_err_ortho)
+!
+! the orthonormalization has introduced an error that makes the new vectors no longer fully
+! orthogonal to x. assuming that u was orthogonal to x to machine precision after the
+! projection, the error is estimated as growth * eps, where growth accounts for the scaling of
+! the projected vectors and for the transformations applied by ortho_cd.
+!
+            growth = cd_growth*maxval(norm_old/norm_new)
+            if (ieee_is_nan(growth)) then
+                call dgl_error(ctx, caller//': the orthogonalization produced NaN.', dgl_err_ortho)
                 go to 100
             end if
-            done = xu_norm .lt. tol_ortho
+            done = growth*epsilon(one) .lt. tol_ortho
 !
-! if things went really wrong, abort.
+! the default route is not converging: the vectors are (numerically) linearly dependent,
+! even if the checks above did not detect it (e.g., with a B-metric, where the projector is
+! not orthogonal and the norm of a dependent vector does not vanish).
 !
-            if (it .gt. maxit) then
-                call dgl_error(ctx, 'catastrophic failure of b_ortho_vs_x', dgl_err_ortho)
-                go to 100
+            if (.not. done .and. it .ge. max_default_it .and. .not. used_fallback) then
+                call gs_fallback(ctx, n, m, k, x, bx, u)
+                if (dgl_failed(ctx)) go to 100
+                used_fallback = .true.
             end if
         end do
 !
 100     continue
         call mfree(ctx, xu)
-!
-    end subroutine b_ortho_vs_x
+        call mfree(ctx, norm_old)
+        call mfree(ctx, norm_new)
+    end subroutine orthonormalize_vs_x
 
 end module dgl_orthogonalizations
