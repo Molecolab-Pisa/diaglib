@@ -1,7 +1,7 @@
 module dgl_minor_utils
 !* Module containing few utilities
     use dgl_global_utils
-    use dgl_orthogonalizations, only: ortho_cd, ortho
+    use dgl_orthogonalizations, only: ortho_gs
     implicit none
 !
     interface prtmat
@@ -21,8 +21,7 @@ contains
         real(dp), dimension(n, m), intent(inout) :: evec
 !
         integer(ip) :: i, j
-        real(dp) :: fac, diag_norm, out_norm, growth
-        logical :: ok
+        real(dp) :: fac, diag_norm, out_norm
 !
         real(dp), allocatable :: overlap(:, :)
 !
@@ -34,8 +33,8 @@ contains
 ! no luck. make a random guess, then orthonormalize it.
 !
             call random_number(evec)
-            call ortho_cd(ctx, n, m, evec, growth, ok)
-            if (.not. ok) call ortho(ctx, n, m, evec)
+            evec = evec - 0.5_dp
+            call ortho_gs(ctx, n, m, evec)
         else
 !
 ! compute the overlap and check that the vectors are orthonormal.
@@ -57,10 +56,10 @@ contains
                 if (abs(diag_norm - one) .gt. num_thresh .or. &
                     out_norm .gt. num_thresh) then
 !
-! orthogonalize the guess:
+! orthonormalize the guess. zero or linearly dependent vectors (e.g., when a guess is given
+! only for some of the vectors) are replaced with random ones.
 !
-                    call ortho_cd(ctx, n, m, evec, growth, ok)
-                    if (.not. ok) call ortho(ctx, n, m, evec)
+                    call ortho_gs(ctx, n, m, evec)
                 end if
             end if
 !

@@ -9,7 +9,7 @@ module dgl_orthogonalizations
 !! Convergence thresholds for orthogonalizations
     real(dp), parameter, private :: keep_ratio = 0.5_dp
 !! In replace_dependent, a projection that keeps less than this fraction of the norm of a vector
-!! is repeated; if also the second one does, the vector is considered linearly dependent
+!! is repeated
 !
 contains
 !
@@ -113,6 +113,8 @@ contains
         if (dgl_failed(ctx)) go to 100
 !
         call dgemm('t', 'n', m, m, n, one, u, n, bu, n, zero, metric, m)
+        call dgl_check_finite(ctx, m, metric, m)
+        if (dgl_failed(ctx)) go to 100
 !
         if (use_svd) then
 !
@@ -479,12 +481,14 @@ contains
 ! Linearly dependent vectors, e.g., preconditioned residuals that span fewer directions than
 ! their number, cannot be orthonormalized as a block: the orthonormalization amplifies the
 ! round-off noise, which then is no longer orthogonal to \(x\).
-! A vector is found to be dependent with the "twice is enough" criterion (Kahan, Parlett):
-! if the projection removes most of its norm, the projection is repeated, and if the second
-! one also removes most of what was left, what was left was only round-off noise.
-! This does not depend on how small the independent part of a vector is, as long as it is
-! not round-off noise: small but genuine components, which can speed up the convergence,
-! are kept.
+! As in the "twice is enough" algorithm (Kahan, Parlett), if the projection removes most of the
+! norm of a vector, the projection is repeated, which makes the result orthogonal to the other
+! vectors up to round-off errors of the order of machine precision times its norm before the
+! second projection. The vector is linearly dependent only if the second projection leaves
+! nothing but such errors.
+! Even very small parts of a vector that survive the second projection are kept: they are
+! mostly made of the round-off errors of the first projection, which are distributed like the
+! entries of the original vector, and are more useful to expand the space than a random vector.
 !
         implicit none
         type(dgl_context), intent(inout) :: ctx
@@ -535,10 +539,13 @@ contains
                             call dgemv('n', n, j - 1, -one, u, n, uu, 1_ip, one, u(1, j), 1_ip)
                         end if
                         u_norm = dnrm2(n, u(1, j), 1_ip)
-                        if (u_norm .gt. zero .and. u_norm .ge. keep_ratio*prev_norm) then
-                            accepted = .true.
-                            exit
+                        if (pass .eq. 1) then
+                            accepted = u_norm .ge. keep_ratio*prev_norm
+                        else
+                            accepted = u_norm .gt. real(m + j, dp)*epsilon(one)*prev_norm
                         end if
+                        if (accepted .and. u_norm .gt. zero) exit
+                        accepted = .false.
                         prev_norm = u_norm
                     end do
                 end if
@@ -562,6 +569,24 @@ contains
         call mfree(ctx, xu)
         call mfree(ctx, uu)
     end subroutine replace_dependent
+!
+    subroutine ortho_gs(ctx, n, k, u)
+!* Orthonormalize the vectors \(u(n,k)\) with Gram-Schmidt (see replace_dependent), replacing
+! the ones that are linearly dependent, or zero, with random vectors. Used for guess vectors
+! provided by the user, which can be incomplete (e.g., zero columns).
+        implicit none
+        type(dgl_context), intent(inout) :: ctx
+        integer(ip), intent(in) :: n
+!! Lenght of the vectors
+        integer(ip), intent(in) :: k
+!! Number of vectors
+        real(dp), dimension(n, k), intent(inout) :: u
+!! Vectors to orthonormalize
+!
+        real(dp) :: no_x(n, 0)
+!
+        call replace_dependent(ctx, n, 0_ip, k, no_x, no_x, u)
+    end subroutine ortho_gs
 !
     subroutine ortho_vs_x(ctx, n, m, k, x, u)
         implicit none

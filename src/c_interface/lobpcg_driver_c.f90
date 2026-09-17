@@ -13,7 +13,7 @@ module mod_lobpcg_driver_c
 contains
 
     subroutine lobpcg_driver_c(n, n_targ, n_max, matvec, precnd, metvec, eig, evec, ok, info, &
-                               verbose, tol, max_iter, shift, memory, memory_unit) &
+                               verbose, tol, max_iter, shift, precnd_shift, memory, memory_unit) &
         bind(C, name="dgl_lobpcg_driver")
         implicit none
 
@@ -21,7 +21,7 @@ contains
         integer(c_ip), value, intent(in) :: n, n_targ, n_max
         integer(c_ip), value, intent(in) :: max_iter
         integer(c_ip), value, intent(in) :: memory
-        logical(C_BOOL), value, intent(in) :: verbose
+        logical(C_BOOL), value, intent(in) :: verbose, precnd_shift
         real(C_DOUBLE), value, intent(in) :: tol, shift
         type(C_PTR), value, intent(in) :: memory_unit
         type(C_FUNPTR), value :: matvec, precnd, metvec
@@ -34,13 +34,14 @@ contains
         character(len=2) :: memory_unit_f
 !! fixed length, as required by the Fortran drivers: shorter strings
 !! are blank padded, longer ones truncated, NULL gives the default unit
-        logical :: verbose_f, ok_f
+        logical :: verbose_f, ok_f, precnd_shift_f
         integer(ip) :: info_f
         type(C_FUNPTR) :: saved_matvec, saved_precnd, saved_metvec
         procedure(dgl_matvec), pointer :: metvec_p
 !
         memory_unit_f = c_ptr_to_f_string(memory_unit)
         verbose_f = verbose
+        precnd_shift_f = precnd_shift
 !
         ok = .false.
         info = dgl_err_input
@@ -59,12 +60,12 @@ contains
             call dgl_lobpcg_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, eig, evec, ok_f, &
                                    dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_shift=shift, &
                                    dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit_f, &
-                                   metvec=metvec_p, dgl_info=info_f)
+                                   metvec=metvec_p, dgl_info=info_f, dgl_precnd_shift=precnd_shift_f)
         else
             call dgl_lobpcg_driver(n, n_targ, n_max, matvec_wrapper, precnd_wrapper, eig, evec, ok_f, &
                                    dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_shift=shift, &
                                    dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit_f, &
-                                   dgl_info=info_f)
+                                   dgl_info=info_f, dgl_precnd_shift=precnd_shift_f)
         end if
 !
         matvec_c = saved_matvec

@@ -59,7 +59,8 @@ module dgl_interface
             integer(dgl_int), intent(in) :: m
 !! Number of vectors
             real(dgl_real), intent(in) :: shift
-!! Shift for the preconditioner: minus the current approximation to the eigenvalue
+!! Shift for the preconditioner: minus the lowest non-converged approximate eigenvalue,
+!! or zero (see the dgl_precnd_shift argument of the drivers)
             real(dgl_real), dimension(n, m), intent(in) :: x
 !! Input vectors
             real(dgl_real), dimension(n, m), intent(inout) :: y
@@ -92,7 +93,7 @@ module dgl_interface
     interface
         module subroutine dgl_davidson_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
                                    dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                                   dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
+                                   dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info, dgl_precnd_shift)
 !! # Driver for Davidson-Liu symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -137,11 +138,14 @@ module dgl_interface
             integer(dgl_int), optional, intent(out) :: dgl_info
 !! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
 !! If not present, DiagLib stops the program when an error occurs.
+            logical, optional, intent(in) :: dgl_precnd_shift
+!! If true, the shift passed to precnd is minus the lowest non-converged eigenvalue, as in
+!! Davidson's method; if false, the shift is zero. Default = .true.
         end subroutine dgl_davidson_driver
 
         module subroutine dgl_lobpcg_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
                                  dgl_verbose, dgl_max_iter, dgl_tol, &
-                                 dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
+                                 dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info, dgl_precnd_shift)
 !! # Driver for LOBPCG symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -184,12 +188,17 @@ module dgl_interface
             integer(dgl_int), optional, intent(out) :: dgl_info
 !! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
 !! If not present, DiagLib stops the program when an error occurs.
+            logical, optional, intent(in) :: dgl_precnd_shift
+!! If true, the shift passed to precnd is minus the lowest non-converged eigenvalue; if false,
+!! the shift is zero. LOBPCG works best with a positive definite preconditioner that stays well
+!! conditioned (e.g., an approximation of the inverse of the matrix), which a preconditioner
+!! shifted by an approximate eigenvalue is not. Default = .false.
         end subroutine dgl_lobpcg_driver
 
         module subroutine dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
                                          eig, evec_1, ok, evec_2, &
                                          dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                                         dgl_shift, dgl_memory, dgl_memory_unit, dgl_info)
+                                         dgl_shift, dgl_memory, dgl_memory_unit, dgl_info, dgl_precnd_shift)
 !! # Driver for Davidson-Liu non-symmetric diagonalization
 !! Non-symmetric davidson diagonalization is commonly encountered in EOM-CC theory.
 !! This driver can eveluate both Left and Right eigenvectors.
@@ -255,6 +264,9 @@ module dgl_interface
             integer(dgl_int), optional, intent(out) :: dgl_info
 !! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
 !! If not present, DiagLib stops the program when an error occurs.
+            logical, optional, intent(in) :: dgl_precnd_shift
+!! If true, the shift passed to precnd is minus the lowest non-converged eigenvalue, as in
+!! Davidson's method; if false, the shift is zero. Default = .true.
         end subroutine dgl_davidson_nosym_driver
 
         module subroutine dgl_smogd_driver(n2, n_targ, n_max, apbmul, ambmul, &

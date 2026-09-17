@@ -31,7 +31,7 @@ int main() {
   bool ok = false;
   dgl_int info = 0;
   dgl_davidson_driver(n, n_targ, n_max, matvec, precnd, nullptr, eig.data(), evec.data(), &ok, &info,
-                      false, 1e-8, 100, 25, 0.0, 10, "MB");
+                      false, 1e-8, 100, 25, 0.0, true, 10, "MB");
   // reference value computed with LAPACK
   const bool pass = ok && info == DGL_SUCCESS && std::fabs(eig[0] - 1.86940073) < 1e-7;
   std::printf("C++ test: ok=%d info=%ld eig=%.8f -> %s\n", ok, static_cast<long>(info), eig[0], pass ? "PASSED" : "FAILED");

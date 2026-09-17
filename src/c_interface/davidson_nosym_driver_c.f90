@@ -15,7 +15,7 @@ contains
     subroutine davidson_nosym_driver_c(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
                                        eig, evec_1, evec_2, ok, info, &
                                        verbose, tol, max_iter, dav_iter, &
-                                       shift, memory, memory_unit) &
+                                       shift, precnd_shift, memory, memory_unit) &
         bind(C, name="dgl_davidson_nosym_driver")
         implicit none
 
@@ -23,7 +23,7 @@ contains
         integer(c_ip), value, intent(in) :: n, n_targ, n_max
         integer(c_ip), value, intent(in) :: max_iter, dav_iter
         integer(c_ip), value, intent(in) :: memory
-        logical(C_BOOL), value, intent(in) :: verbose
+        logical(C_BOOL), value, intent(in) :: verbose, precnd_shift
         real(C_DOUBLE), value, intent(in) :: tol, shift
         type(C_PTR), value, intent(in) :: memory_unit, side
         type(C_PTR), value, intent(in) :: evec_2
@@ -38,7 +38,7 @@ contains
         character(len=2) :: memory_unit_f, side_f
 !! fixed length, as required by the Fortran driver: shorter strings
 !! are blank padded, longer ones truncated, NULL gives the default unit
-        logical :: verbose_f, ok_f
+        logical :: verbose_f, ok_f, precnd_shift_f
         integer(ip) :: info_f
         real(C_DOUBLE), pointer :: evec_2_f(:, :)
         type(C_FUNPTR) :: saved_matvec_r, saved_matvec_l, saved_precnd
@@ -46,6 +46,7 @@ contains
         memory_unit_f = c_ptr_to_f_string(memory_unit)
         side_f = c_ptr_to_f_string(side)
         verbose_f = verbose
+        precnd_shift_f = precnd_shift
 !
         ok = .false.
         info = dgl_err_input
@@ -69,13 +70,15 @@ contains
                                            side_f, eig, evec_1, ok_f, evec_2=evec_2_f, &
                                            dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
                                            dgl_shift=shift, dgl_tol=tol, dgl_memory=memory, &
-                                           dgl_memory_unit=memory_unit_f, dgl_info=info_f)
+                                           dgl_memory_unit=memory_unit_f, dgl_info=info_f, &
+                                           dgl_precnd_shift=precnd_shift_f)
         else
             call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
                                            side_f, eig, evec_1, ok_f, &
                                            dgl_verbose=verbose_f, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
                                            dgl_shift=shift, dgl_tol=tol, dgl_memory=memory, &
-                                           dgl_memory_unit=memory_unit_f, dgl_info=info_f)
+                                           dgl_memory_unit=memory_unit_f, dgl_info=info_f, &
+                                           dgl_precnd_shift=precnd_shift_f)
         end if
 !
         matvec_r_c = saved_matvec_r

@@ -9,7 +9,7 @@ contains
 !
     module subroutine dgl_lobpcg_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
                                         dgl_verbose, dgl_max_iter, dgl_tol, &
-                                        dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
+                                        dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info, dgl_precnd_shift)
 !
 ! the arguments are documented in the interface, in dgl_interface.f90. They are repeated
 ! here, instead of using "module procedure", so that all compilers check the calls to
@@ -32,6 +32,7 @@ contains
         real(dgl_real), optional, intent(in) :: dgl_shift
         procedure(dgl_matvec), pointer, optional :: metvec
         integer(dgl_int), optional, intent(out) :: dgl_info
+        logical, optional, intent(in) :: dgl_precnd_shift
 !
 ! local variables:
 ! ================
@@ -40,7 +41,7 @@ contains
         real(dp), allocatable :: work(:)
         integer(ip) :: lwork, info
         real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), t_mv(2), t_tot(2)
-        logical :: verbose_in
+        logical :: verbose_in, precnd_shift
         integer(ip) :: max_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
@@ -116,6 +117,7 @@ contains
 ! Parse optional arguments
 !
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
+        precnd_shift = .false.; if (present(dgl_precnd_shift)) precnd_shift = dgl_precnd_shift
         max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
         tol = 1.e-7_dp; if (present(dgl_tol)) tol = dgl_tol
         shift = 0.e0_dp; if (present(dgl_shift)) shift = dgl_shift
@@ -215,6 +217,8 @@ contains
 !
         call dgemm('t', 'n', n_max, n_max, n, one, space, n, aspace, n, zero, a_red, lda)
 !
+        call dgl_check_finite(ctx, n_max, a_red, lda)
+        if (dgl_failed(ctx)) go to 900
         call get_time(t1)
         call dsyev('v', 'l', n_max, a_red, lda, e_red, work, lwork, info)
         call get_time(t2)
@@ -255,7 +259,7 @@ contains
 !
         ind_x = 1
         ind_w = ind_x + n_max
-        call precnd(n, n_max, -eig(ind_x), residuals(1, ind_x), space(1, ind_w))
+        call precnd(n, n_max, merge(-eig(ind_x), zero, precnd_shift), residuals(1, ind_x), space(1, ind_w))
 !
 ! orthogonalize:
 !
@@ -327,6 +331,8 @@ contains
             if (it .eq. 1) ld_current = 2*n_max
             call dgemm('t', 'n', ld_current, ld_current, n, one, space, n, aspace, n, zero, a_red, lda)
 !
+            call dgl_check_finite(ctx, ld_current, a_red, lda)
+            if (dgl_failed(ctx)) go to 900
             call get_time(t1)
             call dsyev('v', 'l', ld_current, a_red, lda, e_red, work, lwork, info)
             call get_time(t2)
@@ -438,9 +444,10 @@ contains
                 call dcopy(n*n_max, bx_new, 1_ip, bspace, 1_ip)
             end if
 !
-! compute the preconditioned residuals w:
+! compute the preconditioned residuals w. as in davidson, the shift passed to the
+! preconditioner is minus the lowest non-converged eigenvalue.
 !
-            call precnd(n, n_act, -eig(1), residuals(1, ind_x), space(1, ind_w))
+            call precnd(n, n_act, merge(-eig(ind_x), zero, precnd_shift), residuals(1, ind_x), space(1, ind_w))
 !
 ! orthogonalize w against x and p, and then orthonormalize it:
 !

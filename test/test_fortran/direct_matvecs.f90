@@ -416,6 +416,86 @@ contains
         return
     end subroutine lrprc
 
+    real(dgl_real) function rot_eigenvalue(i)
+!
+!   eigenvalues of ax_rot, in increasing order
+!
+        implicit none
+        integer(dgl_int), intent(in) :: i
+        rot_eigenvalue = real(i, dgl_real) + 0.5_dgl_real*sin(real(i, dgl_real))**2
+    end function rot_eigenvalue
+!
+    subroutine householder(n, m, x)
+!
+!   apply the Householder reflection H = I - 2 v v^T, v_i ~ sin(i), to m vectors
+!
+        implicit none
+        integer(dgl_int), intent(in) :: n, m
+        real(dgl_real), dimension(n, m), intent(inout) :: x
+        real(dgl_real) :: v(n)
+        integer(dgl_int) :: i, k
+!
+        do i = 1, n
+            v(i) = sin(real(i, dgl_real))
+        end do
+        v = v/norm2(v)
+        do k = 1, m
+            x(:, k) = x(:, k) - 2.0_dgl_real*dot_product(v, x(:, k))*v
+        end do
+    end subroutine householder
+!
+    subroutine ax_rot(n, m, x, y)
+!
+!   a = H diag(d) H, with d_i = rot_eigenvalue(i): the eigenvectors are H e_i
+!
+        implicit none
+        integer(dgl_int), intent(in) :: n, m
+        real(dgl_real), dimension(n, m), intent(in) :: x
+        real(dgl_real), dimension(n, m), intent(inout) :: y
+        integer(dgl_int) :: i
+!
+        y = x
+        call householder(n, m, y)
+        do i = 1, n
+            y(i, :) = rot_eigenvalue(i)*y(i, :)
+        end do
+        call householder(n, m, y)
+    end subroutine ax_rot
+!
+    subroutine dx_rot(n, m, shift, x, y)
+!
+!   diagonal preconditioner for ax_rot, (d + shift)^-1, approximate as the diagonal
+!   of ax_rot is not d
+!
+        implicit none
+        integer(dgl_int), intent(in) :: n, m
+        real(dgl_real), intent(in) :: shift
+        real(dgl_real), dimension(n, m), intent(in) :: x
+        real(dgl_real), dimension(n, m), intent(inout) :: y
+        integer(dgl_int) :: i
+        real(dgl_real) :: den
+!
+        do i = 1, n
+            den = rot_eigenvalue(i) + shift
+            if (abs(den) .lt. 1.0e-3_dgl_real) den = sign(1.0e-3_dgl_real, den)
+            y(i, :) = x(i, :)/den
+        end do
+    end subroutine dx_rot
+!
+    subroutine ax_nan(n, m, x, y)
+!
+!   a broken matrix-vector product, which returns a NaN
+!
+        use, intrinsic :: ieee_arithmetic, only: ieee_value, ieee_quiet_nan
+        implicit none
+        integer(dgl_int), intent(in) :: n, m
+        real(dgl_real), dimension(n, m), intent(in) :: x
+        real(dgl_real), dimension(n, m), intent(inout) :: y
+!
+        y = x
+        y(n, m) = ieee_value(1.0_dgl_real, ieee_quiet_nan)
+    end subroutine ax_nan
+!
     subroutine ax_tri(n, m, x, y)
 !
 !   tridiagonal matrix a_ii = i, a_i,i+1 = a_i+1,i = 0.1. with unit vectors as a guess, the

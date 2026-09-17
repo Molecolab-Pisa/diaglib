@@ -338,7 +338,7 @@ static void test_davidson(bool generalized, bool random_guess) {
   dgl_int info = -99;
   init_guess(N, evec, random_guess);
   dgl_davidson_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, generalized ? metvec_c : NULL, eig, evec, &ok, &info,
-                      false, TOL, 100, 20, 0.0, 1, "GB");
+                      false, TOL, 100, 20, 0.0, true, 1, "GB");
   // the metric is the identity: the residual is the same as for the standard problem
   for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, residual(matvec_c, N, evec + i * N, eig[i]));
   check(generalized ? "generalized Davidson" : "Davidson", random_guess, ok, info, eig, ref_sym, max_res);
@@ -350,7 +350,7 @@ static void test_lobpcg(bool generalized, bool random_guess) {
   dgl_int info = -99;
   init_guess(N, evec, random_guess);
   dgl_lobpcg_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, generalized ? metvec_c : NULL, eig, evec, &ok, &info,
-                    false, TOL, 100, 0.0, 1, "GB");
+                    false, TOL, 100, 0.0, false, 1, "GB");
   for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, residual(matvec_c, N, evec + i * N, eig[i]));
   check(generalized ? "generalized LOBPCG" : "LOBPCG", random_guess, ok, info, eig, ref_sym, max_res);
 }
@@ -365,7 +365,7 @@ static void test_nosym(const char* side, bool random_guess) {
   init_guess(N, evec, random_guess);
   init_guess(N, evec_2, random_guess);
   dgl_davidson_nosym_driver(N, N_TARG, N_MAX, matvec_r_c, matvec_l_c, precnd_c, side, eig, evec,
-                            lr ? evec_2 : NULL, &ok, &info, false, TOL, 100, 20, 0.0, 1, "GB");
+                            lr ? evec_2 : NULL, &ok, &info, false, TOL, 100, 20, 0.0, true, 1, "GB");
   // in evec: right eigenvectors for "R" and "LR", left ones for "L"; in evec_2: left ones for "LR"
   for (int i = 0; i < N_TARG && ok; ++i) {
     matvec_t first = strcmp(side, "L") == 0 ? matvec_l_c : matvec_r_c;
@@ -399,15 +399,15 @@ static void test_errors(void) {
   bool ok;
   dgl_int info;
   init_guess(N, evec, false);
-  dgl_davidson_driver(N, N_MAX + 1, N_MAX, matvec_c, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 20, 0.0,
+  dgl_davidson_driver(N, N_MAX + 1, N_MAX, matvec_c, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 20, 0.0, true,
                       1, "GB");
   check_error("error: n_targ > n_max", info, DGL_ERR_INPUT);
-  dgl_lobpcg_driver(N, N_TARG, N_MAX, NULL, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 0.0, 1, "GB");
+  dgl_lobpcg_driver(N, N_TARG, N_MAX, NULL, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 0.0, false, 1, "GB");
   check_error("error: NULL matvec", info, DGL_ERR_INPUT);
   dgl_davidson_nosym_driver(N, N_TARG, N_MAX, matvec_r_c, matvec_l_c, precnd_c, "LR", eig, evec, NULL, &ok, &info,
-                            false, TOL, 100, 20, 0.0, 1, "GB");
+                            false, TOL, 100, 20, 0.0, true, 1, "GB");
   check_error("error: side = LR and evec_2 = NULL", info, DGL_ERR_INPUT);
-  dgl_davidson_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 20, 0.0,
+  dgl_davidson_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 20, 0.0, true,
                       1, "KB");
   check_error("error: not enough memory", info, DGL_ERR_MEMORY);
 }
@@ -426,10 +426,10 @@ static void nested_matvec_c(dgl_int* n, dgl_int* m, double* x, double* ax) {
   memset(evec, 0, sizeof evec);
   for (int j = 0; j < N_MAX_IN; ++j) evec[j + j * N_IN] = 1.0;
   dgl_davidson_driver(N_IN, N_MAX_IN + 1, N_MAX_IN, apbmul_c, precnd_c, NULL, eig, evec, &ok, &info, false, 1e-8,
-                      100, 20, 0.0, 1, "GB");
+                      100, 20, 0.0, true, 1, "GB");
   bool passed = !ok && info == DGL_ERR_INPUT;
   dgl_davidson_driver(N_IN, N_TARG_IN, N_MAX_IN, apbmul_c, precnd_c, NULL, eig, evec, &ok, &info, false, 1e-8,
-                      100, 20, 0.0, 1, "GB");
+                      100, 20, 0.0, true, 1, "GB");
   passed = passed && ok && info == DGL_SUCCESS && residual(apbmul_c, N_IN, evec, eig[0]) < 1e-6;
   if (!passed) nested_failed++;
   matvec_c(n, m, x, ax);
@@ -441,7 +441,7 @@ static void test_nested(void) {
   dgl_int info = -99;
   init_guess(N, evec, false);
   dgl_davidson_driver(N, N_TARG, N_MAX, nested_matvec_c, precnd_c, metvec_c, eig, evec, &ok, &info, false, TOL, 100,
-                      20, 0.0, 1, "GB");
+                      20, 0.0, true, 1, "GB");
   for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, residual(matvec_c, N, evec + i * N, eig[i]));
   printf("nested calls: %d, failed: %d\n", nested_calls, nested_failed);
   if (nested_calls == 0 || nested_failed > 0) ok = false;
@@ -478,9 +478,9 @@ static void test_threads(void) {
     info[task] = -99;
     if (task % 4 < 2)
       dgl_davidson_driver(N, N_TARG, N_MAX, mv, pc, NULL, eig, evec, &ok[task], &info[task], false, TOL, 100, 20,
-                          0.0, 1, "GB");
+                          0.0, true, 1, "GB");
     else
-      dgl_lobpcg_driver(N, N_TARG, N_MAX, mv, pc, NULL, eig, evec, &ok[task], &info[task], false, TOL, 100, 0.0, 1,
+      dgl_lobpcg_driver(N, N_TARG, N_MAX, mv, pc, NULL, eig, evec, &ok[task], &info[task], false, TOL, 100, 0.0, false, 1,
                         "GB");
     max_err[task] = 0.0;
     for (int i = 0; i < N_TARG; ++i) max_err[task] = fmax(max_err[task], fabs(eig[i] - scale * ref_sym[i]));

@@ -1,6 +1,6 @@
 submodule(dgl_interface) dgl_smogd
     use dgl_global_utils
-    use dgl_orthogonalizations, only: b_ortho, b_ortho_vs_x
+    use dgl_orthogonalizations, only: b_ortho, b_ortho_vs_x, ortho_gs
     use dgl_minor_utils
 !
     implicit none
@@ -228,13 +228,17 @@ contains
 ! the same is done for the individual plus and minus components that vanish
 ! (e.g., if Y = Z), as they cannot be orthonormalized.
 !
-        if (dnrm2(n2*n_max, evec, 1_ip) .lt. num_thresh) call random_number(evec)
         do i_eig = 1, n_max
             vp(:, i_eig) = evec(1:n, i_eig) + evec(n + 1:n2, i_eig)
             vm(:, i_eig) = evec(1:n, i_eig) - evec(n + 1:n2, i_eig)
-            if (dnrm2(n, vp(:, i_eig), 1_ip) .lt. num_thresh) call random_number(vp(:, i_eig))
-            if (dnrm2(n, vm(:, i_eig), 1_ip) .lt. num_thresh) call random_number(vm(:, i_eig))
         end do
+!
+! orthonormalize the plus and minus guess vectors, as required by b_ortho, replacing the
+! ones that vanish or are linearly dependent with random vectors
+!
+        call ortho_gs(ctx, n, n_max, vp)
+        call ortho_gs(ctx, n, n_max, vm)
+        if (dgl_failed(ctx)) go to 900
 !
 ! initialize the counters
 !
@@ -300,6 +304,8 @@ contains
 !
 ! diagonalize s^t s
 !
+            call dgl_check_finite(ctx, ld_current, s_red_2, lda)
+            if (dgl_failed(ctx)) go to 900
             call get_time(t1)
             call dsyev('v', 'u', ld_current, s_red_2, lda, e_red, work, lwork, info)
             call get_time(t2)

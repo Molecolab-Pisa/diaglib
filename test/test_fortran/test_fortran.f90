@@ -11,15 +11,20 @@ program test_fortran
 !!    which the roots change order during the iterations and have to be followed, and one with
 !!    a pair of complex eigenvalues among the lowest ones, which have to be skipped.
 !! 2. all the drivers are run with a level shift, in verbose mode, from a guess that is not
-!!    orthonormal.
+!!    orthonormal (LOBPCG with a shifted preconditioner, as the Davidson drivers), and from an
+!!    incomplete guess (a duplicated vector and zero vectors).
 !! 3. the non-symmetric driver is run with a poor preconditioner, so that the expansion space
 !!    is restarted several times, also when computing the left eigenvectors after the right ones.
-!! 4. invalid input has to be reported through dgl_info, and values of dav_iter that are too
-!!    small or too large have to be handled.
+!! 4. invalid input (including NaN returned by the user-supplied routines) has to be reported
+!!    through dgl_info, and values of dav_iter that are too small or too large have to be handled.
 !! 5. DiagLib is called from inside a matrix-vector callback: the nested calls must not
 !!    interfere with the outer one.
 !! 6. all the drivers that use (b_)ortho_vs_x are run on a tridiagonal matrix, starting from
 !!    unit vectors, so that the preconditioned residuals are linearly dependent.
+!! 7. Davidson and LOBPCG are run on a matrix with known eigenvalues whose eigenvectors are far
+!!    from unit vectors (a diagonal matrix rotated by a Householder reflection), so that the
+!!    diagonal preconditioner is only approximate, with and without the shift of the
+!!    preconditioner.
 !!
     use dgl_interface
     use direct_matvecs
@@ -28,7 +33,7 @@ program test_fortran
 !
 ! kinds of guess
 !
-    integer(ip), parameter :: simple_guess = 0, random_guess = 1, scaled_guess = 2
+    integer(ip), parameter :: simple_guess = 0, random_guess = 1, scaled_guess = 2, partial_guess = 3
 !
 ! non-symmetric test matrices
 !
@@ -39,6 +44,10 @@ program test_fortran
     integer(ip) :: guess_kind
     real(dp) :: test_shift
     logical :: test_verbose, weak_precnd
+!
+! LOBPCG is run with the default (no shift for the preconditioner), except in pass 2
+!
+    logical :: lobpcg_precnd_shift = .false.
 !
     logical :: ok
     integer(ip) :: n_tests = 0, n_failed = 0, run, i_side, i_mat
@@ -82,6 +91,12 @@ program test_fortran
     guess_kind = scaled_guess
     test_shift = 0.5_dp
     test_verbose = .true.
+    lobpcg_precnd_shift = .true.
+    call run_all_drivers()
+    lobpcg_precnd_shift = .false.
+    guess_kind = partial_guess
+    test_shift = shift
+    test_verbose = verbose
     call run_all_drivers()
 !
 ! 3. poor preconditioner, many restarts
@@ -107,6 +122,10 @@ program test_fortran
 ! 6. linearly dependent preconditioned residuals
 !
     call test_dependent_residuals()
+!
+! 7. rotated matrix, approximate preconditioner
+!
+    call test_rotated()
 !
 ! close the output file:
 !
@@ -151,6 +170,13 @@ contains
                 vecs(k + 1, k) = 0.5_dp
             end do
         end if
+!
+! guess only for the first n_targ vectors: then a copy of the first one, and zero vectors
+!
+        if (guess_kind .eq. partial_guess) then
+            vecs(:, n_targ + 1) = vecs(:, 1)
+            vecs(:, n_targ + 2:) = zero
+        end if
     end subroutine init_guess
 !
     function test_label(driver) result(label)
@@ -166,6 +192,8 @@ contains
             label = driver//", random guess"
         case (scaled_guess)
             label = driver//", shifted, verbose, non-orthonormal guess"
+        case (partial_guess)
+            label = driver//", incomplete guess"
         case default
             label = driver//", simple guess"
         end select
@@ -255,11 +283,13 @@ contains
         if (generalized) then
             call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
                                    dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_shift=test_shift, &
-                                   dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+                                   dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info, &
+                                   dgl_precnd_shift=lobpcg_precnd_shift)
         else
             call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
                                    dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_shift=test_shift, &
-                                   dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+                                   dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info, &
+                                   dgl_precnd_shift=lobpcg_precnd_shift)
         end if
 !
         same = .false.
@@ -461,6 +491,17 @@ contains
         call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
                                  dgl_memory=1_ip, dgl_memory_unit="KB", dgl_info=info)
         call check_error("not enough memory", info, dgl_err_memory)
+        call init_eigenpairs(n, n_max, eig, evec, ok, .false.)
+        call dgl_davidson_driver(n, n_targ, n_max, ax_nan, dx, eig, evec, ok, dgl_info=info)
+        call check_error("NaN from matvec (Davidson)", info, dgl_err_input)
+        call init_eigenpairs(n, n_max, eig, evec, ok, .false.)
+        call dgl_lobpcg_driver(n, n_targ, n_max, ax_nan, dx, eig, evec, ok, dgl_info=info)
+        call check_error("NaN from matvec (LOBPCG)", info, dgl_err_input)
+        call init_eigenpairs(n, n_max, eig, evec, ok, .false.)
+        call dgl_davidson_nosym_driver(n, n_targ, n_max, ax_nan, ax_nan, dx, "R ", eig, evec, ok, dgl_info=info)
+        call check_error("NaN from matvec (non-symmetric Davidson)", info, dgl_err_input)
+        call dgl_smogd_driver(n, n_targ, n_max, ax_nan, ax_nan, spdx, smdx, lrprc, eig, evec, ok, dgl_info=info)
+        call check_error("NaN from matvec (SMOGD)", info, dgl_err_input)
 !
     end subroutine test_input_errors
 !
@@ -521,6 +562,46 @@ contains
         end do
     end subroutine test_dependent_residuals
 !
+    subroutine test_rotated()
+!
+! the eigenvalues of ax_rot are d_i = i + 0.5 sin(i)^2, which are increasing
+!
+        implicit none
+        real(dp) :: ref(n_targ), res(n)
+        integer(ip) :: info, k, i_test
+        real(dp) :: err, max_res
+        character(len=80) :: label
+!
+        do k = 1, n_targ
+            ref(k) = rot_eigenvalue(k)
+        end do
+        do i_test = 1, 3
+            evec = zero
+            select case (i_test)
+            case (1)
+                label = "Davidson, rotated matrix, shifted preconditioner"
+                call dgl_davidson_driver(n, n_targ, n_max, ax_rot, dx_rot, eig, evec, ok, dgl_tol=tol, &
+                                         dgl_max_iter=max_iter, dgl_info=info)
+            case (2)
+                label = "Davidson, rotated matrix, preconditioner without shift"
+                call dgl_davidson_driver(n, n_targ, n_max, ax_rot, dx_rot, eig, evec, ok, dgl_tol=tol, &
+                                         dgl_max_iter=max_iter, dgl_info=info, dgl_precnd_shift=.false.)
+            case (3)
+                label = "LOBPCG, rotated matrix, preconditioner without shift (default)"
+                call dgl_lobpcg_driver(n, n_targ, n_max, ax_rot, dx_rot, eig, evec, ok, dgl_tol=tol, &
+                                       dgl_max_iter=3*max_iter, dgl_info=info)
+            end select
+            err = maxval(abs(eig(:n_targ) - ref))
+            max_res = zero
+            do k = 1, n_targ
+                call ax_rot(n, 1_ip, evec(:, k), res)
+                max_res = max(max_res, norm2(res - eig(k)*evec(:, k))/norm2(evec(:, k)))
+            end do
+            write (6, "(t3,a,es9.2,a,es9.2)") "max eigenvalue error: ", err, "   max residual: ", max_res
+            call check_result(trim(label), ok, info, err .lt. 1.0e-9_dp .and. max_res .lt. 1.0e-6_dp)
+        end do
+    end subroutine test_rotated
+!
     subroutine test_nested()
 !
 ! generalized Davidson with a matvec that calls DiagLib itself
@@ -559,7 +640,7 @@ contains
             end do
             err_norm = max(err_norm, abs(norm2(v_r(:, j)) - one))
         end do
-        write (6, "(t3,a,d8.2,a,d8.2)") "max biorthonormality error: ", err_bi, &
+        write (6, "(t3,a,es9.2,a,es9.2)") "max biorthonormality error: ", err_bi, &
             "   max norm error of the right vectors: ", err_norm
         passed = err_bi .lt. 1.0e-10_dp .and. err_norm .lt. 1.0e-10_dp
     end function check_biortho

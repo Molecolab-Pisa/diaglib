@@ -50,6 +50,8 @@ extern void dgl_davidson_driver(
     dgl_int max_iter,
     dgl_int dav_iter,
     double shift,       /* only added to the printed eigenvalues */
+    bool precnd_shift,  /* shift passed to precnd: minus the lowest non-converged eigenvalue if true,
+                           zero if false (the Fortran default is true) */
     dgl_int memory,
     const char* memory_unit
 );
@@ -69,6 +71,9 @@ extern void dgl_lobpcg_driver(
     double tol,
     dgl_int max_iter,
     double shift,       /* only added to the printed eigenvalues */
+    bool precnd_shift,  /* shift passed to precnd: minus the lowest non-converged eigenvalue if true,
+                           zero if false (the Fortran default is false: LOBPCG works best with a
+                           positive definite, well conditioned preconditioner) */
     dgl_int memory,
     const char* memory_unit
 );
@@ -92,6 +97,8 @@ extern void dgl_davidson_nosym_driver(
     dgl_int max_iter,
     dgl_int dav_iter,
     double shift,       /* only added to the printed eigenvalues */
+    bool precnd_shift,  /* shift passed to precnd: minus the lowest non-converged eigenvalue if true,
+                           zero if false (the Fortran default is true) */
     dgl_int memory,
     const char* memory_unit
 );

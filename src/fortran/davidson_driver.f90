@@ -9,7 +9,7 @@ contains
 !
     module subroutine dgl_davidson_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
                                           dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                                          dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
+                                          dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info, dgl_precnd_shift)
 !
 ! the arguments are documented in the interface, in dgl_interface.f90. They are repeated
 ! here, instead of using "module procedure", so that all compilers check the calls to
@@ -33,6 +33,7 @@ contains
         real(dgl_real), optional, intent(in) :: dgl_shift
         procedure(dgl_matvec), pointer, optional :: metvec
         integer(dgl_int), optional, intent(out) :: dgl_info
+        logical, optional, intent(in) :: dgl_precnd_shift
 !
 ! local variables:
 ! ================
@@ -41,7 +42,7 @@ contains
         real(dp), allocatable :: work(:)
         integer(ip) :: lwork, info
         real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), t_mv(2), t_tot(2)
-        logical :: verbose_in
+        logical :: verbose_in, precnd_shift
         integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
@@ -116,6 +117,7 @@ contains
 ! Parse optional arguments
 !
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
+        precnd_shift = .true.; if (present(dgl_precnd_shift)) precnd_shift = dgl_precnd_shift
         max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
         dav_iter = 25; if (present(dgl_dav_iter)) dav_iter = dgl_dav_iter
         tol = 1.e-7_dp; if (present(dgl_tol)) tol = dgl_tol
@@ -278,6 +280,8 @@ contains
 ! converged eigenvalues in the reduced matrix
 !
             a_copy = a_red
+            call dgl_check_finite(ctx, ld_current, a_copy, lda)
+            if (dgl_failed(ctx)) go to 900
 !
 ! diagonalize the reduced matrix
 !
@@ -413,7 +417,7 @@ contains
 ! algorithm.
 !
             ind = n_max - n_act + 1
-            call precnd(n, n_act, -eig(ind), residuals(1, ind), space(1, i_beg))
+            call precnd(n, n_act, merge(-eig(ind), zero, precnd_shift), residuals(1, ind), space(1, i_beg))
 !
 ! orthogonalize the new vectors to the existing ones and then
 ! orthonormalize them.

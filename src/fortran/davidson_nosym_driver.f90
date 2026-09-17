@@ -1,6 +1,6 @@
 submodule(dgl_interface) dgl_davidson_nosym
     use dgl_global_utils
-    use dgl_orthogonalizations, only: ortho, ortho_vs_x, biortho_eigvecs
+    use dgl_orthogonalizations, only: ortho, ortho_vs_x, ortho_gs, biortho_eigvecs
     use dgl_minor_utils
 !
     implicit none
@@ -10,7 +10,7 @@ contains
     module subroutine dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
                                                 eig, evec_1, ok, evec_2, &
                                                 dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                                                dgl_shift, dgl_memory, dgl_memory_unit, dgl_info)
+                                                dgl_shift, dgl_memory, dgl_memory_unit, dgl_info, dgl_precnd_shift)
 !
 ! the arguments are documented in the interface, in dgl_interface.f90. They are repeated
 ! here, instead of using "module procedure", so that all compilers check the calls to
@@ -36,6 +36,7 @@ contains
         real(dgl_real), optional, intent(in) :: dgl_tol
         real(dgl_real), optional, intent(in) :: dgl_shift
         integer(dgl_int), optional, intent(out) :: dgl_info
+        logical, optional, intent(in) :: dgl_precnd_shift
 !
 ! local variables:
 ! ================
@@ -44,7 +45,7 @@ contains
         real(dp), allocatable :: work(:)
         integer(ip) :: lwork, info
         real(dp) :: t1(2), t2(2), t_diag(2), t_ortho(2), t_mv(2), t_tot(2)
-        logical :: verbose_in
+        logical :: verbose_in, precnd_shift
         integer(ip) :: max_iter, dav_iter, memory
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
@@ -74,12 +75,12 @@ contains
 !
         integer(ip) :: it, i_eig
         real(dp) :: sqrtn, tol_im
-        real(dp) :: yy, tol_eig
+        real(dp) :: tol_eig
         integer(ip) :: j
 !
-! convergence of the current run and success of the orthogonalization of the guess
+! convergence of the current run
 !
-        logical :: run_ok, ok_ortho
+        logical :: run_ok
 !
 ! arrays to control convergence
 !
@@ -132,6 +133,7 @@ contains
 ! Parse optional arguments
 !
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
+        precnd_shift = .true.; if (present(dgl_precnd_shift)) precnd_shift = dgl_precnd_shift
         max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
         dav_iter = 25; if (present(dgl_dav_iter)) dav_iter = dgl_dav_iter
         tol = 1.e-7_dp; if (present(dgl_tol)) tol = dgl_tol
@@ -323,6 +325,8 @@ contains
                 end select
 !
                 a_copy = a_red
+                call dgl_check_finite(ctx, ld_current, a_copy, lda)
+                if (dgl_failed(ctx)) go to 900
 !
 ! diagonalize the reduced matrix
 !
@@ -504,7 +508,8 @@ contains
                 n_act = n_act_new
                 n_frozen = n_max - n_act
                 ind = n_max - n_act + 1
-                call precnd(n, n_act, -minval(eig(ind:n_max)), residuals(1, ind), space(1, i_beg))
+                call precnd(n, n_act, merge(-minval(eig(ind:n_max)), zero, precnd_shift), residuals(1, ind), &
+                            space(1, i_beg))
 !
 ! orthogonalize the new vectors to the existing ones of the respective other
 ! space and orthogonalize set of new vectors among each other
@@ -563,8 +568,7 @@ contains
 ! use evec_1 as guess for evec_2
 !
                     call dcopy(n*n_max, evec_1, 1_ip, evec_2, 1_ip)
-                    call ortho_cd(ctx, n, n_max, evec_2, yy, ok_ortho)
-                    if (.not. ok_ortho) call ortho(ctx, n, n_max, evec_2)
+                    call ortho_gs(ctx, n, n_max, evec_2)
                     if (dgl_failed(ctx)) go to 900
                     call dcopy(n*n_max, evec_2, 1_ip, space, 1_ip)
 !

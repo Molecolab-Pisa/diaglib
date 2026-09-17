@@ -6,6 +6,7 @@ module dgl_global_utils
 ! bookkeeping, error status, verbosity) is stored in a dgl_context variable, which is
 ! local to the driver and passed to the internal routines that need it. This makes
 ! the drivers re-entrant and thread-safe (as long as the user-supplied routines are).
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use dgl_interface, only: ip => dgl_int, dp => dgl_real, &
                              dgl_success, dgl_err_input, dgl_err_memory, &
                              dgl_err_lapack, dgl_err_ortho, dgl_err_mismatch
@@ -402,6 +403,25 @@ contains
             dgl_err_input)
 !
     end subroutine dgl_check_input
+!
+    subroutine dgl_check_finite(ctx, m, a, lda)
+!! Check that the leading m x m block of a reduced matrix contains no NaN or Inf,
+!! which can only come from the user-supplied routines. Lapack routines can crash
+!! when given such values, instead of returning an error.
+        implicit none
+        type(dgl_context), intent(inout) :: ctx
+        integer(ip), intent(in) :: m, lda
+        real(dp), intent(in) :: a(lda, *)
+!
+        integer(ip) :: j
+!
+        do j = 1, m
+            if (.not. all(ieee_is_finite(a(1:m, j)))) then
+                call dgl_error(ctx, "the results of the user-supplied routines contain NaN or Inf", dgl_err_input)
+                return
+            end if
+        end do
+    end subroutine dgl_check_finite
 !
     logical function dgl_failed(ctx)
 !! True if an error has been recorded in the driver call

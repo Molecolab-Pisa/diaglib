@@ -56,6 +56,9 @@ class diaglib:
     n_max:    size of the arrays of eigenvalues and eigenvectors (n_max >= n_targ)
     The other arguments are the options of the drivers, with the same defaults as in Fortran.
     shift is only added to the eigenvalues when they are printed (verbose=True).
+    precnd_shift: if True, the shift passed to precnd is minus the lowest non-converged eigenvalue,
+    if False it is zero; None uses the default of each driver (True for the Davidson drivers,
+    False for LOBPCG, which works best with a positive definite, well conditioned preconditioner).
     """
 
     def __init__(self, lib_path, n, n_targ, n_max,
@@ -64,6 +67,7 @@ class diaglib:
                  dav_iter=25,
                  tol=1e-7,
                  shift=0.0,
+                 precnd_shift=None,
                  memory=80,
                  memory_unit="MB"):
         self.lib = _load_library(lib_path)
@@ -93,6 +97,7 @@ class diaglib:
         self.dav_iter = dav_iter
         self.tol = tol
         self.shift = shift
+        self.precnd_shift = precnd_shift
         self.memory = memory
         self.memory_unit = memory_unit
 
@@ -120,21 +125,21 @@ class diaglib:
         self.lib.dgl_davidson_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, PRECND, MATVEC,
             pDouble, pDouble, ctypes.POINTER(cBool), ctypes.POINTER(cInt),
-            cBool, cDouble, cInt, cInt, cDouble, cInt, cCharP
+            cBool, cDouble, cInt, cInt, cDouble, cBool, cInt, cCharP
         ]
         self.lib.dgl_davidson_driver.restype = None
 
         self.lib.dgl_lobpcg_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, PRECND, MATVEC,
             pDouble, pDouble, ctypes.POINTER(cBool), ctypes.POINTER(cInt),
-            cBool, cDouble, cInt, cDouble, cInt, cCharP
+            cBool, cDouble, cInt, cDouble, cBool, cInt, cCharP
         ]
         self.lib.dgl_lobpcg_driver.restype = None
 
         self.lib.dgl_davidson_nosym_driver.argtypes = [
             cInt, cInt, cInt, MATVEC, MATVEC, PRECND, cCharP,
             pDouble, pDouble, pDouble, ctypes.POINTER(cBool), ctypes.POINTER(cInt),
-            cBool, cDouble, cInt, cInt, cDouble, cInt, cCharP
+            cBool, cDouble, cInt, cInt, cDouble, cBool, cInt, cCharP
         ]
         self.lib.dgl_davidson_nosym_driver.restype = None
 
@@ -197,6 +202,9 @@ class diaglib:
         if info.value != 0:
             raise RuntimeError(f"DiagLib error {info.value}: {DGL_ERRORS.get(info.value, 'unknown error')}")
 
+    def __precnd_shift(self, default):
+        return default if self.precnd_shift is None else bool(self.precnd_shift)
+
     def __memory_unit(self):
         return ctypes.c_char_p(bytes(self.memory_unit, "utf-8"))
 
@@ -218,7 +226,7 @@ class diaglib:
             c_matvec, c_precnd, c_metvec,
             p_eig, p_evec,
             ctypes.byref(ok), ctypes.byref(info),
-            self.verbose, self.tol, self.max_iter, self.dav_iter, self.shift,
+            self.verbose, self.tol, self.max_iter, self.dav_iter, self.shift, self.__precnd_shift(True),
             self.memory, self.__memory_unit()
         )
         self.__check(info)
@@ -240,7 +248,7 @@ class diaglib:
             c_matvec, c_precnd, c_metvec,
             p_eig, p_evec,
             ctypes.byref(ok), ctypes.byref(info),
-            self.verbose, self.tol, self.max_iter, self.shift,
+            self.verbose, self.tol, self.max_iter, self.shift, self.__precnd_shift(False),
             self.memory, self.__memory_unit()
         )
         self.__check(info)
@@ -274,7 +282,7 @@ class diaglib:
             ctypes.c_char_p(bytes(side, "utf-8")),
             p_eig, p_evec1, p_evec2,
             ctypes.byref(ok), ctypes.byref(info),
-            self.verbose, self.tol, self.max_iter, self.dav_iter, self.shift,
+            self.verbose, self.tol, self.max_iter, self.dav_iter, self.shift, self.__precnd_shift(True),
             self.memory, self.__memory_unit()
         )
         self.__check(info)

@@ -199,6 +199,12 @@ if __name__ == "__main__":
     eig, evec = guess(N, False)
     expect_exception("error: exception raised in a callback", RuntimeError,
                      lambda: calc.dgl_davidson_driver(eig, evec, failing_matvec, precnd))
+    # the non-symmetric driver used to crash when the callback outputs contained NaN
+    calls["n"] = 0
+    eig, evec = guess(N, False)
+    expect_exception("error: exception raised in a non-symmetric callback", RuntimeError,
+                     lambda: calc.dgl_davidson_nosym_driver(eig, evec, None, "R", failing_matvec,
+                                                            make_matvec(AR.T), precnd))
     # the interface is still usable afterwards
     eig, evec = guess(N, False)
     ok = calc.dgl_davidson_driver(eig, evec, make_matvec(A), precnd)

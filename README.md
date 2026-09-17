@@ -40,8 +40,13 @@ vectors. such routines have the following interface:
   subroutine precnd(n,m,shift,x,ax)
 
 where n,m are integer(dgl_int) and x(n,m) and ax(n,m) are real(dgl_real)
-arrays. as using the first eigenvalue in a shift-and-invert spirit is very
-common, a real(dgl_real) scalar shift is also passed to precnd.
+arrays. a real(dgl_real) scalar shift is also passed to precnd: minus the lowest
+non-converged approximate eigenvalue, to build shift-and-invert preconditioners
+such as (D - lambda)^-1, as in davidson's method, or zero. the choice is made
+with the optional dgl_precnd_shift argument (precnd_shift in C and python):
+the default is to shift for the davidson drivers, and not to shift for lobpcg,
+which works best with a positive definite, well conditioned preconditioner
+(e.g., an approximation of the inverse of the matrix).
 
 the optional shift argument of the drivers (not available for smo-gd) is only
 added to the eigenvalues when they are printed, e.g., to print total energies
