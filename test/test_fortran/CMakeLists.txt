@@ -1,5 +1,7 @@
 # make a reference for comparison
 add_executable(dgl_reference
+        ${PROJECT_SOURCE_DIR}/src/fortran/dgl_kinds.f90
+        ${PROJECT_SOURCE_DIR}/src/fortran/dgl_lapack.f90
         utility.f90
         reference.f90
 )
@@ -10,32 +12,21 @@ add_executable(dgl_test
         direct_matvecs.f90
 )
 
+target_compile_options(dgl_reference PRIVATE ${DGL_Fortran_F2003} ${DGL_Fortran_OPTIONS})
+target_compile_options(dgl_test PRIVATE ${DGL_Fortran_F2003} ${DGL_Fortran_OPTIONS})
+
+# Keep the .mod files of the two executables separate, as they share utility.f90
+set_target_properties(dgl_reference PROPERTIES Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod_reference)
+set_target_properties(dgl_test PROPERTIES Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/mod_test)
 
 # Link DiagLib
 target_link_libraries(dgl_test PRIVATE diaglib)
 
 # Linking BLAS and LAPACK
-target_link_libraries(dgl_reference PUBLIC BLAS::BLAS)
-target_link_libraries(dgl_reference PUBLIC LAPACK::LAPACK)
+target_link_libraries(dgl_reference PRIVATE BLAS::BLAS LAPACK::LAPACK)
 
-
-# Ensure proper RPATH is set for installation
-set_target_properties(dgl_test PROPERTIES
-        #BUILD_WITH_INSTALL_RPATH ON    # Use install RPATH during build
-        INSTALL_RPATH_USE_LINK_PATH OFF # Use link paths
-        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}"  # Point to install lib dir
-)
-set_target_properties(dgl_reference PROPERTIES
-        #BUILD_WITH_INSTALL_RPATH ON    # Use install RPATH during build
-        INSTALL_RPATH_USE_LINK_PATH OFF # Use link paths
-        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}"  # Point to install lib dir
-)
-
-# Install the executables
-install(TARGETS dgl_test dgl_reference
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-# Run test
+# Run test (the reference has to be computed first)
 add_test(NAME dgl_reference COMMAND dgl_reference)
 add_test(NAME dgl_test COMMAND dgl_test)
+set_tests_properties(dgl_reference dgl_test PROPERTIES ENVIRONMENT "${DGL_TEST_ENVIRONMENT}")
+set_tests_properties(dgl_test PROPERTIES DEPENDS dgl_reference)

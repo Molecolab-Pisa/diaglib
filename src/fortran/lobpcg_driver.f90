@@ -10,7 +10,7 @@ contains
 !
     subroutine lobpcg_driver(n, n_targ, n_max, matvec, precnd, eig, evec, ok, &
                              dgl_verbose, dgl_max_iter, dgl_tol, &
-                             dgl_shift, dgl_memory, dgl_memory_unit, metvec)
+                             dgl_shift, dgl_memory, dgl_memory_unit, metvec, dgl_info)
 !! # Driver for LOBPCG symmetric diagonalization
 !! Can solve both standard and generalized eigenvalue problems.
 !! In the latter case you need to pass the optional argument [[metvec]] as a pointer to your routine.
@@ -48,6 +48,9 @@ contains
 !! Diagonal level shifting parameter. Default = \(0.\)
         procedure(metvec_), pointer, optional :: metvec
 !! Pointer to External subroutine that applies the metric-vector multiplication
+        integer(ip), optional, intent(out) :: dgl_info
+!! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
+!! If not present, DiagLib stops the program when an error occurs.
 !
 ! local variables:
 ! ================
@@ -105,21 +108,21 @@ contains
 ! START EXECUTION
 ! ================
 !
+        call dgl_clear_error()
+        ok = .false.
+!
 ! Stupidity check
 !
-        if (n_targ .gt. n_max) call dgl_error( &
-            "Number of eigenvalues requested is larger that size of arrays passed")
-!
         if (3*n_max .ge. n) call dgl_error( &
-            "Requested more than a third of the total number of eigenvalues: expansions space would break down!")
+            "Requested more than a third of the total number of eigenvalues: expansions space would break down!", &
+            dgl_err_input)
 !
 ! check what problem we are dealing with
 !
         generalized = .false.
         if (present(metvec)) then
             if (.not. associated(metvec)) then
-                call dgl_error("Non associated pointer to metric-vector product routine")
-                !call dgl_warning("Non associated pointer to metric-vector product routine, going on with standard solver")
+                call dgl_error("Non associated pointer to metric-vector product routine", dgl_err_input)
             else
                 generalized = .true.
             end if
@@ -128,11 +131,16 @@ contains
 ! Parse optional arguments
 !
         verbose_in = .false.; if (present(dgl_verbose)) verbose_in = dgl_verbose
-        max_iter = 50; if (present(dgl_max_iter)) max_iter = dgl_max_iter
+        max_iter = 100; if (present(dgl_max_iter)) max_iter = dgl_max_iter
         tol = 1.e-7_dp; if (present(dgl_tol)) tol = dgl_tol
         shift = 0.e0_dp; if (present(dgl_shift)) shift = dgl_shift
         memory = 80; if (present(dgl_memory)) memory = dgl_memory !80MBs
         memory_unit = "MB"; if (present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+!
+! check the input
+!
+        call dgl_check_input(n, n_targ, n_max, max_iter, tol, memory)
+        if (dgl_failed()) go to 999
 !
 ! set size of the expansion space
 !
@@ -147,9 +155,8 @@ contains
 !
 ! start by allocating memory for the various lapack routines
 !
-        lwork = get_mem_lapack(n, n_max)
+        lwork = get_mem_lapack(lda)
         call mallocate(lwork, work)
-        call mallocate(2*n_max, tau)
 !
 ! allocate memory for the expansion space, the corresponding
 ! matrix-multiplied vectors and the residuals:
@@ -174,7 +181,8 @@ contains
 ! allocate memory for convergence check
 !
         call mallocate(n_max, done)
-        call mallocate(2, n_max, r_norm)
+        call mallocate(2_ip, n_max, r_norm)
+        if (dgl_failed()) go to 900
 !
 ! clean out:
 !
@@ -190,6 +198,7 @@ contains
 ! if evec is zero, create a random guess.
 !
         call check_guess(n, n_max, evec)
+        if (dgl_failed()) go to 900
 !
 ! if required, compute b*evec and b-orthogonalize the guess
 !
@@ -207,48 +216,59 @@ contains
 !
 ! compute the first eigenpairs by diagonalizing the reduced matrix:
 !
-        call dcopy(n*n_max, evec, 1, space, 1)
-        if (generalized) call dcopy(n*n_max, bx_new, 1, bspace, 1)
+        call dcopy(n*n_max, evec, 1_ip, space, 1_ip)
+        if (generalized) call dcopy(n*n_max, bx_new, 1_ip, bspace, 1_ip)
 !
         call get_time(t1)
         call matvec(n, n_max, space, aspace)
         call get_time(t2)
         t_mv = t_mv + t2 - t1
 !
-        if (abs(shift) .gt. num_thresh) call daxpy(n*n_max, shift, space, 1, aspace, 1)
+!
+! apply the level shift: A + shift*I, or A + shift*B for a generalized problem
+!
+        if (abs(shift) .gt. num_thresh) then
+            if (generalized) then
+                call daxpy(n*n_max, shift, bspace, 1_ip, aspace, 1_ip)
+            else
+                call daxpy(n*n_max, shift, space, 1_ip, aspace, 1_ip)
+            end if
+        end if
         call dgemm('t', 'n', n_max, n_max, n, one, space, n, aspace, n, zero, a_red, lda)
 !
         call get_time(t1)
         call dsyev('v', 'l', n_max, a_red, lda, e_red, work, lwork, info)
         call get_time(t2)
         t_diag = t_diag + t2 - t1
+        if (info .ne. 0) call dgl_error("diagonalization of the reduced matrix failed", dgl_err_lapack)
+        if (dgl_failed()) go to 900
         eig = e_red(1:n_max)
 !
 ! get the ritz vectors:
 !
         call dgemm('n', 'n', n, n_max, n_max, one, space, n, a_red, lda, zero, evec, n)
-        call dcopy(n*n_max, evec, 1, space, 1)
+        call dcopy(n*n_max, evec, 1_ip, space, 1_ip)
         call dgemm('n', 'n', n, n_max, n_max, one, aspace, n, a_red, lda, zero, evec, n)
-        call dcopy(n*n_max, evec, 1, aspace, 1)
+        call dcopy(n*n_max, evec, 1_ip, aspace, 1_ip)
 !
 ! if required, also get b times the ritz vector:
 !
         if (generalized) then
             call dgemm('n', 'n', n, n_max, n_max, one, bspace, n, a_red, lda, zero, evec, n)
-            call dcopy(n*n_max, evec, 1, bspace, 1)
+            call dcopy(n*n_max, evec, 1_ip, bspace, 1_ip)
         end if
 !
 ! do the first iteration explicitly.
 ! build the residuals:
 !
-        call dcopy(n*n_max, aspace, 1, residuals, 1)
+        call dcopy(n*n_max, aspace, 1_ip, residuals, 1_ip)
         if (generalized) then
             do i_eig = 1, n_max
-                call daxpy(n, -eig(i_eig), bspace(:, i_eig), 1, residuals(:, i_eig), 1)
+                call daxpy(n, -eig(i_eig), bspace(:, i_eig), 1_ip, residuals(:, i_eig), 1_ip)
             end do
         else
             do i_eig = 1, n_max
-                call daxpy(n, -eig(i_eig), space(:, i_eig), 1, residuals(:, i_eig), 1)
+                call daxpy(n, -eig(i_eig), space(:, i_eig), 1_ip, residuals(:, i_eig), 1_ip)
             end do
         end if
 !
@@ -268,6 +288,7 @@ contains
         end if
         call get_time(t2)
         t_ortho = t_ortho + t2 - t1
+        if (dgl_failed()) go to 900
 !
 ! we are now ready to start the main loop.
 ! initialize a few parameters
@@ -278,6 +299,10 @@ contains
         ok = .false.
         done = .false.
         n_act = n_max
+!
+! x_new holds the latest ritz vectors, returned if the procedure does not converge
+!
+        call dcopy(n*n_max, space, 1_ip, x_new, 1_ip)
 !
 1010    format(t5, 'LOBPCG iterations (tol=', d10.2, '):')
 1020    format(t5, 'Generalized LOBPCG iterations (tol=', d10.2, '):')
@@ -317,7 +342,13 @@ contains
             call get_time(t2)
             t_mv = t_mv + t2 - t1
 !
-            if (abs(shift) .gt. num_thresh) call daxpy(n*n_act, shift, space(1, ind_w), 1, aspace(1, ind_w), 1)
+            if (abs(shift) .gt. num_thresh) then
+                if (generalized) then
+                    call daxpy(n*n_act, shift, bspace(1, ind_w), 1_ip, aspace(1, ind_w), 1_ip)
+                else
+                    call daxpy(n*n_act, shift, space(1, ind_w), 1_ip, aspace(1, ind_w), 1_ip)
+                end if
+            end if
 !
 ! build the reduced matrix and diagonalize it:
 !
@@ -332,10 +363,8 @@ contains
 !
 ! if dsyev failed, print an error message and abort (this should not happen)
 !
-            if (info .ne. 0) then
-                write (6, '(t3,a,i6)') 'dsyev failed. info = ', info
-                stop
-            end if
+            if (info .ne. 0) call dgl_error("diagonalization of the reduced matrix failed", dgl_err_lapack)
+            if (dgl_failed()) go to 900
             eig = e_red(1:n_max)
 !
 ! update x and ax, and, if required, bx:
@@ -348,7 +377,7 @@ contains
 !
 ! compute the residuals and their rms and sup norms:
 !
-            call dcopy(n*n_max, ax_new, 1, residuals, 1)
+            call dcopy(n*n_max, ax_new, 1_ip, residuals, 1_ip)
             do i_eig = 1, n_max
 !
 ! if the eigenvalue is already converged, skip it.
@@ -356,11 +385,11 @@ contains
                 if (done(i_eig)) cycle
 !
                 if (generalized) then
-                    call daxpy(n, -eig(i_eig), bx_new(:, i_eig), 1, residuals(:, i_eig), 1)
+                    call daxpy(n, -eig(i_eig), bx_new(:, i_eig), 1_ip, residuals(:, i_eig), 1_ip)
                 else
-                    call daxpy(n, -eig(i_eig), x_new(:, i_eig), 1, residuals(:, i_eig), 1)
+                    call daxpy(n, -eig(i_eig), x_new(:, i_eig), 1_ip, residuals(:, i_eig), 1_ip)
                 end if
-                r_norm(1, i_eig) = dnrm2(n, residuals(:, i_eig), 1)/sqrtn
+                r_norm(1, i_eig) = dnrm2(n, residuals(:, i_eig), 1_ip)/sqrtn
                 r_norm(2, i_eig) = maxval(abs(residuals(:, i_eig)))
             end do
 !
@@ -386,7 +415,7 @@ contains
                 write (6, *)
             end if
             if (all(done(1:n_targ))) then
-                call dcopy(n*n_max, x_new, 1, evec, 1)
+                call dcopy(n*n_max, x_new, 1_ip, evec, 1_ip)
                 ok = .true.
                 exit
             end if
@@ -395,7 +424,7 @@ contains
 ! converged eigenvalues and eigenvectors will be locked and kept
 ! for orthogonalization purposes.
 !
-            n_act = n_max - count(done)
+            n_act = n_max - count(done, kind=ip)
             ind_x = n_max - n_act + 1
             ind_p = ind_x + n_act
             ind_w = ind_p + n_act
@@ -407,8 +436,10 @@ contains
 !
             call mallocate(ld_current, n_max, u_x)
             call mallocate(ld_current, n_act, u_p)
+            if (dgl_failed()) go to 900
 !
             call get_coeffs(lda, ld_current, n_max, n_act, a_red, u_x, u_p)
+            if (dgl_failed()) go to 900
 !
 ! p  = space  * u_p
 ! ap = aspace * u_p
@@ -416,13 +447,13 @@ contains
 ! note that this is numerically safe, as u_p is orthogonal.
 !
             call dgemm('n', 'n', n, n_act, ld_current, one, space, n, u_p, ld_current, zero, evec, n)
-            call dcopy(n_act*n, evec, 1, space(1, ind_p), 1)
+            call dcopy(n_act*n, evec, 1_ip, space(1, ind_p), 1_ip)
             call dgemm('n', 'n', n, n_act, ld_current, one, aspace, n, u_p, ld_current, zero, evec, n)
-            call dcopy(n_act*n, evec, 1, aspace(1, ind_p), 1)
+            call dcopy(n_act*n, evec, 1_ip, aspace(1, ind_p), 1_ip)
 !
             if (generalized) then
                 call dgemm('n', 'n', n, n_act, ld_current, one, bspace, n, u_p, ld_current, zero, evec, n)
-                call dcopy(n_act*n, evec, 1, bspace(1, ind_p), 1)
+                call dcopy(n_act*n, evec, 1_ip, bspace(1, ind_p), 1_ip)
             end if
 !
             call mfree(u_x)
@@ -430,10 +461,10 @@ contains
 !
 ! now, move x_new and ax_new into space and aspace.
 !
-            call dcopy(n*n_max, x_new, 1, space, 1)
-            call dcopy(n*n_max, ax_new, 1, aspace, 1)
+            call dcopy(n*n_max, x_new, 1_ip, space, 1_ip)
+            call dcopy(n*n_max, ax_new, 1_ip, aspace, 1_ip)
             if (generalized) then
-                call dcopy(n*n_max, bx_new, 1, bspace, 1)
+                call dcopy(n*n_max, bx_new, 1_ip, bspace, 1_ip)
             end if
 !
 ! compute the preconditioned residuals w:
@@ -450,13 +481,24 @@ contains
             end if
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
+            if (dgl_failed()) go to 900
 !
         end do
 !
+! if not converged, return the latest ritz vectors (evec is used as scratch)
+!
+        if (.not. ok) call dcopy(n*n_max, x_new, 1_ip, evec, 1_ip)
+!
+! return the eigenvalues of the unshifted problem
+!
+        eig = eig - shift
+!
 ! deallocate memory and return.
 !
+900     continue
+        call mfree(u_x)
+        call mfree(u_p)
         call mfree(work)
-        call mfree(tau)
         call mfree(space)
         call mfree(aspace)
         call mfree(residuals)
@@ -485,6 +527,12 @@ contains
             end if
             write (6, 1000) t_mv, t_diag, t_ortho, t_tot
         end if
+!
+! report the error status (or stop, if dgl_info is not present)
+!
+999     continue
+        if (dgl_failed()) ok = .false.
+        call dgl_return_info(dgl_info)
 !
 1001    format(t3, 'timings for LOBPCG (cpu/wall): ')
 1002    format(t3, 'timings for Generalized LOBPCG (cpu/wall): ')

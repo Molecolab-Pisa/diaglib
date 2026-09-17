@@ -11,7 +11,7 @@ contains
     subroutine smogd_driver(n2, n_targ, n_max, apbmul, ambmul, &
                             spdmul, smdmul, lrprec, eig, evec, ok, &
                             dgl_verbose, dgl_tol, dgl_max_iter, dgl_dav_iter, &
-                            dgl_memory, dgl_memory_unit)
+                            dgl_memory, dgl_memory_unit, dgl_info)
 !!# Driver for the efficient solution to the Linear-Response CASSCF problem
 !! \begin{equation}
 !! \begin{bmatrix} \begin{pmatrix}
@@ -143,6 +143,9 @@ contains
 !! Unit of memory. Default = MBs
         real(dp), optional, intent(in) :: dgl_tol
 !! Convergence threshold on residuals norms. Default = \(10^{-7}\)
+        integer(ip), optional, intent(out) :: dgl_info
+!! Error status: dgl_success (0) or one of the (negative) dgl_err_* codes.
+!! If not present, DiagLib stops the program when an error occurs.
 !
 ! local variables:
 ! ================
@@ -186,7 +189,7 @@ contains
 ! expansion spaces, residuals and their norms.
 !
         real(dp), allocatable :: vp(:, :), vm(:, :), lvp(:, :), lvm(:, :), bvp(:, :), bvm(:, :)
-        real(dp), allocatable :: rp(:, :), rm(:, :), rr(:, :), r_norm(:, :)
+        real(dp), allocatable :: rp(:, :), rm(:, :), r_norm(:, :)
 !
 ! eigenvectors of the reduced problem and components of the ritz vectors:
 !
@@ -205,16 +208,17 @@ contains
 ! START EXECUTION
 ! ================
 !
+        call dgl_clear_error()
+        ok = .false.
+!
 ! Stupidity checks
 !
-        if (n_targ .gt. n_max) call dgl_error( &
-            "Number of eigenvalues requested is larger that size of arrays passed")
-!
-        if (mod(n2, 2) .ne. 0) call dgl_error( &
-            "Size of the total problem is not even, something is really wrong with your input")
+        if (mod(n2, 2_ip) .ne. 0) call dgl_error( &
+            "Size of the total problem is not even, something is really wrong with your input", dgl_err_input)
 !
         if (4*n_max .ge. n2) call dgl_error( &
-            "Requested more than half of the total number of eigenvalues: expansions space would break down!")
+            "Requested more than half of the total number of eigenvalues: expansions space would break down!", &
+            dgl_err_input)
 !
 ! Parse optional arguments
 !
@@ -224,6 +228,19 @@ contains
         tol = 1.e-7_dp; if (present(dgl_tol)) tol = dgl_tol
         memory = 80; if (present(dgl_memory)) memory = dgl_memory
         memory_unit = "MB"; if (present(dgl_memory_unit)) memory_unit = dgl_memory_unit
+!
+! check the input
+!
+        call dgl_check_input(n2, n_targ, n_max, max_iter, tol, memory)
+!
+! no expansion space smaller than dgl_min_dav_iter iterations is deemed acceptable
+!
+        if (dav_iter .lt. dgl_min_dav_iter) then
+            if (verbose_in) call dgl_warning("dav_iter is smaller than the minimum allowed value, "// &
+                                             "the minimum value is used instead")
+            dav_iter = dgl_min_dav_iter
+        end if
+        if (dgl_failed()) go to 999
 !
 !
 ! compute the actual size of the expansion space, checking that
@@ -242,14 +259,13 @@ contains
 ! compute the number of large vectors that will be allocated
 ! to later exstimate required memory in dgl_init
 !
-        n_arrs = lda*6 + n_max*7
+        n_arrs = lda*6 + n_max*6
         call dgl_init(n, n_arrs, memory, memory_unit, verbose_in)
 !
 ! start by allocating memory for the various lapack routines
 !
-        lwork = get_mem_lapack(n, n_max)
+        lwork = get_mem_lapack(lda)
         call mallocate(lwork, work)
-        call mallocate(n_max, tau)
 !
 ! allocate memory for the expansion space, the corresponding
 ! matrix-multiplied vectors and the residual:
@@ -262,12 +278,11 @@ contains
         call mallocate(n, lda, bvm)
         call mallocate(n, n_max, rp)
         call mallocate(n, n_max, rm)
-        call mallocate(n, n_max, rr)
 !
 ! allocate memory for convergence check
 !
         call mallocate(n_max, done)
-        call mallocate(2, n_max, r_norm)
+        call mallocate(2_ip, n_max, r_norm)
 !
 ! allocate memory for the reduced matrix and its eigenvalues:
 !
@@ -286,6 +301,7 @@ contains
         call mallocate(n, n_max, bm)
 !
         call mallocate(n_max, lda, scratch)
+        if (dgl_failed()) go to 900
 !
 ! set the tolerances and compute a useful constant to compute rms norms:
 !
@@ -311,10 +327,16 @@ contains
         call get_time(t_tot)
 !
 ! move the guess into the expansion space.
+! as for the other drivers, if no guess is provided (evec is zero), a random one is used.
+! the same is done for the individual plus and minus components that vanish
+! (e.g., if Y = Z), as they cannot be orthonormalized.
 !
+        if (dnrm2(n2*n_max, evec, 1_ip) .lt. num_thresh) call random_number(evec)
         do i_eig = 1, n_max
             vp(:, i_eig) = evec(1:n, i_eig) + evec(n + 1:n2, i_eig)
             vm(:, i_eig) = evec(1:n, i_eig) - evec(n + 1:n2, i_eig)
+            if (dnrm2(n, vp(:, i_eig), 1_ip) .lt. num_thresh) call random_number(vp(:, i_eig))
+            if (dnrm2(n, vm(:, i_eig), 1_ip) .lt. num_thresh) call random_number(vm(:, i_eig))
         end do
 !
 ! initialize the counters
@@ -368,9 +390,9 @@ contains
 !
 ! update the reduced matrix
 !
-            call dgemm('t', 'n', ld_current, n_act, n, one, vm, n, bvm(:, i_beg), n, zero, s_red(1, i_beg), lda)
+            call dgemm('t', 'n', ld_current, n_act, n, one, vm, n, bvm(1, i_beg), n, zero, s_red(1, i_beg), lda)
             if (it .gt. 1) then
-                call dgemm('t', 'n', n_act, i_beg - 1, n, one, vm(:, i_beg), n, bvm, n, zero, scratch, n_max)
+                call dgemm('t', 'n', n_act, i_beg - 1, n, one, vm(1, i_beg), n, bvm, n, zero, scratch, n_max)
                 s_red(i_beg:ld_current, 1:i_beg - 1) = scratch(:n_act, :i_beg - 1)
             end if
 !
@@ -385,6 +407,8 @@ contains
             call dsyev('v', 'u', ld_current, s_red_2, lda, e_red, work, lwork, info)
             call get_time(t2)
             t_diag = t_diag + t2 - t1
+            if (info .ne. 0) call dgl_error("diagonalization of the reduced matrix failed", dgl_err_lapack)
+            if (dgl_failed()) go to 900
 !
 ! extract the eigenvalues and compute the ritz approximation to the
 ! eigenvectors
@@ -413,15 +437,19 @@ contains
             call dgemm('n', 'n', n, n_max, ld_current, one, lvp, n, up, lda, zero, bp, n)
             call dgemm('n', 'n', n, n_max, ld_current, one, lvm, n, um, lda, zero, bm, n)
 !
-            do i_eig = 1, n_targ
+            do i_eig = 1, n_max
 !
-! if the eigenvalue is already converged, skip it.
+! the residuals of all the non-converged ritz pairs are used to expand the space,
+! but convergence is only checked for the n_targ lowest ones.
 !
-                if (done(i_eig)) cycle
+                if (i_eig .le. n_targ) then
+                    if (done(i_eig)) cycle
+                end if
 !
-                call daxpy(n, -eig(i_eig), bp(:, i_eig), 1, rp(:, i_eig), 1)
-                call daxpy(n, -eig(i_eig), bm(:, i_eig), 1, rm(:, i_eig), 1)
-                r_norm(1, i_eig) = (dnrm2(n, rp(:, i_eig), 1) + dnrm2(n, rm(:, i_eig), 1))/(eig(i_eig)*sqrt(two)*sqrtn)
+                call daxpy(n, -eig(i_eig), bp(:, i_eig), 1_ip, rp(:, i_eig), 1_ip)
+                call daxpy(n, -eig(i_eig), bm(:, i_eig), 1_ip, rm(:, i_eig), 1_ip)
+                if (i_eig .gt. n_targ) cycle
+                r_norm(1, i_eig) = (dnrm2(n, rp(:, i_eig), 1_ip) + dnrm2(n, rm(:, i_eig), 1_ip))/(eig(i_eig)*sqrt(two)*sqrtn)
                 r_norm(2, i_eig) = (maxval(abs(rp(:, i_eig))) + maxval(abs(rm(:, i_eig))))/(sqrt(two)*eig(i_eig))
             end do
 !
@@ -450,11 +478,6 @@ contains
 !
             if (all(done(1:n_targ))) then
                 ok = .true.
-                do i_eig = 1, n_targ
-                    eig(i_eig) = one/eig(i_eig)
-                end do
-                evec(1:n, :) = (eigp + eigm)/two
-                evec(n + 1:n2, :) = (eigp - eigm)/two
                 exit
             end if
 !
@@ -526,18 +549,28 @@ contains
 !
             call get_time(t2)
             t_ortho = t_ortho + t2 - t1
+            if (dgl_failed()) go to 900
 !
             if (verbose) write (6, 1050) n_targ, n_act, n_frozen
 !
         end do
 !
+! assemble the eigenvalues and the eigenvectors (Y, Z) from the latest ritz
+! approximation, whether or not the procedure has converged.
+!
+        if (max_iter .ge. 1) then
+            eig = one/eig
+            evec(1:n, :) = (eigp + eigm)/two
+            evec(n + 1:n2, :) = (eigp - eigm)/two
+        end if
+!
+900     continue
         call get_time(t1)
         t_tot = t1 - t_tot
 !
         if (verbose) write (6, 1000) t_mv, t_diag, t_ortho, t_tot
 !
         call mfree(work)
-        call mfree(tau)
         call mfree(vp)
         call mfree(vm)
         call mfree(lvp)
@@ -546,7 +579,6 @@ contains
         call mfree(bvm)
         call mfree(rp)
         call mfree(rm)
-        call mfree(rr)
         call mfree(r_norm)
         call mfree(done)
         call mfree(s_copy)
@@ -562,6 +594,12 @@ contains
         call mfree(scratch)
 !
         call dgl_check_memleak()
+!
+! report the error status (or stop, if dgl_info is not present)
+!
+999     continue
+        if (dgl_failed()) ok = .false.
+        call dgl_return_info(dgl_info)
 !
 1000    format(t3, 'timings for SMO-GD (cpu/wall):   ', /, &
                t3, '  matrix-vector multiplications: ', 2f12.4, /, &

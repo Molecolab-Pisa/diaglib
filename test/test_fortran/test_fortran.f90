@@ -1,13 +1,45 @@
 program test_fortran
 !!
-!! tests the various functionalities of diaglib.
+!! tests the various functionalities of diaglib, comparing the results with the reference
+!! computed with lapack by the dgl_reference program.
+!!
+!! 1. all the drivers are run from a simple guess (unit vectors) and n_random_runs times from a
+!!    random guess (zero vectors in input, so that diaglib generates the guess). results obtained
+!!    from a random guess are not reproducible, so only the converged eigenpairs are checked.
+!!    the non-symmetric driver is run for right, left and both eigenvectors, and for three
+!!    matrices: one with well separated eigenvalues, one with nearly degenerate eigenvalues, in
+!!    which the roots change order during the iterations and have to be followed, and one with
+!!    a pair of complex eigenvalues among the lowest ones, which have to be skipped.
+!! 2. all the drivers are run with a level shift, in verbose mode, from a guess that is not
+!!    orthonormal.
+!! 3. the non-symmetric driver is run with a poor preconditioner, so that the expansion space
+!!    is restarted several times, also when computing the left eigenvectors after the right ones.
+!! 4. invalid input has to be reported through dgl_info, and values of dav_iter that are too
+!!    small or too large have to be handled.
 !!
     use dgl_interface
     use direct_matvecs
     use utility
     implicit none
+!
+! kinds of guess
+!
+    integer(ip), parameter :: simple_guess = 0, random_guess = 1, scaled_guess = 2
+!
+! non-symmetric test matrices
+!
+    integer(ip), parameter :: separated = 1, close_eigs = 2, cplx_eigs = 3
+!
+! options of the current tests
+!
+    integer(ip) :: guess_kind
+    real(dp) :: test_shift
+    logical :: test_verbose, weak_precnd
+!
     logical :: ok
+    integer(ip) :: n_tests = 0, n_failed = 0, run, i_side, i_mat
     real(dp), allocatable :: eig(:), evec(:, :), evec_2(:, :)
+    character(len=2), parameter :: sides(3) = ["R ", "L ", "LR"]
 !
 ! Check if the reference exists
 !
@@ -31,12 +63,38 @@ program test_fortran
 ! TESTING AREA
 !====================================
 !
-    call test_davidson
-    call test_davidson_generalized
-    call test_lobpcg
-    call test_lobpcg_generalized
-    call test_nonsym_davidson
-    call test_smogd
+! 1. simple and random guesses
+!
+    test_shift = shift
+    test_verbose = verbose
+    weak_precnd = .false.
+    do run = 0, n_random_runs
+        guess_kind = merge(random_guess, simple_guess, run .gt. 0)
+        call run_all_drivers()
+    end do
+!
+! 2. level shift, verbose output, guess that is not orthonormal
+!
+    guess_kind = scaled_guess
+    test_shift = 0.5_dp
+    test_verbose = .true.
+    call run_all_drivers()
+!
+! 3. poor preconditioner, many restarts
+!
+    guess_kind = simple_guess
+    test_shift = shift
+    test_verbose = verbose
+    weak_precnd = .true.
+    do i_side = 1, size(sides)
+        call test_nonsym_davidson(sides(i_side), close_eigs)
+    end do
+    weak_precnd = .false.
+!
+! 4. invalid input and extreme values of dav_iter
+!
+    call test_input_errors()
+    call test_dav_iter()
 !
 ! close the output file:
 !
@@ -46,222 +104,365 @@ program test_fortran
 !
     deallocate (evec, evec_2, eig)
 !
+    write (6, "(t3,a,i0,a,i0,a)") "Summary: ", n_failed, " failed tests out of ", n_tests, "."
+    if (n_failed .gt. 0) stop 1
+!
 contains
 !
-    subroutine test_davidson()
+    subroutine run_all_drivers()
         implicit none
+        call test_davidson(.false.)
+        call test_davidson(.true.)
+        call test_lobpcg(.false.)
+        call test_lobpcg(.true.)
+        do i_mat = separated, cplx_eigs
+            do i_side = 1, size(sides)
+                call test_nonsym_davidson(sides(i_side), i_mat)
+            end do
+        end do
+        call test_smogd()
+    end subroutine run_all_drivers
 !
-! test davidson:
+    subroutine init_guess(ld, vecs)
 !
-        call init_eigenpairs(n, n_max, eig, evec, ok)
+! build the guess for the current test
 !
-        write (6, f_string) 'testing Davidson:'
-        call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                                 dgl_verbose=verbose, &
-                                 dgl_max_iter=max_iter, &
-                                 dgl_dav_iter=dav_iter, &
-                                 dgl_shift=shift, &
-                                 dgl_tol=tol, &
-                                 dgl_memory=memory, &
-                                 dgl_memory_unit=memory_unit &
-                                 )
+        implicit none
+        integer(ip), intent(in) :: ld
+        real(dp), intent(inout) :: vecs(ld, n_max)
+        integer(ip) :: k
 !
-        if (ok) then
-            write (6, f_string) 'Davidson converged.'
-            eig = eig - shift
-            ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric diagonalization")
-            call dump_eigpairs(lutest, n, n_targ, eig, evec, "Davidson")
-            if (.not. ok) then
-                write (*, f_string) "Davidson results do not match with reference! Maybe rerun reference?"
-                stop 1
-            end if
-        else
-            write (6, f_string) 'Davidson failed to converge.'
-            stop 1
+        call init_eigenpairs(ld, n_max, eig, vecs, ok, guess_kind .eq. random_guess)
+        if (guess_kind .eq. scaled_guess) then
+            do k = 1, n_max
+                vecs(k, k) = 2.0_dp
+                vecs(k + 1, k) = 0.5_dp
+            end do
         end if
+    end subroutine init_guess
+!
+    function test_label(driver) result(label)
+!
+! describe the current test
+!
+        implicit none
+        character(len=*), intent(in) :: driver
+        character(len=120) :: label
+!
+        select case (guess_kind)
+        case (random_guess)
+            label = driver//", random guess"
+        case (scaled_guess)
+            label = driver//", shifted, verbose, non-orthonormal guess"
+        case default
+            label = driver//", simple guess"
+        end select
+        if (weak_precnd) label = trim(label)//", poor preconditioner"
+    end function test_label
+!
+    subroutine check_result(label, ok, info, compared)
+!
+! record the result of a test: the driver has to converge without errors,
+! and the eigenpairs have to agree with the reference
+!
+        implicit none
+        character(len=*), intent(in) :: label
+        logical, intent(in) :: ok, compared
+        integer(ip), intent(in) :: info
+!
+        n_tests = n_tests + 1
+        if (info .eq. dgl_success .and. ok .and. compared) then
+            write (6, f_string) label//": PASSED"
+        else
+            n_failed = n_failed + 1
+            if (info .ne. dgl_success) then
+                write (6, "('-- ', a, ': FAILED (error ', i0, ')', /)") label, info
+            else if (.not. ok) then
+                write (6, f_string) label//": FAILED (not converged)"
+            else
+                write (6, f_string) label//": FAILED (results do not match the reference)"
+            end if
+        end if
+    end subroutine check_result
+!
+    subroutine test_davidson(generalized)
+        implicit none
+        logical, intent(in) :: generalized
+        integer(ip) :: info
+        logical :: same
+        character(len=120) :: label
+!
+        if (generalized) then
+            label = test_label("Generalized Davidson")
+        else
+            label = test_label("Davidson")
+        end if
+        call init_guess(n, evec)
+!
+        write (6, f_string) 'testing '//trim(label)//':'
+        if (generalized) then
+            call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
+                                     dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                                     dgl_shift=test_shift, dgl_tol=tol, dgl_memory=memory, &
+                                     dgl_memory_unit=memory_unit, dgl_info=info)
+        else
+            call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+                                     dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                                     dgl_shift=test_shift, dgl_tol=tol, dgl_memory=memory, &
+                                     dgl_memory_unit=memory_unit, dgl_info=info)
+        end if
+!
+        same = .false.
+        if (ok .and. info .eq. dgl_success) then
+            if (generalized) then
+                same = compare_eigs(n, n_targ, eig, evec, "Symmetric Generalized")
+            else
+                same = compare_eigs(n, n_targ, eig, evec, "Symmetric diagonalization")
+            end if
+            call dump_eigpairs(lutest, n, n_targ, eig, evec, trim(label))
+        end if
+        call check_result(trim(label), ok, info, same)
 !
     end subroutine test_davidson
 !
-    subroutine test_davidson_generalized()
+    subroutine test_lobpcg(generalized)
         implicit none
+        logical, intent(in) :: generalized
+        integer(ip) :: info
+        logical :: same
+        character(len=120) :: label
 !
-! test generalized davidson:
-!
-        call init_eigenpairs(n, n_max, eig, evec, ok)
-!
-        write (6, f_string) 'testing Generalized Davidson:'
-        call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
-                                 dgl_verbose=verbose, &
-                                 dgl_max_iter=max_iter, &
-                                 dgl_dav_iter=dav_iter, &
-                                 dgl_shift=shift, &
-                                 dgl_tol=tol, &
-                                 dgl_memory=memory, &
-                                 dgl_memory_unit=memory_unit &
-                                 )
-!
-        if (ok) then
-            write (6, f_string) 'Generalized Davidson converged.'
-            ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric Generalized")
-            call dump_eigpairs(lutest, n, n_targ, eig, evec, "Generalized Davidson")
-            if (.not. ok) then
-                write (*, f_string) "Generalized Davidson results do not match with reference! Maybe rerun reference?"
-                stop 1
-            end if
-
+        if (generalized) then
+            label = test_label("Generalized LOBPCG")
         else
-            write (6, f_string) 'Generalized Davidson failed to converge.'
-            stop 1
+            label = test_label("LOBPCG")
+        end if
+        call init_guess(n, evec)
+!
+        write (6, f_string) 'testing '//trim(label)//':'
+        if (generalized) then
+            call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
+                                   dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_shift=test_shift, &
+                                   dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+        else
+            call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+                                   dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_shift=test_shift, &
+                                   dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
         end if
 !
-    end subroutine test_davidson_generalized
-!
-    subroutine test_nonsym_davidson()
-        implicit none
-!
-! test non-symmetric davidson:
-!
-        call init_eigenpairs(n, n_max, eig, evec, ok)
-        call init_eigenpairs(n, n_max, eig, evec_2, ok)
-!
-        write (6, f_string) 'testing non-symmetric Davidson:'
-        call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "LR", eig, evec, ok, evec_2=evec_2, &
-                                       dgl_verbose=verbose, &
-                                       dgl_max_iter=max_iter, &
-                                       dgl_dav_iter=dav_iter, &
-                                       dgl_shift=shift, &
-                                       dgl_tol=tol, &
-                                       dgl_memory=memory, &
-                                       dgl_memory_unit=memory_unit &
-                                       )
-!
-        if (ok) then
-            write (6, f_string) 'non-symmetric Davidson converged.'
-            eig = eig - shift
-            ok = compare_eigs(n, n_targ, tol, eig, evec, "Non Symmetric diagonalization, Right")
-            call dump_eigpairs(lutest, n, n_targ, eig, evec, "Non Symmetric Davidson, Right")
-            if (.not. ok) then
-                write (*, f_string) "Right Non symmetric Davidson results do not match with reference! Maybe rerun reference?"
-                stop 1
+        same = .false.
+        if (ok .and. info .eq. dgl_success) then
+            if (generalized) then
+                same = compare_eigs(n, n_targ, eig, evec, "Symmetric Generalized")
+            else
+                same = compare_eigs(n, n_targ, eig, evec, "Symmetric diagonalization")
             end if
-
-            ok = compare_eigs(n, n_targ, tol, eig, evec_2, "Non Symmetric diagonalization, Left")
-            call dump_eigpairs(lutest, n, n_targ, eig, evec_2, "Non Symmetric Davidson, Left")
-            if (.not. ok) then
-                write (*, f_string) "Left Non symmetric Davidson results do not match with reference! Maybe rerun reference?"
-                stop 1
-            end if
-        else
-            write (6, f_string) 'non-symmetric Davidson failed to converge.'
-            stop 1
+            call dump_eigpairs(lutest, n, n_targ, eig, evec, trim(label))
         end if
+        call check_result(trim(label), ok, info, same)
+!
+    end subroutine test_lobpcg
+!
+    subroutine test_nonsym_davidson(side, matrix)
+!
+! test non-symmetric davidson for the given side ("R ", "L " or "LR") and test matrix
+!
+        implicit none
+        character(len=2), intent(in) :: side
+        integer(ip), intent(in) :: matrix
+        integer(ip) :: info
+        logical :: same
+        character(len=120) :: label, reference
+        procedure(dgl_matvec), pointer :: matvec_r, matvec_l
+        procedure(dgl_precnd), pointer :: precnd
+!
+        select case (matrix)
+        case (close_eigs)
+            label = "non-symmetric Davidson ("//trim(side)//", nearly degenerate)"
+            reference = "Nearly degenerate nonsymmetric diagonalization"
+            matvec_r => arx_close
+            matvec_l => alx_close
+            precnd => dx_close
+            if (weak_precnd) precnd => dx_close_weak
+        case (cplx_eigs)
+            label = "non-symmetric Davidson ("//trim(side)//", complex pair)"
+            reference = "Complex pair nonsymmetric diagonalization"
+            matvec_r => arx_cplx
+            matvec_l => alx_cplx
+            precnd => dx
+        case default
+            label = "non-symmetric Davidson ("//trim(side)//")"
+            reference = "Non Symmetric diagonalization"
+            matvec_r => arx
+            matvec_l => alx
+            precnd => dx
+        end select
+        label = test_label(trim(label))
+!
+        call init_guess(n, evec)
+        call init_guess(n, evec_2)
+!
+        write (6, f_string) 'testing '//trim(label)//':'
+        if (side .eq. "LR") then
+            call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, eig, evec, ok, &
+                                           evec_2=evec_2, dgl_verbose=test_verbose, dgl_max_iter=max_iter, &
+                                           dgl_dav_iter=dav_iter, dgl_shift=test_shift, dgl_tol=tol, &
+                                           dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+        else
+            call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, eig, evec, ok, &
+                                           dgl_verbose=test_verbose, dgl_max_iter=max_iter, &
+                                           dgl_dav_iter=dav_iter, dgl_shift=test_shift, dgl_tol=tol, &
+                                           dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+        end if
+!
+! in evec: right eigenvectors for "R " and "LR", left ones for "L ". in evec_2: left ones for "LR"
+!
+        same = .false.
+        if (ok .and. info .eq. dgl_success) then
+            select case (side)
+            case ("R ")
+                same = compare_eigs(n, n_targ, eig, evec, trim(reference)//", Right")
+            case ("L ")
+                same = compare_eigs(n, n_targ, eig, evec, trim(reference)//", Left")
+            case ("LR")
+                same = compare_eigs(n, n_targ, eig, evec, trim(reference)//", Right")
+                same = compare_eigs(n, n_targ, eig, evec_2, trim(reference)//", Left") .and. same
+            end select
+            call dump_eigpairs(lutest, n, n_targ, eig, evec, trim(label))
+        end if
+        call check_result(trim(label), ok, info, same)
 !
     end subroutine test_nonsym_davidson
 !
-    subroutine test_lobpcg()
-        implicit none
-
-!
-! test lobpcg:
-!
-        call init_eigenpairs(n, n_max, eig, evec, ok)
-!
-        write (6, f_string) 'testing LOBPCG:'
-
-        call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
-                               dgl_verbose=verbose, &
-                               dgl_max_iter=max_iter, &
-                               dgl_shift=shift, &
-                               dgl_tol=tol, &
-                               dgl_memory=memory, &
-                               dgl_memory_unit=memory_unit &
-                               )
-!
-        if (ok) then
-            write (6, f_string) 'LOBPCG converged.'
-            eig = eig - shift
-            ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric diagonalization")
-            call dump_eigpairs(lutest, n, n_targ, eig, evec, "LOBPCG")
-            if (.not. ok) then
-                write (*, f_string) "LOBPCG results do not match with reference! Maybe rerun reference?"
-                stop 1
-            end if
-        else
-            write (6, f_string) 'LOBPCG failed to converge.'
-            stop 1
-        end if
-
-    end subroutine test_lobpcg
-!
-    subroutine test_lobpcg_generalized()
-        implicit none
-!
-! test generalized lobpcg:
-!
-        call init_eigenpairs(n, n_max, eig, evec, ok)
-!
-        write (6, f_string) 'testing Generalized LOBPCG:'
-
-        call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=mx_p, &
-                               dgl_verbose=verbose, &
-                               dgl_max_iter=max_iter, &
-                               dgl_shift=shift, &
-                               dgl_tol=tol, &
-                               dgl_memory=memory, &
-                               dgl_memory_unit=memory_unit &
-                               )
-!
-        if (ok) then
-            write (6, f_string) 'Generalized LOBPCG converged.'
-            ok = compare_eigs(n, n_targ, tol, eig, evec, "Symmetric Generalized")
-            call dump_eigpairs(lutest, n, n_targ, eig, evec, "Generalized LOBPCG")
-            if (.not. ok) then
-                write (*, f_string) "Generalized LOBPCG results do not match with reference! Maybe rerun reference?"
-                stop 1
-            end if
-        else
-            write (6, f_string) 'Generalized LOBPCG failed to converge.'
-            stop 1
-        end if
-!
-    end subroutine test_lobpcg_generalized
-!
     subroutine test_smogd()
         implicit none
+        integer(ip) :: info
+        logical :: same
+        real(dp), allocatable :: eig_lr(:), evec_lr(:, :)
+        character(len=120) :: label
 !
-! test smogd:
+        allocate (evec_lr(2*n, n_max), eig_lr(n_max))
+        label = test_label("SMOGD")
+        call init_guess(2*n, evec_lr)
 !
-        deallocate (evec, eig)
-        allocate (evec(2*n, n_max), eig(2*n))
-        call init_eigenpairs(2*n, n_max, eig, evec, ok)
-!
-        write (6, f_string) 'testing SMOGD:'
-        call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, &
-                              eig, evec, ok, &
-                              dgl_verbose=verbose, &
-                              dgl_max_iter=max_iter, &
-                              dgl_dav_iter=dav_iter, &
-                              dgl_tol=tol, &
-                              dgl_memory=memory, &
-                              dgl_memory_unit=memory_unit &
-                              )
-        if (ok) then
-            write (6, f_string) 'SMOGD converged.'
-            ok = compare_eigs(2*n, n_targ, tol, eig, evec, "Linear response")
-            call dump_eigpairs(lutest, n*2, n_targ, eig, evec, "SMOGD")
-            if (.not. ok) then
-                write (*, f_string) "SMOGD results do not match with reference! Maybe rerun reference?"
-                stop 1
-            end if
-        else
-            write (6, f_string) 'SMOGD failed to converge.'
-            stop 1
+        write (6, f_string) 'testing '//trim(label)//':'
+        call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, eig_lr, evec_lr, ok, &
+                              dgl_verbose=test_verbose, dgl_max_iter=max_iter, dgl_dav_iter=dav_iter, &
+                              dgl_tol=tol, dgl_memory=memory, dgl_memory_unit=memory_unit, dgl_info=info)
+        same = .false.
+        if (ok .and. info .eq. dgl_success) then
+            same = compare_eigs(2*n, n_targ, eig_lr, evec_lr, "Linear response")
+            call dump_eigpairs(lutest, n*2, n_targ, eig_lr, evec_lr, trim(label))
         end if
+        call check_result(trim(label), ok, info, same)
 !
-        deallocate (evec, eig)
-        allocate (evec(n, n_max), eig(n))
+        deallocate (evec_lr, eig_lr)
 !
     end subroutine test_smogd
 !
+    subroutine test_dav_iter()
+!
+! a value of dav_iter smaller than the minimum is replaced by the minimum; a value such
+! that the expansion space would be larger than the problem is reduced.
+!
+        implicit none
+        integer(ip) :: info, i_dav
+        integer(ip), parameter :: dav_iters(2) = [1_ip, 200_ip]
+        logical :: same
+        real(dp), allocatable :: eig_lr(:), evec_lr(:, :)
+        character(len=16) :: dav_label
+!
+        guess_kind = simple_guess
+        allocate (evec_lr(2*n, n_max), eig_lr(n_max))
+        do i_dav = 1, size(dav_iters)
+            write (dav_label, "('dav_iter = ', i0)") dav_iters(i_dav)
+!
+            call init_guess(n, evec)
+            call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, dgl_dav_iter=dav_iters(i_dav), &
+                                     dgl_tol=tol, dgl_max_iter=max_iter, dgl_verbose=.true., dgl_info=info)
+            same = .false.
+            if (ok .and. info .eq. dgl_success) same = compare_eigs(n, n_targ, eig, evec, "Symmetric diagonalization")
+            call check_result("Davidson, "//trim(dav_label), ok, info, same)
+!
+            call init_guess(n, evec)
+            call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "R ", eig, evec, ok, &
+                                           dgl_dav_iter=dav_iters(i_dav), dgl_tol=tol, dgl_max_iter=max_iter, &
+                                           dgl_verbose=.true., dgl_info=info)
+            same = .false.
+            if (ok .and. info .eq. dgl_success) &
+                same = compare_eigs(n, n_targ, eig, evec, "Non Symmetric diagonalization, Right")
+            call check_result("non-symmetric Davidson, "//trim(dav_label), ok, info, same)
+!
+            call init_guess(2*n, evec_lr)
+            call dgl_smogd_driver(2*n, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, eig_lr, evec_lr, ok, &
+                                  dgl_dav_iter=dav_iters(i_dav), dgl_tol=tol, dgl_max_iter=max_iter, &
+                                  dgl_verbose=.true., dgl_info=info)
+            same = .false.
+            if (ok .and. info .eq. dgl_success) same = compare_eigs(2*n, n_targ, eig_lr, evec_lr, "Linear response")
+            call check_result("SMOGD, "//trim(dav_label), ok, info, same)
+        end do
+        deallocate (evec_lr, eig_lr)
+!
+    end subroutine test_dav_iter
+!
+    subroutine test_input_errors()
+!
+! check that invalid input is reported through dgl_info, without stopping the program
+!
+        implicit none
+        integer(ip) :: info
+        procedure(), pointer :: null_p => null()
+!
+        write (6, f_string) 'testing the handling of invalid input:'
+!
+        call init_eigenpairs(n, n_max, eig, evec, ok, .false.)
+        call dgl_davidson_driver(n, 0_ip, n_max, ax, dx, eig, evec, ok, dgl_info=info)
+        call check_error("n_targ = 0", info, dgl_err_input)
+        call dgl_davidson_driver(n, n_max + 1, n_max, ax, dx, eig, evec, ok, dgl_info=info)
+        call check_error("n_targ > n_max", info, dgl_err_input)
+        call dgl_davidson_driver(2*n_max - 1, n_targ, n_max, ax, dx, eig, evec, ok, dgl_info=info)
+        call check_error("too many eigenvalues requested", info, dgl_err_input)
+        call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, dgl_tol=0.0_dp, dgl_info=info)
+        call check_error("tol = 0", info, dgl_err_input)
+        call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=null_p, dgl_info=info)
+        call check_error("non associated metvec (Davidson)", info, dgl_err_input)
+        call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, dgl_max_iter=0_ip, dgl_info=info)
+        call check_error("max_iter = 0", info, dgl_err_input)
+        call dgl_lobpcg_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, metvec=null_p, dgl_info=info)
+        call check_error("non associated metvec (LOBPCG)", info, dgl_err_input)
+        call dgl_lobpcg_driver(3*n_max - 1, n_targ, n_max, ax, dx, eig, evec, ok, dgl_info=info)
+        call check_error("too many eigenvalues requested (LOBPCG)", info, dgl_err_input)
+        call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "XX", eig, evec, ok, dgl_info=info)
+        call check_error("invalid side", info, dgl_err_input)
+        call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "LR", eig, evec, ok, dgl_info=info)
+        call check_error("side = LR without evec_2", info, dgl_err_input)
+        call init_eigenpairs(n, n_max, eig, evec, ok, .false.)
+        call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "R ", eig, evec, ok, evec_2=evec_2, &
+                                       dgl_tol=tol, dgl_max_iter=max_iter, dgl_info=info)
+        call check_error("side = R with an unneeded evec_2 (warning only)", info, dgl_success)
+        call dgl_davidson_nosym_driver(n, n_targ, n_max, arx, alx, dx, "R ", eig, evec, ok, &
+                                       dgl_memory=0_ip, dgl_info=info)
+        call check_error("memory = 0", info, dgl_err_input)
+        call dgl_smogd_driver(n - 1, n_targ, n_max, apbx, ambx, spdx, smdx, lrprc, eig, evec, ok, dgl_info=info)
+        call check_error("odd size for SMOGD", info, dgl_err_input)
+        call dgl_davidson_driver(n, n_targ, n_max, ax, dx, eig, evec, ok, &
+                                 dgl_memory=1_ip, dgl_memory_unit="KB", dgl_info=info)
+        call check_error("not enough memory", info, dgl_err_memory)
+!
+    end subroutine test_input_errors
+!
+    subroutine check_error(label, info, expected)
+        implicit none
+        character(len=*), intent(in) :: label
+        integer(ip), intent(in) :: info, expected
+!
+        n_tests = n_tests + 1
+        if (info .eq. expected) then
+            write (6, "('-- ', a, ': PASSED (info = ', i0, ')', /)") label, info
+        else
+            n_failed = n_failed + 1
+            write (6, "('-- ', a, ': FAILED (info = ', i0, ', expected ', i0, ')', /)") label, info, expected
+        end if
+    end subroutine check_error
+!
 end program test_fortran
-

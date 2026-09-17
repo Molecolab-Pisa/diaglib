@@ -4,13 +4,30 @@ module dgl_utils_c
 
     integer, parameter :: dp = dgl_real
     integer, parameter :: ip = dgl_int
+!
+! kind of the integers exchanged with C: a fixed-width type that matches ip
+! and the dgl_int typedef in diaglib.h
+!
+#ifdef DGL_INT_KIND_8
+    integer, parameter :: c_ip = C_INT64_T
+#elif DGL_INT_KIND_4
+    integer, parameter :: c_ip = C_INT32_T
+#endif
 
-    interface check_pointer
-        module procedure check_funptr
-        module procedure check_ptr
+    interface pointer_ok
+        module procedure funptr_ok
+        module procedure ptr_ok
     end interface
 
 contains
+
+    function integer_kind_c() result(kind_bytes) bind(C, name="dgl_integer_kind")
+!! Size in bytes of the integers of this DiagLib build (4 or 8), so that the users of the
+!! compiled library (e.g., the python interface) do not have to know how it was built.
+        implicit none
+        integer(C_INT) :: kind_bytes
+        kind_bytes = int(storage_size(0_c_ip)/8, C_INT)
+    end function integer_kind_c
 
     FUNCTION c_ptr_to_f_string(c_ptr_str) RESULT(f_str)
         TYPE(C_PTR), INTENT(IN) :: c_ptr_str
@@ -41,39 +58,26 @@ contains
 
     END FUNCTION c_ptr_to_f_string
 
-    subroutine dgl_error(string)
-!! DiagLib error termination
-        implicit none
-        character(len=*), intent(in) :: string
-
-        write (*, "(t3,a)") "-- DiagLib Error: "//string
-        stop "** DiagLib issued stop signal **"
-    end subroutine
-!
-    subroutine dgl_warning(string)
-!! DiagLib error termination
-        implicit none
-        character(len=*), intent(in) :: string
-
-        write (*, "(t3,a)") "-- DiagLib Warning: "//string
-    end subroutine
-
-    subroutine check_funptr(p, str)
+    logical function funptr_ok(p, str)
+!! Check that a C function pointer is associated, printing an error if it is not
         implicit none
         type(C_FUNPTR), intent(in) :: p
         character(len=*), intent(in) :: str
 
-        if (.not. c_associated(p)) call dgl_error("C Pointer to "//str//" is not associated")
+        funptr_ok = c_associated(p)
+        if (.not. funptr_ok) write (*, "(t3,a)") "-- DiagLib Error: C Pointer to "//str//" is not associated"
 
-    end subroutine check_funptr
+    end function funptr_ok
 
-    subroutine check_ptr(p, str)
+    logical function ptr_ok(p, str)
+!! Check that a C pointer is associated, printing an error if it is not
         implicit none
         type(C_PTR), intent(in) :: p
         character(len=*), intent(in) :: str
 
-        if (.not. c_associated(p)) call dgl_error("C Pointer to "//str//" is not associated")
+        ptr_ok = c_associated(p)
+        if (.not. ptr_ok) write (*, "(t3,a)") "-- DiagLib Error: C Pointer to "//str//" is not associated"
 
-    end subroutine check_ptr
+    end function ptr_ok
 
 end module dgl_utils_c

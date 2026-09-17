@@ -8,43 +8,44 @@ module mod_davidson_nosym_driver_c
 contains
 
     subroutine davidson_nosym_driver_c(n, n_targ, n_max, matvec_r, matvec_l, precnd, side, &
-                                       eig, evec_1, evec_2, ok, &
+                                       eig, evec_1, evec_2, ok, info, &
                                        verbose, tol, max_iter, dav_iter, &
                                        shift, memory, memory_unit) &
         bind(C, name="dgl_davidson_nosym_driver")
         implicit none
 
         ! C-compatible arguments
-#ifdef DGL_INT_KIND_4
-        integer(C_INT), value, intent(in) :: n, n_targ, n_max
-        integer(C_INT), value, intent(in) :: max_iter, dav_iter
-        integer(C_INT), value, intent(in) :: memory
-#elif DGL_INT_KIND_8
-        integer(C_LONG), value, intent(in) :: n, n_targ, n_max
-        integer(C_LONG), value, intent(in) :: max_iter, dav_iter
-        integer(C_LONG), value, intent(in) :: memory
-#endif
+        integer(c_ip), value, intent(in) :: n, n_targ, n_max
+        integer(c_ip), value, intent(in) :: max_iter, dav_iter
+        integer(c_ip), value, intent(in) :: memory
         logical(C_BOOL), value, intent(in) :: verbose
         real(C_DOUBLE), value, intent(in) :: tol, shift
         type(C_PTR), value, intent(in) :: memory_unit, side
+        type(C_PTR), value, intent(in) :: evec_2
+!! only used (and required) if side = "LR", may be NULL otherwise
         type(C_FUNPTR), value :: matvec_r, matvec_l, precnd
         !
         real(C_DOUBLE), intent(inout) :: eig(n_max)
-        real(C_DOUBLE), intent(inout) :: evec_1(n, n_max), evec_2(n, n_max)
+        real(C_DOUBLE), intent(inout) :: evec_1(n, n_max)
         logical(C_BOOL), intent(out) :: ok
+        integer(c_ip), intent(out) :: info
 
-        character(len=:), allocatable :: memory_unit_f, side_p
-        character(len=2), allocatable :: side_f
+        character(len=2) :: memory_unit_f, side_f
+!! fixed length, as required by the Fortran driver: shorter strings
+!! are blank padded, longer ones truncated, NULL gives the default unit
         logical :: verbose_f, ok_f
+        integer(ip) :: info_f
+        real(C_DOUBLE), pointer :: evec_2_f(:, :)
 !
         memory_unit_f = c_ptr_to_f_string(memory_unit)
-        side_p = c_ptr_to_f_string(side)
-        side_f = side_p
+        side_f = c_ptr_to_f_string(side)
 !
 !       ! Associate pointers
-        call check_pointer(matvec_r, "matvec_r")
-        call check_pointer(matvec_l, "matvec_l")
-        call check_pointer(precnd, "precnd")
+        ok = .false.
+        info = dgl_err_input
+        if (.not. pointer_ok(matvec_r, "matvec_r")) return
+        if (.not. pointer_ok(matvec_l, "matvec_l")) return
+        if (.not. pointer_ok(precnd, "precnd")) return
         call c_f_procpointer(matvec_r, matvec_r_ptr)
         call c_f_procpointer(matvec_l, matvec_l_ptr)
         call c_f_procpointer(precnd, precnd_ptr)
@@ -53,9 +54,12 @@ contains
 
         ! Chiamata al driver
         if (trim(side_f) == "LR") then
+            if (.not. pointer_ok(evec_2, "evec_2")) return
+            call c_f_pointer(evec_2, evec_2_f, [n, n_max])
             call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
                                            side_f, eig, evec_1, ok_f, &
-                                           evec_2=evec_2, &
+                                           evec_2=evec_2_f, &
+                                           dgl_info=info_f, &
                                            dgl_verbose=verbose_f, &
                                            dgl_max_iter=max_iter, &
                                            dgl_dav_iter=dav_iter, &
@@ -67,6 +71,7 @@ contains
         else
             call dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_wrapper, matvec_l_wrapper, precnd_wrapper, &
                                            side_f, eig, evec_1, ok_f, &
+                                           dgl_info=info_f, &
                                            dgl_verbose=verbose_f, &
                                            dgl_max_iter=max_iter, &
                                            dgl_dav_iter=dav_iter, &
@@ -78,6 +83,7 @@ contains
         end if
 
         ok = ok_f
+        info = info_f
 
     end subroutine davidson_nosym_driver_c
 

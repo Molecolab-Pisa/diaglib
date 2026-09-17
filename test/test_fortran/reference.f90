@@ -3,6 +3,7 @@ program reference
 !! Build reference file for the results of DiagLib tests
 !!
     use utility
+    use dgl_lapack, only: dsyev, dsygv, dgeev
     implicit none
 
     integer(ip) :: lwork = 10000, ilwork = 10000, info
@@ -34,7 +35,7 @@ program reference
     a = copy
     !symmetric generalized problem
     write (*, f_string) "Running symmetric generalized diagonalization"
-    call dsygv(1, "V", "U", n, a, n, b, n, eig, work, lwork, info)
+    call dsygv(1_ip, "V", "U", n, a, n, b, n, eig, work, lwork, info)
     call check_lapack(info)
     call dump_eigpairs(luref, n, n, eig, a, "Symmetric Generalized diagonalization")
 
@@ -42,6 +43,9 @@ program reference
     call get_asym_matrix(n, a)
 
     !non symmetric diagonalization
+    !note: dgeev returns the left eigenvectors in its first array (evec(:, :, 1)) and the right ones
+    !in the second (evec(:, :, 2)). get_asym_matrix builds the transpose of the matrix applied by arx,
+    !so the left eigenvectors of a are the right eigenvectors used by the test, and vice versa.
     write (*, f_string) "Running non symmetric generalized diagonalization"
     call dgeev("V", "V", n, a, n, eig, eig(1, 2), evec, n, evec(1, 1, 2), n, work, lwork, info)
     call check_lapack(info)
@@ -51,6 +55,45 @@ program reference
 
     call dump_eigpairs(luref, n, n, eig, evec, "Non Symmetric diagonalization, Right")
     call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Non Symmetric diagonalization, Left")
+
+    write (*, f_string) "Building nearly degenerate non symmetric matrix"
+    do j = 1, n
+        do i = 1, n
+            a(i, j) = close_matrix_element(i, j)
+        end do
+    end do
+
+    !non symmetric diagonalization, nearly degenerate eigenvalues
+    write (*, f_string) "Running nearly degenerate non symmetric diagonalization"
+    call dgeev("V", "V", n, a, n, eig, eig(1, 2), evec, n, evec(1, 1, 2), n, work, lwork, info)
+    call check_lapack(info)
+
+    if (sqrt(dot_product(eig(:, 2), eig(:, 2))) .gt. 1.e-12_dp) write (*, f_string) "Immaginary eigs detected !!"
+    call sort_eigenpairs(n, n, eig, evec)
+
+    !here a is the same matrix applied by arx_close: the right eigenvectors are in evec(:, :, 2)
+    call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Nearly degenerate nonsymmetric diagonalization, Right")
+    call dump_eigpairs(luref, n, n, eig, evec, "Nearly degenerate nonsymmetric diagonalization, Left")
+
+    write (*, f_string) "Building non symmetric matrix with complex eigenvalues"
+    do j = 1, n
+        do i = 1, n
+            a(i, j) = cplx_matrix_element(i, j)
+        end do
+    end do
+
+    !non symmetric diagonalization, complex pair among the lowest eigenvalues.
+    !diaglib only looks for real eigenvalues: move the complex ones to the end before sorting.
+    write (*, f_string) "Running non symmetric diagonalization with complex eigenvalues"
+    call dgeev("V", "V", n, a, n, eig, eig(1, 2), evec, n, evec(1, 1, 2), n, work, lwork, info)
+    call check_lapack(info)
+    do i = 1, n
+        if (abs(eig(i, 2)) .gt. 1.e-8_dp) eig(i, 1) = eig(i, 1) + 1.e6_dp
+    end do
+    call sort_eigenpairs(n, n, eig, evec)
+
+    call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Complex pair nonsymmetric diagonalization, Right")
+    call dump_eigpairs(luref, n, n, eig, evec, "Complex pair nonsymmetric diagonalization, Left")
 
     deallocate (a, b)
     deallocate (eig)
@@ -78,7 +121,7 @@ program reference
 
     !linear response problem
     write (*, f_string) "Running linear response diagonalization"
-    call dsygv(1, "V", "L", 2*n, b, 2*n, a, 2*n, eig, work, lwork, info)
+    call dsygv(1_ip, "V", "L", 2*n, b, 2*n, a, 2*n, eig, work, lwork, info)
     call check_lapack(info)
 
     eig = -one/eig

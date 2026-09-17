@@ -1,6 +1,6 @@
 module dgl_orthogonalizations
 !* Module for all the orthogonalization procedures.
-! They may be used also as a standalone outside of DiagLib.
+! These are internal routines of the drivers and are not part of the public interface.
     use dgl_global_utils
     implicit none
 !
@@ -35,11 +35,27 @@ contains
 ! local scratch
 ! =============
 !
-        real(dp), allocatable :: v(:, :)
+        real(dp), allocatable :: v(:, :), tau_qr(:), work_qr(:)
+        real(dp) :: lwork_query(1)
+        integer(ip) :: lwork_qr, info_qr
 !
         call mallocate(n, m, v)
+!
+! use a local workspace, so that this routine does not depend on
+! the global lapack work arrays allocated by the drivers.
+!
+        call mallocate(min(n, m), tau_qr)
+        if (dgl_failed()) go to 100
         v = u
-        call dgeqrf(n, m, u, n, tau, work, lwork, info)
+        call dgeqrf(n, m, u, n, tau_qr, lwork_query, -1_ip, info_qr)
+        lwork_qr = max(1_ip, int(lwork_query(1), ip))
+        call mallocate(lwork_qr, work_qr)
+        if (dgl_failed()) go to 100
+        call dgeqrf(n, m, u, n, tau_qr, work_qr, lwork_qr, info_qr)
+        if (info_qr .ne. 0) then
+            call dgl_error("ortho: QR factorization failed", dgl_err_lapack)
+            go to 100
+        end if
 !
         call dtrsm('r', 'u', 'n', 'n', n, m, one, u, n, v, n)
 !
@@ -47,6 +63,9 @@ contains
 !
         u = v
 !
+100     continue
+        call mfree(work_qr)
+        call mfree(tau_qr)
         call mfree(v)
     end subroutine ortho
 !
@@ -76,12 +95,15 @@ contains
 !
         integer(ip) :: i, j
         real(dp), allocatable :: metric(:, :), sigma(:), u_svd(:, :), vt_svd(:, :), &
-                                 temp(:, :)
+                                 temp(:, :), work_svd(:)
+        real(dp) :: lwork_query(1)
+        integer(ip) :: lwork_svd, info_svd
         real(dp), parameter :: tol_svd = 1.0e-5_dp
         logical, parameter :: use_svd = .false.
 !
 !
         call mallocate(m, m, metric)
+        if (dgl_failed()) go to 100
 !
         call dgemm('t', 'n', m, m, n, one, u, n, bu, n, zero, metric, m)
 !
@@ -94,8 +116,14 @@ contains
             call mallocate(m, m, u_svd)
             call mallocate(m, m, vt_svd)
             call mallocate(n, m, temp)
+            if (dgl_failed()) go to 100
 !
-            call dgesvd('a', 'a', m, m, metric, m, sigma, u_svd, m, vt_svd, m, work, lwork, info)
+            call dgesvd('a', 'a', m, m, metric, m, sigma, u_svd, m, vt_svd, m, lwork_query, -1_ip, info_svd)
+            lwork_svd = max(1_ip, int(lwork_query(1), ip))
+            call mallocate(lwork_svd, work_svd)
+            if (dgl_failed()) go to 100
+            call dgesvd('a', 'a', m, m, metric, m, sigma, u_svd, m, vt_svd, m, work_svd, lwork_svd, info_svd)
+            call mfree(work_svd)
 !
 ! compute sigma**(-1/2)
 !
@@ -129,16 +157,15 @@ contains
             u = temp
             call dgemm('n', 'n', n, m, m, one, bu, n, metric, m, zero, temp, n)
             bu = temp
-!
-            call mfree(sigma)
-            call mfree(u_svd)
-            call mfree(vt_svd)
-            call mfree(temp)
         else
 !
 ! compute the cholesky factorization of the metric.
 !
             call dpotrf('l', m, metric, m, info)
+            if (info .ne. 0) then
+                call dgl_error("b_ortho: the metric is not positive definite", dgl_err_ortho)
+                go to 100
+            end if
 !
 ! get u * l^-T and bu * l^-T
 !
@@ -146,6 +173,12 @@ contains
             call dtrsm('r', 'l', 't', 'n', n, m, one, metric, m, bu, n)
         end if
 !
+100     continue
+        call mfree(sigma)
+        call mfree(u_svd)
+        call mfree(vt_svd)
+        call mfree(temp)
+        call mfree(work_svd)
         call mfree(metric)
 !
     end subroutine b_ortho
@@ -216,8 +249,10 @@ contains
 !
 ! get memory for the metric.
 !
+        ok = .false.
         call mallocate(m, m, metric)
         call mallocate(m, m, msave)
+        if (dgl_failed()) go to 100
 !
         metric = zero
         macro_done = .false.
@@ -228,13 +263,11 @@ contains
         growth = one
         do while (.not. macro_done)
             it = it + 1
-            if (it .gt. maxit) then
 !
-! ortho_cd failed. return with an error message
+! ortho_cd failed: return with ok = .false., so that the caller
+! can use a more robust algorithm.
 !
-                ok = .false.
-                call dgl_error('ortho_cd failed: maximum number of iterations reached.')
-            end if
+            if (it .gt. maxit) go to 100
             call dgemm('t', 'n', m, m, n, one, u, n, u, n, zero, metric, m)
             msave = metric
 !
@@ -247,7 +280,7 @@ contains
             if (info .ne. 0) then
 !
                 alpha = 100.0_dp
-                unorm = dnrm2(n*m, u, 1)
+                unorm = dnrm2(n*m, u, 1_ip)
                 it_micro = 0
                 micro_done = .false.
 !
@@ -255,14 +288,11 @@ contains
 !
                 do while (.not. micro_done)
                     it_micro = it_micro + 1
-                    if (it_micro .gt. maxit) then
 !
 ! something went very wrong. return with an error status, the orthogonalization
 ! will be carried out using a different algorithm.
 !
-                        ok = .false.
-                        call dgl_error('ortho_cd failed: maximum number of iterations reached.')
-                    end if
+                    if (it_micro .gt. maxit) go to 100
 !
                     shift = max(epsilon(one)*alpha*unorm, tol_ortho)
                     metric = msave
@@ -314,6 +344,7 @@ contains
 !
         ok = .true.
 !
+100     continue
         call mfree(metric)
         call mfree(msave)
 !
@@ -343,13 +374,17 @@ contains
         integer(ip), parameter :: maxit = 20
 !
         call mallocate(m, k, xu)
+        if (dgl_failed()) go to 100
 !
         done = .false.
         it = 0
 !
         do while (.not. done)
             it = it + 1
-            if (it .gt. maxit) call dgl_error('biortho_vs_x failed.')
+            if (it .gt. maxit) then
+                call dgl_error('biortho_vs_x failed.', dgl_err_ortho)
+                go to 100
+            end if
 !
 ! biorthogonalize ul and ur to xr and xl:
 !
@@ -361,9 +396,12 @@ contains
 ! now, orthogonalize ur and ul.
 !
             call ortho_cd(n, k, ul, growth, ok)
+            if (.not. ok) call dgl_error('biortho_vs_x: ortho_cd failed.', dgl_err_ortho)
             xu_norm(1) = growth*epsilon(one)
             call ortho_cd(n, k, ur, growth, ok)
+            if (.not. ok) call dgl_error('biortho_vs_x: ortho_cd failed.', dgl_err_ortho)
             xu_norm(2) = growth*epsilon(one)
+            if (dgl_failed()) go to 100
 !
             done = xu_norm(1) .lt. tol_ortho .and. xu_norm(2) .lt. tol_ortho
         end do
@@ -373,6 +411,7 @@ contains
 !
         call svd_biortho(n, k, ul, ur)
 !
+100     continue
         call mfree(xu)
     end subroutine biortho_vs_x
 !
@@ -402,7 +441,9 @@ contains
         integer(ip) :: i
         real(dp) :: fac
 !
-        real(dp), allocatable :: over(:, :), u(:, :), s(:), vt(:, :), tmp(:, :)
+        real(dp), allocatable :: over(:, :), u(:, :), s(:), vt(:, :), tmp(:, :), work_svd(:)
+        real(dp) :: lwork_query(1)
+        integer(ip) :: lwork_svd, info_svd
 !
 ! allocate memory.
 !
@@ -411,6 +452,7 @@ contains
         call mallocate(m, m, u)
         call mallocate(m, m, vt)
         call mallocate(n, m, tmp)
+        if (dgl_failed()) go to 100
 !
 ! compute the overlap:
 !
@@ -418,7 +460,15 @@ contains
 !
 ! compute its singular value decomposition:
 !
-        call dgesvd('a', 'a', m, m, over, m, s, u, m, vt, m, work, lwork, info)
+        call dgesvd('a', 'a', m, m, over, m, s, u, m, vt, m, lwork_query, -1_ip, info_svd)
+        lwork_svd = max(1_ip, int(lwork_query(1), ip))
+        call mallocate(lwork_svd, work_svd)
+        if (dgl_failed()) go to 100
+        call dgesvd('a', 'a', m, m, over, m, s, u, m, vt, m, work_svd, lwork_svd, info_svd)
+        if (info_svd .ne. 0) then
+            call dgl_error('svd_biortho: SVD failed.', dgl_err_lapack)
+            go to 100
+        end if
 !
 ! compute l*u and r*v
 !
@@ -436,6 +486,8 @@ contains
             u_r(:, i) = fac*u_r(:, i)
         end do
 !
+100     continue
+        call mfree(work_svd)
         call mfree(over)
         call mfree(u)
         call mfree(s)
@@ -524,6 +576,7 @@ contains
 !
         ok = .false.
         call mallocate(m, k, xu)
+        if (dgl_failed()) go to 100
         done = .false.
         it = 0
 !
@@ -531,6 +584,7 @@ contains
 !
         if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
         if (.not. ok .or. useqr) call ortho(n, k, u)
+        if (dgl_failed()) go to 100
 !
 ! iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -546,6 +600,7 @@ contains
 !
             if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
             if (.not. ok .or. useqr) call ortho(n, k, u)
+            if (dgl_failed()) go to 100
 !
 ! the orthogonalization has introduced an error that makes the new
 ! vector no longer fully orthogonal to x. assuming that u was
@@ -556,7 +611,7 @@ contains
 !
             if (.not. ok .or. useqr) then
                 call dgemm('t', 'n', m, k, n, one, x, n, u, n, zero, xu, m)
-                xu_norm = dnrm2(m*k, xu, 1)
+                xu_norm = dnrm2(m*k, xu, 1_ip)
             else
                 xu_norm = growth*epsilon(one)
             end if
@@ -564,9 +619,13 @@ contains
 !
 ! if things went really wrong, abort.
 !
-            if (it .gt. maxit) call dgl_error('catastrophic failure of ortho_vs_x')
+            if (it .gt. maxit) then
+                call dgl_error('catastrophic failure of ortho_vs_x', dgl_err_ortho)
+                go to 100
+            end if
         end do
 !
+100     continue
         call mfree(xu)
 !
         return
@@ -612,6 +671,7 @@ contains
 !
         ok = .false.
         call mallocate(m, k, xu)
+        if (dgl_failed()) go to 100
         done = .false.
         it = 0
 !
@@ -619,6 +679,7 @@ contains
 !
         if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
         if (.not. ok .or. useqr) call ortho(n, k, u)
+        if (dgl_failed()) go to 100
 !
 ! iteratively orthogonalize u against x, and then orthonormalize u.
 !
@@ -634,6 +695,7 @@ contains
 !
             if (.not. useqr) call ortho_cd(n, k, u, growth, ok)
             if (.not. ok .or. useqr) call ortho(n, k, u)
+            if (dgl_failed()) go to 100
 !
 ! compute the overlap between the orthonormalized u and x and decide
 ! whether the orthogonalization procedure converged.
@@ -644,7 +706,7 @@ contains
 !
             if (.not. ok .or. useqr) then
                 call dgemm('t', 'n', m, k, n, one, bx, n, u, n, zero, xu, m)
-                xu_norm = dnrm2(m*k, xu, 1)
+                xu_norm = dnrm2(m*k, xu, 1_ip)
             else
                 xu_norm = growth*epsilon(one)
             end if
@@ -652,9 +714,13 @@ contains
 !
 ! if things went really wrong, abort.
 !
-            if (it .gt. maxit) stop ' catastrophic failure of b_ortho_vs_x'
+            if (it .gt. maxit) then
+                call dgl_error('catastrophic failure of b_ortho_vs_x', dgl_err_ortho)
+                go to 100
+            end if
         end do
 !
+100     continue
         call mfree(xu)
 !
     end subroutine b_ortho_vs_x

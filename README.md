@@ -14,39 +14,80 @@ Pisa, november 2022
 diaglib is licensed under the LGPL v2.1 license
 
 ## Description
-diaglib - a fortran library of matrix-free iterative algorithm to
-compute a few eigenvalues and eigenvectors of large matrices.
+diaglib - a fortran library of matrix-free iterative algorithms to
+compute a few eigenvalues and eigenvectors of large matrices, with
+C and python interfaces.
 
-diaglib provides an implementation of two matrix-free algorithms to
-compute a few eigenvalues and eigenvectors of a large, possibly sparse
-matrix.
+the available drivers are
 
-the available algorithms are
+1) davidson-liu, for symmetric standard and generalized problems
+   (`dgl_davidson_driver`)
 
-1) locally optimal block preconditioned conjugate gradient 
+2) locally optimal block preconditioned conjugate gradient, for symmetric
+   standard and generalized problems (`dgl_lobpcg_driver`)
 
-2) davidson-liu
+3) non-symmetric davidson, for the right and/or left eigenvectors of
+   non-symmetric matrices (`dgl_davidson_nosym_driver`)
 
-both algorithms require two user-provided routines to apply the matrix
-and a suitable preconditioner to a set of vectors.
-such routines have the following interface:
+4) swapped metric-orthogonal generalized davidson (smo-gd), for linear
+   response problems (`dgl_smogd_driver`)
 
-  subroutine matvec(n,m,x,ax)  
+all the drivers require user-provided routines to apply the matrix
+(and, if needed, the metric) and a suitable preconditioner to a set of
+vectors. such routines have the following interface:
+
+  subroutine matvec(n,m,x,ax)
   subroutine precnd(n,m,shift,x,ax)
 
-where n,m are integers and x(n,m) and ax(n,m) are double precision
-arrays.
-as using the first eigenvalue in a shift-and-invert spirit is very 
-common, a double precision scalar shift is also passed to precnd.
+where n,m are integer(dgl_int) and x(n,m) and ax(n,m) are real(dgl_real)
+arrays. as using the first eigenvalue in a shift-and-invert spirit is very
+common, a real(dgl_real) scalar shift is also passed to precnd.
 
-both implementations favor numerical stability over efficiency and are
+all implementations favor numerical stability over efficiency and are
 targeted at applications in molecular quantum chemistry, such as in
 (full) ci or augmented hessian calculations, where typically m << n.
 
 ## Dependencies
-BLAS and LAPACK
+- a Fortran and a C compiler, CMake (3.15 or newer; 3.22 or newer to select
+  a BLAS/LAPACK library with 64-bit integers automatically)
+- BLAS and LAPACK
+- optionally, OpenMP (only used for wall-clock timings)
+- for the python interface, python 3.9 or newer with numpy
 
-## Example use
-A simple-minded driver is provided, so that the user can compile the
-library and test it on toy matrices.
+## Building and installing
+    cmake -S . -B build [options]
+    cmake --build build
+    ctest --test-dir build        # or: cd build && ctest
+    cmake --install build --prefix <prefix>
 
+main options:
+- `-DDGL_INTEGER_KIND=8`: use 64-bit integers (default: 4, i.e. 32-bit). A
+  BLAS/LAPACK library with 64-bit integers is required.
+- `-DBLA_VENDOR=<vendor>`: choose the BLAS/LAPACK library, e.g. `OpenBLAS`,
+  `Intel10_64lp` (MKL, 32-bit integers), `Intel10_64ilp` (MKL, 64-bit integers).
+  By default, the first library found by CMake is used.
+- `-DBUILD_PYTHON=ON`: install the python interface (`pyDiaglib.py`).
+- `-DBUILD_TESTING=OFF`: do not build the tests.
+- `-DDGL_NATIVE_ARCH=ON`: optimize for the build machine (not portable).
+- `-DCMAKE_BUILD_TYPE=Debug`: build with run-time checks (default: `Release`).
+
+## Usage
+- Fortran: `use dgl_interface`, which provides the drivers, the kinds
+  `dgl_int` and `dgl_real` and the error codes. The installed CMake package can be
+  used with `find_package(diaglib)` and the target `diaglib::diaglib`.
+- C and C++: `#include "diaglib.h"`, which provides the drivers, the integer
+  type `dgl_int` and the error codes, and link `libdiaglib_c` (CMake target
+  `diaglib::diaglib_c`).
+- python: `import pyDiaglib`, see the documentation in `pyDiaglib.py`. The
+  path of `libdiaglib_c` can be passed explicitly or set in the
+  `DIAGLIB_C_LIBRARY` environment variable. Alternatively, the module can be
+  installed with `pip install src/python_interface`.
+
+errors (invalid input, not enough memory, failures of LAPACK or of the
+orthogonalizations) are reported through the optional `dgl_info` argument of the
+Fortran drivers (if it is not present, the program is stopped), through the
+`info` argument of the C functions, and as `RuntimeError` in python.
+not converging within the maximum number of iterations is not an error: the
+drivers then return `ok = .false.` and the latest approximations.
+
+the tests in `test/` show how to use the drivers from Fortran, C and python.

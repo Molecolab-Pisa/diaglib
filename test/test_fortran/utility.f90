@@ -14,6 +14,17 @@ module utility
     integer(ip), parameter :: max_iter = 100, dav_iter = 10
     logical :: verbose = .false.
     real(dp), parameter :: tol = 1.0e-10_dp, shift = 0.0_dp
+!
+! thresholds used to compare the results with the reference: maximum error on the eigenvalues
+! and maximum distance between the normalized computed and reference eigenvectors (about the
+! sine of the angle between them). with tol = 1e-10, the observed errors are at most about
+! 2e-12 on the eigenvalues and 6e-11 on the eigenvectors, for all drivers and guesses.
+!
+    real(dp), parameter :: eig_thresh = 1.0e-9_dp, vec_thresh = 1.0e-7_dp
+!
+! number of runs for each test that starts from a random guess
+!
+    integer(ip), parameter :: n_random_runs = 3
     integer(ip), parameter :: memory = 100
     character(len=2), parameter :: memory_unit = "MB"
     procedure(), pointer :: mx_p => null()
@@ -32,9 +43,10 @@ module utility
 contains
 
 !
-    subroutine init_eigenpairs(ld, n_eig, eig, evec, ok)
+    subroutine init_eigenpairs(ld, n_eig, eig, evec, ok, random_guess)
 !!
-!! Make a simple guess
+!! Make a simple guess (unit vectors), or no guess at all (zero vectors), in which case
+!! DiagLib starts from a random guess
 !!
         implicit none
         integer(ip), intent(in) :: ld
@@ -42,51 +54,106 @@ contains
         real(dp) :: eig(n_eig)
         real(dp) :: evec(ld, n_eig)
         logical :: ok
+        logical, intent(in) :: random_guess
+!
+        integer(ip) :: k
 !
         eig = zero
         evec = zero
-        do i = 1, n_eig
-            evec(i, i) = one
-        end do
+        if (.not. random_guess) then
+            do k = 1, n_eig
+                evec(k, k) = one
+            end do
+        end if
         ok = .false.
 
     end subroutine init_eigenpairs
 
-    logical function compare_eigs(ld, n_eig, thresh, eig, evec, string) result(success)
+    real(dp) function close_matrix_element(ii, jj) result(val)
+!!
+!! Element (ii,jj) of a non-symmetric matrix with a real spectrum and a nearly degenerate
+!! pair of low eigenvalues (about 2.950 and 3.056), used to test the root following of the
+!! non-symmetric Davidson driver. Used both to build the reference and in the matvecs.
+!!
+        implicit none
+        integer(ip), intent(in) :: ii, jj
+        real(dp), parameter :: diag(5) = [2.0_dp, 3.0_dp, 3.001_dp, 3.5_dp, 4.2_dp]
+!
+        if (ii .eq. jj) then
+            if (ii .le. 5) then
+                val = diag(ii)
+            else
+                val = real(ii + 1, dp)
+            end if
+        else
+            val = 0.3_dp*(real(ii, dp)/real(jj, dp))/real(ii + jj, dp)
+            if (mod(ii + jj - 2_ip, 3_ip) .eq. 0) val = -val
+        end if
+
+    end function close_matrix_element
+
+    real(dp) function cplx_matrix_element(ii, jj) result(val)
+!!
+!! Element (ii,jj) of the non-symmetric test matrix applied by arx, plus an antisymmetric
+!! coupling between the second and third basis functions, which produces a pair of complex
+!! eigenvalues (about 3.49 +- 0.84 i) among the lowest real ones. The drivers have to skip them.
+!!
+        implicit none
+        integer(ip), intent(in) :: ii, jj
+!
+        if (ii .eq. jj) then
+            val = real(ii + 1, dp)
+        else if (ii .eq. 2 .and. jj .eq. 3) then
+            val = one
+        else if (ii .eq. 3 .and. jj .eq. 2) then
+            val = -one
+        else
+            val = (real(ii, dp)/real(jj, dp))/real(ii + jj, dp)
+        end if
+
+    end function cplx_matrix_element
+
+    logical function compare_eigs(ld, n_eig, eig, evec, string) result(success)
+!!
+!! Compare computed eigenpairs with the reference ones. The eigenvectors are compared
+!! through the distance between the normalized vectors (with the sign that minimizes it),
+!! which does not depend on their normalization and phase.
+!!
         integer(ip), intent(in) :: ld, n_eig
-        real(dp), intent(in) :: thresh
         real(dp), intent(in) :: eig(n_eig)
-        real(dp), intent(inout) :: evec(ld, n_eig)
+        real(dp), intent(in) :: evec(ld, n_eig)
         character(len=*) :: string
 
-        real(dp), allocatable :: ex_eig(:), ex_evec(:, :), norms(:, :)
+        real(dp), allocatable :: ex_eig(:), ex_evec(:, :), u(:), v(:)
+        real(dp) :: eig_err, vec_err, dist
+        integer(ip) :: k
 
-        success = .true.
-
-        allocate (ex_eig(n_eig), ex_evec(ld, n_eig), norms(n_eig, 2))
+        allocate (ex_eig(n_eig), ex_evec(ld, n_eig), u(ld), v(ld))
 
         call read_reference(ld, n_eig, ex_eig, ex_evec, string)
 
-        if (abs(maxval(eig - ex_eig)) .gt. thresh) success = .false.
+        eig_err = maxval(abs(eig - ex_eig))
 
-        do i = 1, n_eig
-            if (evec(1, i) .lt. zero) evec(:, i) = -evec(:, i)
-            norms(i, 1) = sqrt(dot_product(evec(:, i), evec(:, i)))
-            norms(i, 2) = sqrt(dot_product(evec(:, i), ex_evec(:, i)))
+        vec_err = zero
+        do k = 1, n_eig
+            u = evec(:, k)/sqrt(dot_product(evec(:, k), evec(:, k)))
+            v = ex_evec(:, k)/sqrt(dot_product(ex_evec(:, k), ex_evec(:, k)))
+            dist = min(sqrt(dot_product(u - v, u - v)), sqrt(dot_product(u + v, u + v)))
+            vec_err = max(vec_err, dist)
         end do
-        if (abs(maxval(norms(:, 1) - norms(:, 2))) .gt. thresh) success = .false.
+!
+! written this way, a NaN makes the comparison fail
+!
+        success = eig_err .le. eig_thresh .and. vec_err .le. vec_thresh
 
+        write (*, "(t3,a,d10.2,a,d10.2)") "max eigenvalue error:", eig_err, "   max eigenvector error:", vec_err
         if (.not. success) then
             write (*, "(t3,a,*(d14.4))") "Computed  Eigenvals:", eig
             write (*, "(t3,a,*(d14.4))") "Reference Eigenvals:", ex_eig
             write (*, "(t3,a,*(d14.4))") "Difference:         ", abs(ex_eig - eig)
-            write (*, *)
-            write (*, "(t3,a,*(d14.4))") "Norm of Computed  Eigenvecs:     ", norms(:, 1)
-            write (*, "(t3,a,*(d14.4))") "Overlap with Reference Eigenvecs:", norms(:, 2)
-            write (*, "(t3,a,*(d14.4))") "Difference:                      ", abs(norms(:, 2) - norms(:, 1))
         end if
 
-        deallocate (ex_eig, ex_evec, norms)
+        deallocate (ex_eig, ex_evec, u, v)
 
     end function compare_eigs
 
@@ -176,7 +243,7 @@ contains
         mask = .true.
 
         do i = 1, n_eig
-            idx = minloc(eig, mask=mask)
+            idx = minloc(eig, mask=mask, kind=ip)
             copy = eig(i)
             eig(i) = eig(idx(1))
             eig(idx(1)) = copy

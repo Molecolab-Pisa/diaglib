@@ -4,24 +4,29 @@ add_library(diaglib_c SHARED
         lobpcg_driver_c.f90
         davidson_nosym_driver_c.f90
         smogd_driver_c.f90
-        dgl_orthogonalizations_c.f90
 )
 
-# Include the directory with the C header
+# Generate the header that tells C users the size of DiagLib integers
+configure_file(diaglib_config.h.in
+        "${CMAKE_CURRENT_BINARY_DIR}/diaglib_config.h" @ONLY)
+
+# Include the directories with the C headers
 target_include_directories(diaglib_c PUBLIC 
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# Fix flags for the interface
-if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
-    set(CMAKE_Fortran_FLAGS "-std=f2018 -pedantic")
-elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
-    set(CMAKE_Fortran_FLAGS "-stand 2018")
-endif()
+# The interface needs a more recent standard
+target_compile_options(diaglib_c PRIVATE ${DGL_Fortran_F2018} ${DGL_Fortran_OPTIONS})
 
 # Link actual diaglib
 target_link_libraries(diaglib_c PRIVATE diaglib)
+
+# Let the installed library find libdiaglib in the same directory
+set_target_properties(diaglib_c PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Install libray
 install(TARGETS diaglib_c
@@ -32,9 +37,9 @@ install(TARGETS diaglib_c
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-# Export the target to this lib
-install(EXPORT diaglibTargets
-        FILE DiaglibTargets.cmake
-        NAMESPACE diaglib::
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Diaglib
+# Install the C headers
+install(FILES
+        diaglib.h
+        "${CMAKE_CURRENT_BINARY_DIR}/diaglib_config.h"
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )

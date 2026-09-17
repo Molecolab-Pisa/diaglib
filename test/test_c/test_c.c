@@ -1,6 +1,8 @@
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
+#include <string.h>
 #include "diaglib.h"
 
 //
@@ -9,7 +11,7 @@
 // list of functions:
 // ==================
 //
-// matvec_c(int* n, int*m, double*x, double* ax)
+// matvec_c(dgl_int* n, dgl_int* m, double*x, double* ax)
 //
 //   applies the symmetric matrix 
 //
@@ -19,7 +21,7 @@
 //   as in fortran)
 //
 //
-// precnd_c(int* n, int*m, double* shift, double*x, double* ax)
+// precnd_c(dgl_int* n, dgl_int* m, double* shift, double*x, double* ax)
 //
 //   applies the preconditioner
 //
@@ -28,8 +30,8 @@
 //   to m vectors of length n (in x, assumed column major
 //   as in fortran), where a is the matrix from matvec_c.
 //
-// matvec_r_c(int* n, int* m, double* x, double* y)
-// matvec_l_c(int* n, int* m, double* x, double* y)
+// matvec_r_c(dgl_int* n, dgl_int* m, double* x, double* y)
+// matvec_l_c(dgl_int* n, dgl_int* m, double* x, double* y)
 //
 //   apply the non-symmetric matrix
 //
@@ -45,14 +47,14 @@
 //
 //     d_{ii} = 1/i
 //    
-// metvec_c(int* n, int* m, double* x, double* bx)
+// metvec_c(dgl_int* n, dgl_int* m, double* x, double* bx)
 //
 //   applies a positive definite matrix b (here, just the identity)
 //   to m vectors of length n (in x, assumed column major
 //   as in fortran)
 // 
-// apbmul_c(int* n, int* m, double* x, double* ax)
-// ambmul_c(int* n, int* m, double* x, double* ax)
+// apbmul_c(dgl_int* n, dgl_int* m, double* x, double* ax)
+// ambmul_c(dgl_int* n, dgl_int* m, double* x, double* ax)
 //
 //   apply the SPD matrices (a+b) and (a-b), respectively, where
 //
@@ -64,8 +66,8 @@
 //   signature for linear response problems and can be used to test
 //   the smogd routine.
 //
-// spdmul_c(int* n, int* m, double* x, double* ax)
-// smdmul_c(int* n, int* m, double* x, double* ax)
+// spdmul_c(dgl_int* n, dgl_int* m, double* x, double* ax)
+// smdmul_c(dgl_int* n, dgl_int* m, double* x, double* ax)
 //
 //   apply the matrices (\sigma+\delta) and (\sigma-\delta), respectively, where
 //
@@ -80,7 +82,7 @@
 //   in linear response problems. these routines can thus be used to
 //   test smogd. 
 // 
-// lrprec_c(int* n, int* m, double* fac, double* xp, double* xm,  double* yp, double* ym)
+// lrprec_c(dgl_int* n, dgl_int* m, double* fac, double* xp, double* xm,  double* yp, double* ym)
 //
 //   applies the smogd diagonal preconditioner to m vectors xp and xm (note that the two
 //   quantities are used to define both yp and ym), which are assumed to be column major
@@ -88,7 +90,7 @@
 //   this routine implements the same definitions of a and sigma as in the previous 
 //   routines, and can be used to test smogd. 
 //
-void matvec_c(int* n, int* m, double* x, double* ax) {
+void matvec_c(dgl_int* n, dgl_int* m, double* x, double* ax) {
   int N = *n;
   int M = *m;
 
@@ -104,19 +106,19 @@ void matvec_c(int* n, int* m, double* x, double* ax) {
   }
 }
 
-void precnd_c(int* n, int* m, double* shift, double* r, double* z) {
+void precnd_c(dgl_int* n, dgl_int* m, double* shift, double* r, double* z) {
   int N = *n;
   int M = *m;
 
   for (int j = 0; j < M; ++j) {
     for (int i = 0; i < N; ++i) {
-      double diag = (i + 1.0) + (*shift); // A_ii + shift
+      double diag = (i + 2.0) + (*shift); // A_ii + shift
       z[i + j * N] = r[i + j * N] / diag;
     }
   }
 }
 
-void matvec_r_c(int* n, int* m, double* x, double* y) {
+void matvec_r_c(dgl_int* n, dgl_int* m, double* x, double* y) {
     int N = *n, M = *m;
 
     for (int k = 0; k < M; ++k)
@@ -132,7 +134,7 @@ void matvec_r_c(int* n, int* m, double* x, double* y) {
         }
 }
 
-void matvec_l_c(int* n, int* m, double* x, double* y) {
+void matvec_l_c(dgl_int* n, dgl_int* m, double* x, double* y) {
     int N = *n, M = *m;
 
     for (int k = 0; k < M; ++k)
@@ -148,7 +150,7 @@ void matvec_l_c(int* n, int* m, double* x, double* y) {
         }
 }
 
-void metvec_c(int* n, int* m, double* x, double* bx) {
+void metvec_c(dgl_int* n, dgl_int* m, double* x, double* bx) {
   int N = *n;
   int M = *m;
   for (int j = 0; j < M; ++j)
@@ -156,7 +158,7 @@ void metvec_c(int* n, int* m, double* x, double* bx) {
       bx[i + j * N] = x[i + j * N];  
 }
 
-void apbmul_c(int* n, int* m, double* x, double* ax) {
+void apbmul_c(dgl_int* n, dgl_int* m, double* x, double* ax) {
   int N = *n;
   int M = *m;
   for (int j = 0; j < M; ++j) {
@@ -171,7 +173,7 @@ void apbmul_c(int* n, int* m, double* x, double* ax) {
   }
 }
 
-void ambmul_c(int* n, int* m, double* x, double* ax) {
+void ambmul_c(dgl_int* n, dgl_int* m, double* x, double* ax) {
   int N = *n;
   int M = *m;
   for (int j = 0; j < M; ++j) {
@@ -186,7 +188,7 @@ void ambmul_c(int* n, int* m, double* x, double* ax) {
   }
 }
 
-void spdmul_c(int* n, int* m, double* x, double* y) {
+void spdmul_c(dgl_int* n, dgl_int* m, double* x, double* y) {
     int N = *n, M = *m;
 
     for (int k = 0; k < M; ++k)
@@ -202,7 +204,7 @@ void spdmul_c(int* n, int* m, double* x, double* y) {
         }
 }
 
-void smdmul_c(int* n, int* m, double* x, double* y) {
+void smdmul_c(dgl_int* n, dgl_int* m, double* x, double* y) {
     int N = *n, M = *m;
 
     for (int k = 0; k < M; ++k)
@@ -218,7 +220,7 @@ void smdmul_c(int* n, int* m, double* x, double* y) {
         }
 }
 
-void lrprec_c(int* n, int* m, double* fac, double* xp, double* xm, 
+void lrprec_c(dgl_int* n, dgl_int* m, double* fac, double* xp, double* xm, 
               double* yp, double* ym) {
   int N = *n;
   int M = *m;
@@ -235,324 +237,193 @@ void lrprec_c(int* n, int* m, double* fac, double* xp, double* xm,
 }
 
 //
-// small function to output the results to a file:
+// ==========================================================================
+// tests: every driver is run from a simple guess (unit vectors) and from a
+// random guess (zero vectors, so that diaglib generates the guess). the
+// converged eigenvalues are compared with reference values computed with
+// lapack (see test/test_fortran/reference.f90), and the true residual of
+// every returned eigenvector is computed with the matvecs above.
+// ==========================================================================
 //
-void write_results_c(const char* label, int n, int n_targ, double* eig, double* evec, const char* filename) {
-  FILE* f = fopen(filename, "a");
-  if (!f) return;
+#define N 700
+#define N_TARG 5
+#define N_MAX 10
+#define TOL 1e-10
+#define EIG_THRESH 1e-8
+#define RES_THRESH 1e-7
 
-  fprintf(f, "  %s results\n\n", label);
-  fprintf(f, "  Eigenvalues:\n");
-  for (int i = 0; i < n_targ; ++i)
-    fprintf(f, "  %5d%14.6f\n", i + 1, eig[i]);
+// matrices applied by matvec_c (and, similar to it, by matvec_r_c / matvec_l_c)
+static const double ref_sym[N_TARG] = {1.8693982134576630, 3.0004763487609458, 4.0177129623236798,
+                                       5.0168124845115560, 6.0135237881685546};
+// linear response problem defined by apbmul_c, ambmul_c, spdmul_c, smdmul_c
+static const double ref_lr[N_TARG] = {3.9540942156164007, 4.7820108108607249, 5.6867559690540226,
+                                      6.5222631332836727, 7.1025644429415040};
 
-  for (int i = 0; i < n_targ; ++i) {
-    fprintf(f, "   Eigenvector %3d:\n", i + 1);
-    for (int j = 0; j < n; ++j)
-      fprintf(f, "  %5d%14.6f\n", j + 1, evec[j + i * n]);
+static int n_tests = 0, n_failed = 0;
+
+typedef void (*matvec_t)(dgl_int*, dgl_int*, double*, double*);
+
+// relative residual ||A x - lambda x|| / ||x|| of one vector
+static double residual(matvec_t apply, dgl_int n, double* x, double lambda) {
+  dgl_int one = 1;
+  double* ax = malloc(n * sizeof(double));
+  apply(&n, &one, x, ax);
+  double nr = 0.0, nx = 0.0;
+  for (dgl_int i = 0; i < n; ++i) {
+    double r = ax[i] - lambda * x[i];
+    nr += r * r;
+    nx += x[i] * x[i];
   }
-
-  fprintf(f, "\n");
-  fclose(f);
+  free(ax);
+  return sqrt(nr / nx);
 }
 
-void write_results_c_2(const char* label, int n, int n_targ, double* eig, double* evec, 
-                       double* evec_l, const char* filename) {
-  FILE* f = fopen(filename, "a");
-  if (!f) return;
-
-  fprintf(f, "  %s results\n\n", label);
-  fprintf(f, "  Eigenvalues:\n");
-  for (int i = 0; i < n_targ; ++i)
-    fprintf(f, "  %5d%14.6f\n", i + 1, eig[i]);
-
-  for (int i = 0; i < n_targ; ++i) {
-    fprintf(f, "  right Eigenvector %3d:\n", i + 1);
-    for (int j = 0; j < n; ++j)
-      fprintf(f, "  %5d%12.4f\n", j + 1, evec[j + i * n]);
+// relative residual ||E z - omega M z|| / ||z|| of the linear response problem, with
+// E = [A B; B A], M = [S D; -D -S], z = (y, x), and A+B, A-B, S+D, S-D given by the matvecs
+static double lr_residual(dgl_int n, double* z, double omega) {
+  dgl_int one = 1;
+  double* p = malloc(n * sizeof(double)), *m = malloc(n * sizeof(double));
+  double* ap = malloc(n * sizeof(double)), *am = malloc(n * sizeof(double));
+  double* sp = malloc(n * sizeof(double)), *sm = malloc(n * sizeof(double));
+  for (dgl_int i = 0; i < n; ++i) {
+    p[i] = z[i] + z[n + i];
+    m[i] = z[i] - z[n + i];
   }
-  for (int i = 0; i < n_targ; ++i) {
-    fprintf(f, "  left Eigenvector %3d:\n", i + 1);
-    for (int j = 0; j < n; ++j)
-      fprintf(f, "  %5d%12.4f\n", j + 1, evec_l[j + i * n]);
+  apbmul_c(&n, &one, p, ap);
+  ambmul_c(&n, &one, m, am);
+  spdmul_c(&n, &one, p, sp);
+  smdmul_c(&n, &one, m, sm);
+  double nr = 0.0, nz = 0.0;
+  for (dgl_int i = 0; i < n; ++i) {
+    double r1 = 0.5 * (ap[i] + am[i]) - omega * 0.5 * (sp[i] + sm[i]);
+    double r2 = 0.5 * (ap[i] - am[i]) + omega * 0.5 * (sp[i] - sm[i]);
+    nr += r1 * r1 + r2 * r2;
+    nz += z[i] * z[i] + z[n + i] * z[n + i];
   }
-
-  fprintf(f, "\n");
-  fclose(f);
+  free(p); free(m); free(ap); free(am); free(sp); free(sm);
+  return sqrt(nr / nz);
 }
 
-void fix_phase(int n, int n_targ, double* evec) {
-  for (int i = 0; i < n_targ; ++i) {
-    int idx = i * n;  // indice del primo elemento della colonna i
-    if (evec[idx] < 0.0) {
-      for (int j = 0; j < n; ++j)
-        evec[j + i * n] = -evec[j + i * n];
-    }
-  }
+static void init_guess(dgl_int ld, double* evec, bool random_guess) {
+  memset(evec, 0, ld * N_MAX * sizeof(double));
+  if (!random_guess)
+    for (dgl_int j = 0; j < N_MAX; ++j) evec[j + j * ld] = 1.0;
 }
 
-int test_davidson(){
-#ifdef DGL_INT_KIND_4
-  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const int memory = 1;
-#elif DGL_INT_KIND_8
-  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const long int memory = 1;
-#endif
-  const double tol = 1e-10, shift = 0.0;
-  double eig[n_max];
-  double evec[n * n_max];
+// record the result of a test
+static void check(const char* label, bool random_guess, bool ok, dgl_int info, const double* eig,
+                  const double* ref, double max_res) {
+  double max_err = 0.0;
+  for (int i = 0; i < N_TARG; ++i) max_err = fmax(max_err, fabs(eig[i] - ref[i]));
+  bool pass = ok && info == DGL_SUCCESS && max_err < EIG_THRESH && max_res < RES_THRESH;
+  n_tests++;
+  if (!pass) n_failed++;
+  printf("%-45s %s guess: ok=%d info=%ld max eigenvalue error=%.1e max residual=%.1e -> %s\n", label,
+         random_guess ? "random" : "simple", ok, (long)info, max_err, max_res, pass ? "PASSED" : "FAILED");
+}
+
+static void check_error(const char* label, dgl_int info, dgl_int expected) {
+  bool pass = info == expected;
+  n_tests++;
+  if (!pass) n_failed++;
+  printf("%-45s info=%ld (expected %ld) -> %s\n", label, (long)info, (long)expected, pass ? "PASSED" : "FAILED");
+}
+
+static void test_davidson(bool generalized, bool random_guess) {
+  double eig[N_MAX], evec[N * N_MAX], max_res = 0.0;
+  bool ok = false;
+  dgl_int info = -99;
+  init_guess(N, evec, random_guess);
+  dgl_davidson_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, generalized ? metvec_c : NULL, eig, evec, &ok, &info,
+                      false, TOL, 100, 20, 0.0, 1, "GB");
+  // the metric is the identity: the residual is the same as for the standard problem
+  for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, residual(matvec_c, N, evec + i * N, eig[i]));
+  check(generalized ? "generalized Davidson" : "Davidson", random_guess, ok, info, eig, ref_sym, max_res);
+}
+
+static void test_lobpcg(bool generalized, bool random_guess) {
+  double eig[N_MAX], evec[N * N_MAX], max_res = 0.0;
+  bool ok = false;
+  dgl_int info = -99;
+  init_guess(N, evec, random_guess);
+  dgl_lobpcg_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, generalized ? metvec_c : NULL, eig, evec, &ok, &info,
+                    false, TOL, 100, 0.0, 1, "GB");
+  for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, residual(matvec_c, N, evec + i * N, eig[i]));
+  check(generalized ? "generalized LOBPCG" : "LOBPCG", random_guess, ok, info, eig, ref_sym, max_res);
+}
+
+// the non-symmetric matrix of matvec_r_c is similar to the one of matvec_c:
+// the eigenvalues are the same
+static void test_nosym(const char* side, bool random_guess) {
+  double eig[N_MAX], evec[N * N_MAX], evec_2[N * N_MAX], max_res = 0.0;
+  bool ok = false, lr = strcmp(side, "LR") == 0;
+  dgl_int info = -99;
+  char label[64];
+  init_guess(N, evec, random_guess);
+  init_guess(N, evec_2, random_guess);
+  dgl_davidson_nosym_driver(N, N_TARG, N_MAX, matvec_r_c, matvec_l_c, precnd_c, side, eig, evec,
+                            lr ? evec_2 : NULL, &ok, &info, false, TOL, 100, 20, 0.0, 1, "GB");
+  // in evec: right eigenvectors for "R" and "LR", left ones for "L"; in evec_2: left ones for "LR"
+  for (int i = 0; i < N_TARG && ok; ++i) {
+    matvec_t first = strcmp(side, "L") == 0 ? matvec_l_c : matvec_r_c;
+    max_res = fmax(max_res, residual(first, N, evec + i * N, eig[i]));
+    if (lr) max_res = fmax(max_res, residual(matvec_l_c, N, evec_2 + i * N, eig[i]));
+  }
+  snprintf(label, sizeof label, "non-symmetric Davidson (%s)", side);
+  check(label, random_guess, ok, info, eig, ref_sym, max_res);
+}
+
+static void test_smogd(bool random_guess) {
+  double eig[N_MAX], evec[2 * N * N_MAX], max_res = 0.0;
+  bool ok = false;
+  dgl_int info = -99;
+  init_guess(2 * N, evec, random_guess);
+  dgl_smogd_driver(2 * N, N_TARG, N_MAX, apbmul_c, ambmul_c, spdmul_c, smdmul_c, lrprec_c, eig, evec, &ok, &info,
+                   false, TOL, 100, 20, 1, "GB");
+  for (int i = 0; i < N_TARG && ok; ++i) max_res = fmax(max_res, lr_residual(N, evec + i * 2 * N, eig[i]));
+  check("SMO-GD", random_guess, ok, info, eig, ref_lr, max_res);
+}
+
+static void test_errors(void) {
+  double eig[N_MAX], evec[N * N_MAX];
   bool ok;
-  bool verbose = false;
-  const char* memory_unit = "GB";
-//
-  printf("\nCalling DAVIDSON driver...\n");
-  for (int i = 0; i < n * n_max; ++i){
-    evec[i] = 0.0;
-  }
-  for (int j = 0; j < n_max; ++j){
-    for (int i = 0; i < n; ++i){
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-    }
-  }
-  dgl_davidson_driver(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
-                   verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
-  
-  fix_phase(n,n_targ,evec);
-
-  if (ok) {
-    printf("Davidson converged.\n");
-    write_results_c("Davidson", n, n_targ, eig, evec, "output_c.txt");
-  } else {
-    printf("Davidson failed to converge.\n");
-    return 1;
-  }
-  return 0;
+  dgl_int info;
+  init_guess(N, evec, false);
+  dgl_davidson_driver(N, N_MAX + 1, N_MAX, matvec_c, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 20, 0.0,
+                      1, "GB");
+  check_error("error: n_targ > n_max", info, DGL_ERR_INPUT);
+  dgl_lobpcg_driver(N, N_TARG, N_MAX, NULL, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 0.0, 1, "GB");
+  check_error("error: NULL matvec", info, DGL_ERR_INPUT);
+  dgl_davidson_nosym_driver(N, N_TARG, N_MAX, matvec_r_c, matvec_l_c, precnd_c, "LR", eig, evec, NULL, &ok, &info,
+                            false, TOL, 100, 20, 0.0, 1, "GB");
+  check_error("error: side = LR and evec_2 = NULL", info, DGL_ERR_INPUT);
+  dgl_davidson_driver(N, N_TARG, N_MAX, matvec_c, precnd_c, NULL, eig, evec, &ok, &info, false, TOL, 100, 20, 0.0,
+                      1, "KB");
+  check_error("error: not enough memory", info, DGL_ERR_MEMORY);
 }
 
-int test_davidson_generalized(){
-#ifdef DGL_INT_KIND_4
-  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const int memory = 1;
-#elif DGL_INT_KIND_8
-  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const long int memory = 1;
-#endif
-  const double tol = 1e-10, shift = 0.0;
-  double eig[n_max];
-  double evec[n * n_max];
-  bool ok;
-  bool verbose = false;
-  const char* memory_unit = "GB";
-//
-  printf("\nCalling GENERALIZED DAVIDSON driver...\n");
-  for (int i = 0; i < n * n_max; ++i){
-    evec[i] = 0.0;
-  }
-  for (int j = 0; j < n_max; ++j){
-    for (int i = 0; i < n; ++i){
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-    }
-  }
-  dgl_davidson_driver(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
-                   verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
-  
-  fix_phase(n,n_targ,evec);
-
-  if (ok) {
-    printf("Davidson converged.\n");
-    write_results_c("Davidson", n, n_targ, eig, evec, "output_c.txt");
-  } else {
-    printf("Davidson failed to converge.\n");
-    return 1;
-  }
-  return 0;
-
-}
-
-int test_lobpcg(){
-  #ifdef DGL_INT_KIND_4
-  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
-  const int memory = 1;
-#elif DGL_INT_KIND_8
-  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
-  const long int memory = 1;
-#endif
-  const double tol = 1e-10, shift = 0.0;
-  double eig[n_max];
-  double evec[n * n_max];
-  bool ok;
-  bool verbose = false;
-  const char* memory_unit = "GB";
-  
-  printf("\nCalling LOBPCG driver...\n");
-  
-  for (int i = 0; i < n * n_max; ++i)
-    evec[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-  
-  ok = false;
-  
-  dgl_lobpcg_driver(n, n_targ, n_max, matvec_c, precnd_c, NULL, eig, evec, &ok,
-                   verbose, tol, max_iter, shift, memory, memory_unit);
-
-  fix_phase(n,n_targ,evec);
-  
-  if (ok) {
-    printf("LOBPCG converged.\n");
-    write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
-  } else {
-    printf("LOBPCG failed to converge.\n");
-    return 1;
-  }
-  return 0;
-
-}
-
-int test_lobpcg_generalized(){
-  #ifdef DGL_INT_KIND_4
-  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
-  const int memory = 1;
-#elif DGL_INT_KIND_8
-  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100;
-  const long int memory = 1;
-#endif
-  const double tol = 1e-10, shift = 0.0;
-  double eig[n_max];
-  double evec[n * n_max];
-  bool ok;
-  bool verbose = false;
-  const char* memory_unit = "GB";
-  
-  printf("\nCalling GENERALIZED LOBPCG driver...\n");
-  
-  for (int i = 0; i < n * n_max; ++i)
-    evec[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-  
-  ok = false;
-  
-  dgl_lobpcg_driver(n, n_targ, n_max, matvec_c, precnd_c, metvec_c, eig, evec, &ok,
-                   verbose, tol, max_iter, shift, memory, memory_unit);
-
-  fix_phase(n,n_targ,evec);
-  
-  if (ok) {
-    printf("LOBPCG converged.\n");
-    write_results_c("LOBPCG", n, n_targ, eig, evec, "output_c.txt");
-  } else {
-    printf("LOBPCG failed to converge.\n");
-    return 1;
-  }
-  return 0;
-
-}
-
-int test_davidson_nosym_davidson(){
-  #ifdef DGL_INT_KIND_4
-  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const int memory = 1;
-#elif DGL_INT_KIND_8
-  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const long int memory = 1;
-#endif
-  const double tol = 1e-10, shift = 0.0;
-  double eig[n_max];
-  double evec[n * n_max], evec_l[n * n_max];
-  bool ok;
-  bool verbose = false;
-  const char* memory_unit = "GB";
-  const char* side = "LR";
-
-  printf("\nCalling non-symmetric DAVIDSON driver...\n");
-  for (int i = 0; i < n * n_max; ++i)
-    evec[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec[i + j * n] = (j == i) ? 1.0 : 0.0;
-  for (int i = 0; i < n * n_max; ++i)
-    evec_l[i] = 0.0;
-  for (int j = 0; j < n_max; ++j)
-    for (int i = 0; i < n; ++i)
-      evec_l[i + j * n] = (j == i) ? 1.0 : 0.0;
-  
-  dgl_davidson_nosym_driver(n, n_targ, n_max, matvec_r_c, matvec_l_c, precnd_c, side,
-                              eig, evec, evec_l, &ok,
-                              verbose, tol, max_iter, dav_iter, shift, memory, memory_unit);
-  fix_phase(n,n_targ,evec);
-  fix_phase(n,n_targ,evec_l);
-  
-  if (ok) {
-    printf("Non-symmetric Davidson converged.\n");
-    write_results_c_2("Non-Symmetric Davidson", n, n_targ, eig, evec, evec_l, "output_c.txt");
-  } else {
-    printf("Non-symmetric Davidson failed to converge.\n");
-    return 1;
-  }
-  return 0;
-
-}
-
-int test_smogd(){
-  #ifdef DGL_INT_KIND_4
-  const int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const int memory = 1;
-  int n2 = 2 * n;
-#elif DGL_INT_KIND_8
-  const long int n = 700, n_targ = 5, n_max = 10, max_iter = 100, dav_iter = 20;
-  const long int memory = 1;
-  long int n2 = 2 * n;
-#endif
-  const double tol = 1e-10;
-  double eig[n_max];
-  double evec2 [n2 * n_max];
-  
-  bool ok;
-  bool verbose = false;
-  const char* memory_unit = "GB";
-
-  printf("\nCalling SMOGD driver...\n");
-  for (int i = 0; i < n2 * n_max; ++i)
-    evec2[i] = 0.0;
-  for (int i = 0; i < n_max && i < n2; ++i)
-    evec2[i + i * n2] = 1.0;
-  
-  ok = false;
-  
-  dgl_smogd_driver(n2, n_targ, n_max, apbmul_c, ambmul_c, spdmul_c, smdmul_c, 
-                 lrprec_c, eig, evec2, &ok,
-                 verbose, tol, max_iter, dav_iter, memory, memory_unit);
-  
-  if (ok) {
-    printf("SMOGD converged.\n");
-    write_results_c("SMOGD", n2, n_targ, eig, evec2, "output_c.txt");
-  } else {
-    printf("SMOGD failed to converge.\n");
-    return 1;
-  }
-  return 0;
-
-}
 //
 // main program: test davidson, non-symmetric davidson, lobpcg and smogd.
 //
-int main() {
-//
-// get rid of the output file if it's already present.
-//
-  remove("output_c.txt");
-  int exitstatus;
+int main(void) {
+  n_tests++;
+  if (dgl_integer_kind() != DGL_INT_KIND) n_failed++;
+  printf("integer kind of the library: %d, of the header: %d -> %s\n", dgl_integer_kind(), DGL_INT_KIND,
+         dgl_integer_kind() == DGL_INT_KIND ? "PASSED" : "FAILED");
 
-  exitstatus = test_davidson(); if (exitstatus != 0) {return 1;} ;
-  exitstatus = test_davidson_generalized(); if (exitstatus != 0) {return 1;} ;
-  exitstatus = test_lobpcg(); if (exitstatus != 0) {return 1;} ;
-  exitstatus = test_lobpcg_generalized(); if (exitstatus != 0) {return 1;} ;
-  exitstatus = test_davidson_nosym_davidson(); if (exitstatus != 0) {return 1;} ;
-  exitstatus = test_smogd(); if (exitstatus != 0) {return 1;} ;
+  for (int guess = 0; guess < 2; ++guess) {
+    bool random_guess = guess == 1;
+    test_davidson(false, random_guess);
+    test_davidson(true, random_guess);
+    test_lobpcg(false, random_guess);
+    test_lobpcg(true, random_guess);
+    test_nosym("R", random_guess);
+    test_nosym("L", random_guess);
+    test_nosym("LR", random_guess);
+    test_smogd(random_guess);
+  }
+  test_errors();
 
-  return 0;
+  printf("Summary: %d failed tests out of %d.\n", n_failed, n_tests);
+  return n_failed == 0 ? 0 : 1;
 }

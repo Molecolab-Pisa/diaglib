@@ -2,182 +2,122 @@
 #define DIAGLIB_H
 
 #include <stdbool.h>
+#include <stdint.h>
+#include "diaglib_config.h"
 
-extern void dgl_ortho_cd(
-#ifdef DGL_INT_KIND_4
-    int n,
-    int m,
-#elif DGL_INT_KIND_8
-    long int n,
-    long int m,
+/* Integer type matching the integers of the DiagLib build (see diaglib_config.h) */
+#if DGL_INT_KIND == 8
+typedef int64_t dgl_int;
+#elif DGL_INT_KIND == 4
+typedef int32_t dgl_int;
+#else
+#error "diaglib.h: unsupported DGL_INT_KIND, expected 4 or 8"
 #endif
-    double* u,
-    double growth,
-    bool* ok
-);
 
-extern void dgl_ortho_vs_x(
-#ifdef DGL_INT_KIND_4
-    int n,
-    int m,
-    int k,
-#elif DGL_INT_KIND_8
-    long int n,
-    long int m,
-    long int k,
+#ifdef __cplusplus
+extern "C" {
 #endif
-    double* x,
-    double* u
-);
 
-extern void dgl_b_ortho_vs_x(
-#ifdef DGL_INT_KIND_4
-    int n,
-    int m,
-    int k,
-#elif DGL_INT_KIND_8
-    long int n,
-    long int m,
-    long int k,
-#endif
-    double* x,
-    double* bx,
-    double* u
-);
+/* Size in bytes of the integers of the DiagLib library actually linked (4 or 8).
+ * It can be compared with DGL_INT_KIND to detect a mismatch between header and library. */
+extern int dgl_integer_kind(void);
+
+/*
+ * Error codes returned in the info argument of the drivers. On error, ok is false
+ * and eig/evec do not contain meaningful results. Not converging within max_iter
+ * is not an error: info is DGL_SUCCESS and ok is false.
+ */
+#define DGL_SUCCESS       0  /* no error */
+#define DGL_ERR_INPUT    -1  /* invalid input arguments */
+#define DGL_ERR_MEMORY   -2  /* allocation failure or memory limit exceeded */
+#define DGL_ERR_LAPACK   -3  /* a LAPACK routine failed */
+#define DGL_ERR_ORTHO    -4  /* an orthogonalization procedure failed */
+#define DGL_ERR_MISMATCH -5  /* left and right eigenvalues do not match (non-symmetric driver) */
 
 extern void dgl_davidson_driver(
-#ifdef DGL_INT_KIND_4
-    int n,
-    int n_targ,
-    int n_max,
-#elif DGL_INT_KIND_8
-    long int n,
-    long int n_targ,
-    long int n_max,
-#endif
-    void (*matvec)(int*, int*, double*, double*),
-    void (*precnd)(int*, int*, double*, double*, double*),
-    void (*metvec)(int*, int*, double*, double*),
+    dgl_int n,
+    dgl_int n_targ,
+    dgl_int n_max,
+    void (*matvec)(dgl_int*, dgl_int*, double*, double*),
+    void (*precnd)(dgl_int*, dgl_int*, double*, double*, double*),
+    void (*metvec)(dgl_int*, dgl_int*, double*, double*),
     double* eig,
     double* evec,
     bool* ok,
+    dgl_int* info,
     bool verbose,
     double tol,
-#ifdef DGL_INT_KIND_4
-    int max_iter,
-    int dav_iter,
-#elif DGL_INT_KIND_8
-    int long max_iter,
-    int long dav_iter,
-#endif
+    dgl_int max_iter,
+    dgl_int dav_iter,
     double shift,
-#ifdef DGL_INT_KIND_4
-    int memory,
-#elif DGL_INT_KIND_8
-    int long memory,
-#endif
+    dgl_int memory,
     const char* memory_unit
 );
 
-    
 extern void dgl_lobpcg_driver(
-#ifdef DGL_INT_KIND_4
-    int n,
-    int n_targ,
-    int n_max,
-#elif DGL_INT_KIND_8
-    long int n,
-    long int n_targ,
-    long int n_max,
-#endif
-    void (*matvec)(int*, int*, double*, double*),
-    void (*precnd)(int*, int*, double*, double*, double*),
-    void (*metvec)(int*, int*, double*, double*),
+    dgl_int n,
+    dgl_int n_targ,
+    dgl_int n_max,
+    void (*matvec)(dgl_int*, dgl_int*, double*, double*),
+    void (*precnd)(dgl_int*, dgl_int*, double*, double*, double*),
+    void (*metvec)(dgl_int*, dgl_int*, double*, double*),
     double* eig,
     double* evec,
     bool* ok,
+    dgl_int* info,
     bool verbose,
     double tol,
-#ifdef DGL_INT_KIND_4
-    int max_iter,
-#elif DGL_INT_KIND_8
-    int long max_iter,
-#endif
+    dgl_int max_iter,
     double shift,
-#ifdef DGL_INT_KIND_4
-    int memory,
-#elif DGL_INT_KIND_8
-    int long memory,
-#endif
+    dgl_int memory,
     const char* memory_unit
 );
 
 extern void dgl_davidson_nosym_driver(
-#ifdef DGL_INT_KIND_4
-    int n,
-    int n_targ,
-    int n_max,
-#elif DGL_INT_KIND_8
-    long int n,
-    long int n_targ,
-    long int n_max,
-#endif
-    void (*matvec_r)(int*, int*, double*, double*),
-    void (*metvec_l)(int*, int*, double*, double*),
-    void (*precnd)(int*, int*, double*, double*, double*),
+    dgl_int n,
+    dgl_int n_targ,
+    dgl_int n_max,
+    void (*matvec_r)(dgl_int*, dgl_int*, double*, double*),
+    void (*matvec_l)(dgl_int*, dgl_int*, double*, double*),
+    void (*precnd)(dgl_int*, dgl_int*, double*, double*, double*),
     const char* side,
     double* eig,
     double* evec_1,
-    double* evec_2,
+    double* evec_2,     /* only used if side is "LR", may be NULL otherwise */
     bool* ok,
+    dgl_int* info,
     bool verbose,
     double tol,
-#ifdef DGL_INT_KIND_4
-    int max_iter,
-    int dav_iter,
-#elif DGL_INT_KIND_8
-    int long max_iter,
-    int long dav_iter,
-#endif
+    dgl_int max_iter,
+    dgl_int dav_iter,
     double shift,
-#ifdef DGL_INT_KIND_4
-    int memory,
-#elif DGL_INT_KIND_8
-    int long memory,
-#endif
+    dgl_int memory,
     const char* memory_unit
 );
 
 extern void dgl_smogd_driver(
-#ifdef DGL_INT_KIND_4
-    int n2,
-    int n_targ,
-    int n_max,
-#elif DGL_INT_KIND_8
-    long int n2,
-    long int n_targ,
-    long int n_max,
-#endif
-    void (*apbmul)(int*, int*, double*, double*),
-    void (*ambmul)(int*, int*, double*, double*),
-    void (*spdmul)(int*, int*, double*, double*),
-    void (*smdmul)(int*, int*, double*, double*),
-    void (*lrprec)(int*, int*, double*, double*, double*, double*, double*),
+    dgl_int n2,
+    dgl_int n_targ,
+    dgl_int n_max,
+    void (*apbmul)(dgl_int*, dgl_int*, double*, double*),
+    void (*ambmul)(dgl_int*, dgl_int*, double*, double*),
+    void (*spdmul)(dgl_int*, dgl_int*, double*, double*),
+    void (*smdmul)(dgl_int*, dgl_int*, double*, double*),
+    void (*lrprec)(dgl_int*, dgl_int*, double*, double*, double*, double*, double*),
     double* eig,
     double* evec,
     bool* ok,
+    dgl_int* info,
     bool verbose,
     double tol,
-#ifdef DGL_INT_KIND_4
-    int max_iter,
-    int dav_iter,
-    int memory,
-#elif DGL_INT_KIND_8
-    int long max_iter,
-    int long dav_iter,
-    int long memory,
-#endif
+    dgl_int max_iter,
+    dgl_int dav_iter,
+    dgl_int memory,
     const char* memory_unit
 );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

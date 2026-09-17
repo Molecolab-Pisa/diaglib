@@ -1,7 +1,7 @@
 module dgl_minor_utils
 !* Module containing few utilities
     use dgl_global_utils
-    use dgl_orthogonalizations, only: ortho_cd
+    use dgl_orthogonalizations, only: ortho_cd, ortho
     implicit none
 !
     interface prtmat
@@ -27,36 +27,40 @@ contains
 !
 ! check whether evec is zero.
 !
-        fac = dnrm2(n*m, evec, 1)
+        fac = dnrm2(n*m, evec, 1_ip)
         if (fac .lt. num_thresh) then
 !
 ! no luck. make a random guess, then orthonormalize it.
 !
             call random_number(evec)
             call ortho_cd(n, m, evec, growth, ok)
+            if (.not. ok) call ortho(n, m, evec)
         else
 !
 ! compute the overlap and check that the vectors are orthonormal.
 !
             call mallocate(m, m, overlap)
-            call dgemm('t', 'n', m, m, n, one, evec, n, evec, n, zero, overlap, m)
-            diag_norm = zero
-            out_norm = zero
-            do i = 1, m
-                diag_norm = diag_norm + overlap(i, i)**2
-                do j = 1, i - 1
-                    out_norm = out_norm + overlap(j, i)**2
+            if (.not. dgl_failed()) then
+                call dgemm('t', 'n', m, m, n, one, evec, n, evec, n, zero, overlap, m)
+                diag_norm = zero
+                out_norm = zero
+                do i = 1, m
+                    diag_norm = diag_norm + overlap(i, i)**2
+                    do j = 1, i - 1
+                        out_norm = out_norm + overlap(j, i)**2
+                    end do
                 end do
-            end do
 !
-            diag_norm = diag_norm/real(m, dp)
+                diag_norm = diag_norm/real(m, dp)
 !
-            if (abs(diag_norm - one) .gt. num_thresh .or. &
-                out_norm .gt. num_thresh) then
+                if (abs(diag_norm - one) .gt. num_thresh .or. &
+                    out_norm .gt. num_thresh) then
 !
 ! orthogonalize the guess:
 !
-                call ortho_cd(n, m, evec, growth, ok)
+                    call ortho_cd(n, m, evec, growth, ok)
+                    if (.not. ok) call ortho(n, m, evec)
+                end if
             end if
 !
             call mfree(overlap)
