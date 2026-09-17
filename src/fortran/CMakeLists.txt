@@ -10,7 +10,7 @@ add_library(diaglib SHARED
         smogd_driver.f90
 )
 
-target_compile_options(diaglib PRIVATE ${DGL_Fortran_F2008} ${DGL_Fortran_OPTIONS})
+target_compile_options(diaglib PRIVATE ${DGL_Fortran_F2008} ${DGL_Fortran_OPTIONS} ${DGL_Fortran_STRICT})
 
 # Set where the .mod files will be placed, and let the installed library
 # find its dependencies (libraries in the same directory, BLAS/LAPACK)

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15...4.1)
 
-project(diaglib VERSION 1.0
+project(diaglib VERSION 2.0
         DESCRIPTION "A collection of iterative, matrix-free eigensolvers"
         LANGUAGES Fortran C)
 
@@ -66,6 +66,20 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
     endif()
 endif()
 
+# Extra warnings for the DiagLib libraries, treated as errors (used by the CI pipeline).
+# They are only added to the library targets: the test programs call BLAS/LAPACK routines
+# through implicit interfaces on purpose, to check them as a user would.
+option(DGL_STRICT_WARNINGS "Compile the DiagLib libraries with extra warnings, treated as errors" OFF)
+
+set(DGL_Fortran_STRICT "")
+if(DGL_STRICT_WARNINGS)
+    if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+        list(APPEND DGL_Fortran_STRICT -Wall -Wextra -Wconversion -Wimplicit-interface -Werror)
+    elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+        list(APPEND DGL_Fortran_STRICT "SHELL:-warn all" "SHELL:-warn errors")
+    endif()
+endif()
+
 # Integer default kind is 4. If 8 is desired one should run `cmake -DDGL_INTEGER_KIND=8 ..`
 set(DGL_INTEGER_KIND 4 CACHE STRING "Kind (size in bytes) of the integers used in DiagLib: 4 or 8")
 set_property(CACHE DGL_INTEGER_KIND PROPERTY STRINGS 4 8)
@@ -109,6 +123,10 @@ find_package(OpenMP COMPONENTS Fortran)
 # Build python interface?
 option(BUILD_PYTHON "Install the python interface" OFF)
 
+# Build the stress tests? They take a few minutes, and are meant for the CI pipeline and for
+# checking the solvers after a change, rather than for every build.
+option(DGL_STRESS_TESTS "Build the stress tests (ctest -L stress)" OFF)
+
 # Environment for the tests: the test problems are small, and threaded BLAS/LAPACK
 # libraries can be extremely slow on them (e.g., OpenBLAS with many threads)
 set(DGL_TEST_ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
@@ -120,6 +138,10 @@ if (DGL_TOP_LEVEL AND BUILD_TESTING)
         message(STATUS "Tests will be built")
         add_subdirectory(test/test_fortran)
         add_subdirectory(test/test_c)
+        if (DGL_STRESS_TESTS)
+                message(STATUS "Stress tests will be built")
+                add_subdirectory(test/test_stress)
+        endif()
 endif()
 if (BUILD_PYTHON)
         message(STATUS "Python interface will be installed")

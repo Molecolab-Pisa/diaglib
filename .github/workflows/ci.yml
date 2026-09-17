@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # the test problems are small: threaded BLAS/LAPACK libraries can be very slow on them
+  OMP_NUM_THREADS: 2
+  OPENBLAS_NUM_THREADS: 1
+
+jobs:
+  # build and test with gfortran and OpenBLAS, in both build types, with the two compiler
+  # versions available on the runner
+  gnu:
+    name: gfortran ${{ matrix.compiler }}, ${{ matrix.build_type }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gfortran-12, gfortran-13]
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.compiler }} libopenblas-dev python3-numpy
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DBUILD_PYTHON=ON
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # 32-bit and 64-bit integers, with the matching MKL interface
+  mkl:
+    name: MKL, ${{ matrix.integer_kind }}-byte integers
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - integer_kind: 4
+            vendor: Intel10_64lp
+          - integer_kind: 8
+            vendor: Intel10_64ilp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MKL
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel python3-numpy
+      - name: Configure, build and test
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDGL_INTEGER_KIND=${{ matrix.integer_kind }} \
+            -DBLA_VENDOR=${{ matrix.vendor }} \
+            -DBUILD_PYTHON=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+  # the Intel compilers are stricter than gfortran on the standard, and use their own .mod files
+  intel:
+    name: ifx and icx
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the Intel compilers and MKL
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-compiler-fortran \
+            intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel python3-numpy
+      - name: Configure, build and test
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake -S . -B build \
+            -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBLA_VENDOR=Intel10_64lp \
+            -DBUILD_PYTHON=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+  # the library itself must compile without warnings, with both integer kinds
+  warnings:
+    name: strict warnings, ${{ matrix.integer_kind }}-byte integers
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        integer_kind: [4, 8]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenblas-dev
+      - name: Build the libraries with warnings as errors
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=OFF \
+            -DDGL_INTEGER_KIND=${{ matrix.integer_kind }} \
+            -DDGL_STRICT_WARNINGS=ON
+          cmake --build build -j --target diaglib diaglib_c
+
+  # an installed DiagLib, used as a user would: find_package from Fortran, C and C++, the
+  # installed python module, DiagLib as a subproject, and the uninstall target
+  consumers:
+    name: installed package and consumers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenblas-dev python3-numpy python3-pip
+      - name: Build and install
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DBUILD_PYTHON=ON -DCMAKE_INSTALL_PREFIX=$PWD/prefix
+          cmake --build build -j
+          cmake --install build
+      - name: Build and run the consumers
+        run: |
+          cmake -S test/test_consumers -B build_consumers -DCMAKE_PREFIX_PATH=$PWD/prefix
+          cmake --build build_consumers -j
+          ctest --test-dir build_consumers --output-on-failure
+      - name: Use DiagLib as a subproject
+        run: |
+          mkdir -p subproject
+          cp test/test_consumers/consumer_fortran.f90 subproject/
+          cat > subproject/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.15)
+          project(uses_diaglib LANGUAGES Fortran)
+          find_package(OpenMP REQUIRED COMPONENTS Fortran)
+          add_subdirectory(${DGL_SOURCE_DIR} diaglib_build)
+          add_executable(user consumer_fortran.f90)
+          target_link_libraries(user PRIVATE diaglib OpenMP::OpenMP_Fortran)
+          EOF
+          cmake -S subproject -B build_subproject -DDGL_SOURCE_DIR=$PWD
+          cmake --build build_subproject -j
+          ./build_subproject/user
+      - name: Install the python interface with pip
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --target pymodule src/python_interface
+          PYTHONPATH=$PWD/pymodule python3 test/test_consumers/consumer_python.py \
+            $PWD/prefix/lib/libdiaglib_c.so
+      - name: Uninstall
+        run: |
+          cmake --build build --target uninstall
+          left=$(while read -r f; do [ -e "$f" ] && echo "$f"; done < build/install_manifest.txt)
+          if [ -n "$left" ]; then echo "still installed after uninstall:"; echo "$left"; exit 1; fi
+
+  # every driver, many times, from random guesses, against dense LAPACK references
+  stress:
+    name: stress tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenblas-dev
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDGL_STRESS_TESTS=ON
+          cmake --build build -j
+      - name: Run the stress tests
+        run: ctest --test-dir build -L stress --output-on-failure

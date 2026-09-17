@@ -153,8 +153,11 @@ contains
             dav_iter = dgl_min_dav_iter
         end if
 !
-! Check option for problem to solve
+! Check option for problem to solve, and the number of runs it requires
+! (assigned here, and not in the declaration, which would make them static)
 !
+        current_side = "R"
+        davidson_runs = 1
         select case (side)
         case ("R ")
             current_side = "R"

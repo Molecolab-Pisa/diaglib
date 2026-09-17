@@ -11,7 +11,7 @@ Pisa, november 2022
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7680658.svg)](https://doi.org/10.5281/zenodo.7680658)
 
 ## License
-diaglib is licensed under the LGPL v2.1 license
+diaglib is licensed under the Mozilla Public license 2.0
 
 ## Description
 diaglib - a fortran library of matrix-free iterative algorithms to
@@ -84,6 +84,9 @@ main options:
   By default, the first library found by CMake is used.
 - `-DBUILD_PYTHON=ON`: install the python interface (`pyDiaglib.py`).
 - `-DBUILD_TESTING=OFF`: do not build the tests.
+- `-DDGL_STRESS_TESTS=ON`: also build the stress tests (`ctest -L stress`), which run every
+  driver many times from random guesses and compare the results with dense LAPACK.
+- `-DDGL_STRICT_WARNINGS=ON`: compile the libraries with extra warnings, treated as errors.
 - `-DDGL_NATIVE_ARCH=ON`: optimize for the build machine (not portable).
 - `-DCMAKE_BUILD_TYPE=Debug`: build with run-time checks (default: `Release`).
 
@@ -109,3 +112,12 @@ not converging within the maximum number of iterations is not an error: the
 drivers then return `ok = .false.` and the latest approximations.
 
 the tests in `test/` show how to use the drivers from Fortran, C and python.
+`test/test_consumers` is a separate CMake project that uses an installed DiagLib the way a user
+would (`find_package(diaglib)` from Fortran, C and C++, and the installed python module):
+
+    cmake -S test/test_consumers -B build_consumers -DCMAKE_PREFIX_PATH=<prefix>
+    cmake --build build_consumers
+    ctest --test-dir build_consumers
+
+all of this (both integer kinds, gfortran and the Intel compilers, OpenBLAS and MKL, the strict
+warnings, the consumers and the stress tests) is run by the CI pipeline on every push.

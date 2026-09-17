@@ -18,7 +18,7 @@ target_include_directories(diaglib_c PUBLIC
 )
 
 # The interface needs a more recent standard
-target_compile_options(diaglib_c PRIVATE ${DGL_Fortran_F2018} ${DGL_Fortran_OPTIONS})
+target_compile_options(diaglib_c PRIVATE ${DGL_Fortran_F2018} ${DGL_Fortran_OPTIONS} ${DGL_Fortran_STRICT})
 
 # Link actual diaglib
 target_link_libraries(diaglib_c PRIVATE diaglib)
