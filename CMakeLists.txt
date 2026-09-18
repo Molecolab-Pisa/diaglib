@@ -127,6 +127,13 @@ option(BUILD_PYTHON "Install the python interface" OFF)
 # checking the solvers after a change, rather than for every build.
 option(DGL_STRESS_TESTS "Build the stress tests (ctest -L stress)" OFF)
 
+# Build the extreme stress tests? Randomized, time-boxed fuzzers (problems up to n=4000 and
+# metric condition numbers up to 1e11) and a sustained many-thread concurrency test. They are not
+# registered with ctest and take from several minutes to hours depending on the time budget passed
+# on their command line: meant to be run by hand before a release or after a change to the
+# drivers, not as part of routine testing or CI.
+option(DGL_EXTREME_STRESS_TESTS "Build the extreme, long-running stress tests (run by hand, not via ctest)" OFF)
+
 # Environment for the tests: the test problems are small, and threaded BLAS/LAPACK
 # libraries can be extremely slow on them (e.g., OpenBLAS with many threads)
 set(DGL_TEST_ENVIRONMENT "OMP_NUM_THREADS=1;OPENBLAS_NUM_THREADS=1")
@@ -141,6 +148,10 @@ if (DGL_TOP_LEVEL AND BUILD_TESTING)
         if (DGL_STRESS_TESTS)
                 message(STATUS "Stress tests will be built")
                 add_subdirectory(test/test_stress)
+        endif()
+        if (DGL_EXTREME_STRESS_TESTS)
+                message(STATUS "Extreme stress tests will be built (run by hand, not via ctest)")
+                add_subdirectory(test/test_stress_extreme)
         endif()
 endif()
 if (BUILD_PYTHON)

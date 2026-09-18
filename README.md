@@ -88,6 +88,11 @@ main options:
 - `-DBUILD_TESTING=OFF`: do not build the tests.
 - `-DDGL_STRESS_TESTS=ON`: also build the stress tests (`ctest -L stress`), which run every
   driver many times from random guesses and compare the results with dense LAPACK.
+- `-DDGL_EXTREME_STRESS_TESTS=ON`: also build the extreme stress tests (`test/test_stress_extreme`),
+  randomized fuzzers with problems up to n=4000 and metric condition numbers up to 1e11, plus a
+  many-thread concurrency test. Not registered with ctest: run the executables by hand, with a
+  seed and a time budget in minutes on the command line (e.g. `dgl_stress_extreme_sym 12345 30`),
+  before a release or after a change to the drivers.
 - `-DDGL_STRICT_WARNINGS=ON`: compile the libraries with extra warnings, treated as errors.
 - `-DDGL_NATIVE_ARCH=ON`: optimize for the build machine (not portable).
 - `-DCMAKE_BUILD_TYPE=Debug`: build with run-time checks (default: `Release`).
