@@ -18,7 +18,7 @@ program stress_nosym
     logical :: ok
     character(len=2) :: sides(3) = ["R ", "L ", "LR"]
     character(len=90) :: label
-    integer(ip) :: seed_size
+    integer :: seed_size
     integer, allocatable :: seed(:)
 !
     call random_seed(size=seed_size)
@@ -38,7 +38,7 @@ program stress_nosym
         cplx = merge(0.0_dp, 0.3_dp, i_cfg .ge. 5)
         n_targ = merge(4_ip, 12_ip, i_cfg .le. 4)
         n_max = 2*n_targ
-        dav_iter = merge(10_ip, 25_ip, mod(i_cfg, 2) .eq. 0)
+        dav_iter = merge(10_ip, 25_ip, mod(i_cfg, 2_ip) .eq. 0)
         call build_nosym(deg, cplx)
         call reference_nosym()
         n_fail_cfg = 0
@@ -58,7 +58,7 @@ program stress_nosym
     do i_cfg = 1, 4
         n_targ = merge(4_ip, 10_ip, i_cfg .le. 2)
         n_max = 2*n_targ
-        dav_iter = merge(10_ip, 25_ip, mod(i_cfg, 2) .eq. 0)
+        dav_iter = merge(10_ip, 25_ip, mod(i_cfg, 2_ip) .eq. 0)
         call build_lr(merge(0.0_dp, 0.2_dp, i_cfg .le. 2))
         call reference_lr()
         n_fail_cfg = 0
@@ -81,7 +81,7 @@ contains
         d = 0.0_dp
         do i = 1, n
             d(i, i) = 1.0_dp + real(i - 1, dp)
-            if (deg_in .gt. 0.0_dp .and. mod(i, 2) .eq. 0) d(i, i) = d(i - 1, i - 1) + deg_in
+            if (deg_in .gt. 0.0_dp .and. mod(i, 2_ip) .eq. 0) d(i, i) = d(i - 1, i - 1) + deg_in
         end do
         if (cplx_in .gt. 0.0_dp) then          ! a complex pair among the lowest eigenvalues
             d(1, 2) = cplx_in

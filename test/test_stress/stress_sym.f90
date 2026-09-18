@@ -18,7 +18,7 @@ program stress_sym
     character(len=2) :: sides(3) = ["R ", "L ", "LR"]
     character(len=80) :: label
     procedure(dgl_matvec), pointer :: metvec_p
-    integer(ip) :: seed_size
+    integer :: seed_size
     integer, allocatable :: seed(:)
 !
     call random_seed(size=seed_size)
@@ -39,14 +39,14 @@ program stress_sym
 ! metrics with different conditioning
 !
     do i_cfg = 1, 8
-        spread_a = merge(1.0_dp, 100.0_dp, mod(i_cfg, 2) .eq. 0)
+        spread_a = merge(1.0_dp, 100.0_dp, mod(i_cfg, 2_ip) .eq. 0)
         deg = merge(0.0_dp, 1.0e-6_dp, i_cfg .le. 4)      ! nearly degenerate pairs
         cond_b = merge(1.0_dp, 1.0e6_dp, i_cfg .le. 2)    ! conditioning of the metric
         generalized = i_cfg .gt. 2
         n_targ = merge(4_ip, 20_ip, i_cfg .le. 6)
         n_max = 2*n_targ
-        dav_iter = merge(10_ip, 25_ip, mod(i_cfg, 3) .eq. 0)
-        weak = mod(i_cfg, 4) .eq. 0
+        dav_iter = merge(10_ip, 25_ip, mod(i_cfg, 3_ip) .eq. 0)
+        weak = mod(i_cfg, 4_ip) .eq. 0
         spd_precnd = .false.
         write (label, "(a,i0,a,l1,a,es7.1,a,es7.1,a,i0)") "sym cfg ", i_cfg, " gen ", generalized, &
             " deg ", deg, " cond(B) ", cond_b, " roots ", n_targ
@@ -72,7 +72,7 @@ contains
 !
         do k = 1, n
             diag_a(k) = 1.0_dp + spread_in*real(k - 1, dp)/real(n - 1, dp)
-            if (deg_in .gt. 0.0_dp .and. mod(k, 2) .eq. 0) diag_a(k) = diag_a(k - 1) + deg_in
+            if (deg_in .gt. 0.0_dp .and. mod(k, 2_ip) .eq. 0) diag_a(k) = diag_a(k - 1) + deg_in
             diag_b(k) = 1.0_dp + (cond_in - 1.0_dp)*real(n - k, dp)/real(n - 1, dp)
         end do
         call random_number(v)
