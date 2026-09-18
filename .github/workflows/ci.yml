@@ -243,6 +243,31 @@ jobs:
           left=$(while read -r f; do if [ -e "$f" ]; then echo "$f"; fi; done < build/install_manifest.txt)
           if [ -n "$left" ]; then echo "still installed after uninstall:"; echo "$left"; exit 1; fi
 
+  # the documentation is generated from the !! comments in the sources: this job checks
+  # that it still builds and that every [[link]] in it still resolves
+  docs:
+    name: documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install FORD
+        run: python3 -m pip install ford
+      - name: Build the documentation
+        run: |
+          ford manual/diaglib.md 2>&1 | tee ford.log
+          # FORD reports undocumented internal entities too, which is a backlog rather
+          # than a failure: only unresolved links fail the job
+          if grep -q "Could not substitute link" ford.log; then
+            echo "the documentation has links that do not resolve:"
+            grep -A2 "Could not substitute link" ford.log
+            exit 1
+          fi
+      - name: Upload the documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: diaglib-doc
+          path: doc
+
   # every driver, many times, from random guesses, against dense LAPACK references
   stress:
     name: stress tests

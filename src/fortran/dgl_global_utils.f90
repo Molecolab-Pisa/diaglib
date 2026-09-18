@@ -331,11 +331,11 @@ contains
 ! More global routines
 ! =====================
 !
-    subroutine dgl_init(ctx, lenght, n_arrs, mem, mem_unit, verbose_in)
+    subroutine dgl_init(ctx, length, n_arrs, mem, mem_unit, verbose_in)
 !! Initializer for all drivers: sets the verbosity and the memory available to the call
         implicit none
         type(dgl_context), intent(inout) :: ctx
-        integer(ip), intent(in) :: lenght, n_arrs
+        integer(ip), intent(in) :: length, n_arrs
         integer(ip), intent(in) :: mem
         character(len=2), intent(in) :: mem_unit
         logical, intent(in) :: verbose_in
@@ -348,7 +348,7 @@ contains
 !
 ! set maximum memory used by DiagLib to the input value
 !
-        numbers_preview = int(lenght, i8)*int(n_arrs, i8)
+        numbers_preview = int(length, i8)*int(n_arrs, i8)
         call nums_to_bytes(numbers_preview, memory_preview, memory_preview_unit)
         if (ctx%verbose) write (*, "(t3,a,f10.3,a3,/)") "DiagLib estimated memory usage is", &
             memory_preview, memory_preview_unit
@@ -387,7 +387,7 @@ contains
         if (n_targ .lt. 1) call dgl_error(ctx, "The number of requested eigenpairs (n_targ) must be positive", &
                                           dgl_err_input)
         if (n_targ .gt. n_max) call dgl_error(ctx, &
-                                              "Number of eigenvalues requested is larger that size of arrays passed", &
+                                              "Number of eigenvalues requested is larger than the size of the arrays passed", &
                                               dgl_err_input)
         if (max_iter .lt. 1) call dgl_error(ctx, "The maximum number of iterations must be positive", dgl_err_input)
 !

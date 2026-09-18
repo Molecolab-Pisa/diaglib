@@ -22,7 +22,7 @@ contains
 !
     subroutine ortho(ctx, n, m, u, w)
 !! Orthogonalization routine based on QR decomposition.
-!! Orthogonalizes \(m\) vectors of lenght \(n\) contained in \(u\).
+!! Orthogonalizes \(m\) vectors of length \(n\) contained in \(u\).
 !! \[ u^Tu = \textbf{I} \]
 !!
 !! This is done by computing U = QR and then by solving the upper
@@ -36,7 +36,7 @@ contains
         type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
-!! Lenght of the input vectors
+!! Length of the input vectors
         integer(ip), intent(in) :: m
 !! Number of input vectors
         real(dp), dimension(n, m), intent(inout) :: u
@@ -82,7 +82,7 @@ contains
     end subroutine ortho
 !
     subroutine b_ortho(ctx, n, m, u, bu)
-!! Subroutine to B-orthogonalize \(m\) vectors of lenght \(n\)
+!! Subroutine to B-orthogonalize \(m\) vectors of length \(n\)
 !! using the Cholesky factorization of their overlap.
 !! \[ u^TBu = \textbf{I} \]
 !!
@@ -96,7 +96,7 @@ contains
         integer(ip) :: info
 !
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of vectors
         real(dp), dimension(n, m), intent(inout) :: u
@@ -217,7 +217,7 @@ contains
     end subroutine diag_shift
 !
     subroutine ortho_cd(ctx, n, m, u, growth, ok, max_growth, col_norms)
-!! Subroutine to orthogonalize \(m\) vectors of lenght \(n\)
+!! Subroutine to orthogonalize \(m\) vectors of length \(n\)
 !! using the Cholesky factorization of their overlap.
 !! \[ u^Tu = \textbf{I} \]
 !! The metric is computed as \(metric = u^Tu \) and then by computing its cholesky
@@ -251,7 +251,7 @@ contains
         integer(ip) :: info
 !
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of vectors
         real(dp), dimension(n, m), intent(inout) :: u
@@ -428,7 +428,7 @@ contains
         type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of vectors
         real(dp), dimension(n, m), intent(inout) :: v_l
@@ -547,7 +547,7 @@ contains
         type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of reference vectors
         integer(ip), intent(in) :: k
@@ -638,7 +638,7 @@ contains
         implicit none
         type(dgl_context), intent(inout) :: ctx
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: k
 !! Number of vectors
         real(dp), dimension(n, k), intent(inout) :: u
@@ -656,7 +656,7 @@ contains
         implicit none
         type(dgl_context), intent(inout) :: ctx
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of reference vectors
         integer(ip), intent(in) :: k
@@ -676,7 +676,7 @@ contains
         implicit none
         type(dgl_context), intent(inout) :: ctx
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of reference vectors
         integer(ip), intent(in) :: k
@@ -717,7 +717,7 @@ contains
         type(dgl_context), intent(inout) :: ctx
 !
         integer(ip), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
         integer(ip), intent(in) :: m
 !! Number of reference vectors
         integer(ip), intent(in) :: k

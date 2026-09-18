@@ -41,7 +41,7 @@ module dgl_interface
             import :: dgl_int, dgl_real
             implicit none
             integer(dgl_int), intent(in) :: n
-!! Lenght of the vectors to multiply
+!! Length of the vectors to multiply
             integer(dgl_int), intent(in) :: m
 !! Number of vectors to multiply
             real(dgl_real), dimension(n, m), intent(in) :: x
@@ -55,7 +55,7 @@ module dgl_interface
             import :: dgl_int, dgl_real
             implicit none
             integer(dgl_int), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
             integer(dgl_int), intent(in) :: m
 !! Number of vectors
             real(dgl_real), intent(in) :: shift
@@ -72,7 +72,7 @@ module dgl_interface
             import :: dgl_int, dgl_real
             implicit none
             integer(dgl_int), intent(in) :: n
-!! Lenght of the vectors
+!! Length of the vectors
             integer(dgl_int), intent(in) :: m
 !! Number of vectors
             real(dgl_real), intent(in) :: fac
@@ -201,7 +201,7 @@ module dgl_interface
                                          dgl_shift, dgl_memory, dgl_memory_unit, dgl_info, dgl_precnd_shift)
 !! # Driver for Davidson-Liu non-symmetric diagonalization
 !! Non-symmetric davidson diagonalization is commonly encountered in EOM-CC theory.
-!! This driver can eveluate both Left and Right eigenvectors.
+!! This driver can evaluate both Left and Right eigenvectors.
 !! Only standard eigenvalue problems.
 !! @note
 !! eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
@@ -297,7 +297,7 @@ module dgl_interface
 !! \label{eq:respeq}
 !! \end{equation}
 !!
-!! Where A, B, S are symmetric matrices and D is antysimmetric.
+!! Where A, B, S are symmetric matrices and D is antisymmetric.
 !!
 !! If \(\begin{bmatrix} w, \begin{pmatrix} Y \\ Z \end{pmatrix} \end{bmatrix}\) are a solution,
 !! then \(\begin{bmatrix} -w, \begin{pmatrix} Z \\ Y \end{pmatrix} \end{bmatrix}\) is also a solution.
@@ -311,7 +311,7 @@ module dgl_interface
 !! \begin{pmatrix} b^- \\ -b^- \end{pmatrix}
 !! \end{equation}
 !!
-!! This routine performs the Swapped Metric-Orthogonal -- Generalized Davidsion,
+!! This routine performs the Swapped Metric-Orthogonal -- Generalized Davidson,
 !! therefore solves the associate problem:
 !!
 !!\begin{equation}
@@ -371,7 +371,7 @@ module dgl_interface
 !! **Note:** eig and evec should be allocated (n_max) and (n,n_max), where \(n_{max} \ge n_{act}\).
             implicit none
             integer(dgl_int), intent(in) :: n2
-!! Totals size of the generalized eigenvalue
+!! Total size of the generalized eigenvalue
             integer(dgl_int), intent(in) :: n_targ
 !! Number of required eigenpairs.
             integer(dgl_int), intent(in) :: n_max

@@ -122,8 +122,20 @@ would (`find_package(diaglib)` from Fortran, C and C++, and the installed python
     ctest --test-dir build_consumers
 
 all of this is run by the CI pipeline. Every push is built with gfortran and OpenBLAS, with
-both integer kinds, and runs the tests, the strict warnings, the consumers and the stress
-tests. The jobs that use MKL and the Intel compilers download about 1.3 GB from the Intel
-oneAPI repository, and therefore only run on `main`, on tags, on demand, and once a week.
+both integer kinds, and runs the tests, the strict warnings, the consumers, the stress
+tests and the documentation. The jobs that use MKL and the Intel compilers download about
+1.3 GB from the Intel oneAPI repository, and therefore only run on `main`, on tags, on
+demand, and once a week.
 The runner image is pinned, so that a result only changes when the repository does, with one
 job following the newest image and its default compiler to warn when the two diverge.
+
+## Documentation
+the reference documentation is generated from the `!!` comments in the sources with
+[FORD](https://forddocs.readthedocs.io), configured in `manual/diaglib.md`, together with
+the guides in `manual/pages`:
+
+    pip install ford
+    ford manual/diaglib.md
+
+the result is written to `doc/` (not tracked) and starts at `doc/index.html`. The CI
+pipeline builds it on every push and fails if a `[[link]]` in it no longer resolves.
