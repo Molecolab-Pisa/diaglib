@@ -78,7 +78,9 @@ targeted at applications in molecular quantum chemistry, such as in
 
 main options:
 - `-DDGL_INTEGER_KIND=8`: use 64-bit integers (default: 4, i.e. 32-bit). A
-  BLAS/LAPACK library with 64-bit integers is required.
+  BLAS/LAPACK library with 64-bit integers is required: on Debian and Ubuntu, it
+  is provided by `libopenblas64-dev`, while a 32-bit library will be rejected by
+  CMake with `Could NOT find BLAS`.
 - `-DBLA_VENDOR=<vendor>`: choose the BLAS/LAPACK library, e.g. `OpenBLAS`,
   `Intel10_64lp` (MKL, 32-bit integers), `Intel10_64ilp` (MKL, 64-bit integers).
   By default, the first library found by CMake is used.

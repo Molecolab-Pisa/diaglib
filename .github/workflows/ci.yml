@@ -108,13 +108,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        integer_kind: [4, 8]
+        include:
+          # a BLAS/LAPACK with integers of the matching size is required to configure:
+          # libopenblas64-dev installs a build of OpenBLAS with 64-bit integers, which
+          # FindBLAS locates through BLA_SIZEOF_INTEGER
+          - integer_kind: 4
+            blas: libopenblas-dev
+          - integer_kind: 8
+            blas: libopenblas64-dev
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gfortran libopenblas-dev
+          sudo apt-get install -y gfortran ${{ matrix.blas }}
       - name: Build the libraries with warnings as errors
         run: |
           cmake -S . -B build -DBUILD_TESTING=OFF \
