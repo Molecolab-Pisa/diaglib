@@ -228,37 +228,52 @@ contains
     end subroutine read_reference
 
     subroutine sort_eigenpairs(ld, n_eig, eig, evec)
+!!
+!! sort the first n_eig eigenvalues in ascending order, and the two sets of
+!! eigenvectors with them.
+!!
         implicit none
         integer(ip), intent(in) :: ld
         integer(ip), intent(in) :: n_eig
         real(dp), intent(inout) :: eig(ld)
         real(dp), intent(inout) :: evec(ld, ld, 2)
 
-        logical, allocatable :: mask(:)
-        integer(ip) :: idx(1)
+        integer(ip) :: k, l, i_min
         real(dp) :: copy
         real(dp), allocatable :: copy_arr(:)
 
-        allocate (mask(ld), copy_arr(ld))
-        mask = .true.
+        allocate (copy_arr(ld))
+!
+! plain selection sort, with local loop indices. The same algorithm used to be
+! written with minloc(eig, mask=mask, kind=ip), which is not usable: with both a
+! mask and a kind argument, gfortran calls a libgfortran routine that mishandles
+! its back argument and returns the LAST of several equal minima, where the
+! standard requires the first (checked with gfortran 11.4 and 12.3 at -O0; from
+! -O1 the call is inlined and correct, which is why only Debug builds were
+! affected). On some builds of libgfortran the same call aborts instead, with
+! "Assertion 'back == 0' failed", which took down the whole reference generator.
+!
+        do k = 1, n_eig
+            i_min = k
+            do l = k + 1, ld
+                if (eig(l) .lt. eig(i_min)) i_min = l
+            end do
+            if (i_min .eq. k) cycle
 
-        do i = 1, n_eig
-            idx = minloc(eig, mask=mask, kind=ip)
-            copy = eig(i)
-            eig(i) = eig(idx(1))
-            eig(idx(1)) = copy
-            mask(i) = .false.
+            copy = eig(k)
+            eig(k) = eig(i_min)
+            eig(i_min) = copy
 
-            copy_arr = evec(:, i, 1)
-            evec(:, i, 1) = evec(:, idx(1), 1)
-            evec(:, idx(1), 1) = copy_arr
+            copy_arr = evec(:, k, 1)
+            evec(:, k, 1) = evec(:, i_min, 1)
+            evec(:, i_min, 1) = copy_arr
 
-            copy_arr = evec(:, i, 2)
-            evec(:, i, 2) = evec(:, idx(1), 2)
-            evec(:, idx(1), 2) = copy_arr
+            copy_arr = evec(:, k, 2)
+            evec(:, k, 2) = evec(:, i_min, 2)
+            evec(:, i_min, 2) = copy_arr
         end do
 
-        deallocate (mask, copy_arr)
+        deallocate (copy_arr)
 
     end subroutine sort_eigenpairs
 

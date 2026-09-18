@@ -30,14 +30,14 @@ program reference
     write (*, f_string) "Running symmetric diagonalization"
     call dsyev("V", "U", n, a, n, eig, work, lwork, info)
     call check_lapack(info)
-    call dump_eigpairs(luref, n, n, eig, a, "Symmetric diagonalization")
+    call dump_eigpairs(luref, n, n, eig(:, 1), a, "Symmetric diagonalization")
 
     a = copy
     !symmetric generalized problem
     write (*, f_string) "Running symmetric generalized diagonalization"
     call dsygv(1_ip, "V", "U", n, a, n, b, n, eig, work, lwork, info)
     call check_lapack(info)
-    call dump_eigpairs(luref, n, n, eig, a, "Symmetric Generalized diagonalization")
+    call dump_eigpairs(luref, n, n, eig(:, 1), a, "Symmetric Generalized diagonalization")
 
     write (*, f_string) "Building non symmetric matrix"
     call get_asym_matrix(n, a)
@@ -51,10 +51,10 @@ program reference
     call check_lapack(info)
 
     if (sqrt(dot_product(eig(:, 2), eig(:, 2))) .gt. 1.e-12_dp) write (*, f_string) "Immaginary eigs detected !!"
-    call sort_eigenpairs(n, n, eig, evec)
+    call sort_eigenpairs(n, n, eig(:, 1), evec)
 
-    call dump_eigpairs(luref, n, n, eig, evec, "Non Symmetric diagonalization, Right")
-    call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Non Symmetric diagonalization, Left")
+    call dump_eigpairs(luref, n, n, eig(:, 1), evec(:, :, 1), "Non Symmetric diagonalization, Right")
+    call dump_eigpairs(luref, n, n, eig(:, 1), evec(:, :, 2), "Non Symmetric diagonalization, Left")
 
     write (*, f_string) "Building nearly degenerate non symmetric matrix"
     do j = 1, n
@@ -69,11 +69,11 @@ program reference
     call check_lapack(info)
 
     if (sqrt(dot_product(eig(:, 2), eig(:, 2))) .gt. 1.e-12_dp) write (*, f_string) "Immaginary eigs detected !!"
-    call sort_eigenpairs(n, n, eig, evec)
+    call sort_eigenpairs(n, n, eig(:, 1), evec)
 
     !here a is the same matrix applied by arx_close: the right eigenvectors are in evec(:, :, 2)
-    call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Nearly degenerate nonsymmetric diagonalization, Right")
-    call dump_eigpairs(luref, n, n, eig, evec, "Nearly degenerate nonsymmetric diagonalization, Left")
+    call dump_eigpairs(luref, n, n, eig(:, 1), evec(:, :, 2), "Nearly degenerate nonsymmetric diagonalization, Right")
+    call dump_eigpairs(luref, n, n, eig(:, 1), evec(:, :, 1), "Nearly degenerate nonsymmetric diagonalization, Left")
 
     write (*, f_string) "Building non symmetric matrix with complex eigenvalues"
     do j = 1, n
@@ -90,10 +90,10 @@ program reference
     do i = 1, n
         if (abs(eig(i, 2)) .gt. 1.e-8_dp) eig(i, 1) = eig(i, 1) + 1.e6_dp
     end do
-    call sort_eigenpairs(n, n, eig, evec)
+    call sort_eigenpairs(n, n, eig(:, 1), evec)
 
-    call dump_eigpairs(luref, n, n, eig, evec(1, 1, 2), "Complex pair nonsymmetric diagonalization, Right")
-    call dump_eigpairs(luref, n, n, eig, evec, "Complex pair nonsymmetric diagonalization, Left")
+    call dump_eigpairs(luref, n, n, eig(:, 1), evec(:, :, 2), "Complex pair nonsymmetric diagonalization, Right")
+    call dump_eigpairs(luref, n, n, eig(:, 1), evec(:, :, 1), "Complex pair nonsymmetric diagonalization, Left")
 
     deallocate (a, b)
     deallocate (eig)
@@ -128,7 +128,7 @@ program reference
     do i = 1, 2*n
         a(:, i) = b(:, 2*n + 1 - i)
     end do
-    call dump_eigpairs(luref, 2*n, 2*n, eig, a, "Linear response diagonalization")
+    call dump_eigpairs(luref, 2*n, 2*n, eig(:, 1), a, "Linear response diagonalization")
 
     write (*, f_string) "All done!"
     deallocate (evec, eig)
