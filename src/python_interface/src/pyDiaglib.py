@@ -42,7 +42,23 @@ def _load_library(lib_path):
     try:
         return ctypes.CDLL(lib_path)
     except OSError as exc:
-        raise OSError(f"Could not load the DiagLib C library from {lib_path}: {exc}") from exc
+        message = f"Could not load the DiagLib C library from {lib_path}: {exc}"
+        if "mkl" in str(exc).lower():
+            message += (
+                "\n\nThis looks like two copies of MKL in one process: a module imported "
+                "earlier (numpy, scipy or torch installed from pip or conda usually bring "
+                "their own MKL) has already loaded libmkl_core.so.2 or another MKL library, "
+                "and the loader reuses it for DiagLib, so the MKL that DiagLib was built "
+                "against cannot resolve its own symbols. The executables of the same build "
+                "are unaffected: they never import those modules. Any of these fixes it:"
+                "\n  - build DiagLib against the MKL those modules use;"
+                "\n  - preload the MKL DiagLib was built against, its OpenMP runtime first, "
+                "e.g. LD_PRELOAD='libiomp5.so libmkl_core.so.2 libmkl_intel_thread.so.2' "
+                "(libgomp.so.1 and libmkl_gnu_thread.so.2 for a GNU-threaded MKL);"
+                "\n  - build DiagLib with a statically linked MKL (cmake -DBLA_STATIC=ON), "
+                "which leaves libdiaglib with no MKL dependency at all."
+            )
+        raise OSError(message) from exc
 
 
 class diaglib:

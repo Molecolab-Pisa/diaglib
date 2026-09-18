@@ -111,6 +111,15 @@ main options:
   `DIAGLIB_C_LIBRARY` environment variable. Alternatively, the module can be
   installed with `pip install src/python_interface`.
 
+**python and MKL:** if another module in the same process brings its own copy of MKL
+(numpy, scipy or torch installed from pip or conda often do), loading `libdiaglib_c` can
+fail with an undefined MKL symbol, e.g. `libmkl_intel_ilp64.so.2: undefined symbol:
+mkl_lapack_clatrs3`. The loader reuses the MKL that was already loaded, which is not the
+one DiagLib was built against. Executables of the same build are unaffected. Fixes: build
+against the MKL those modules use, preload the intended one with its OpenMP runtime first
+(`LD_PRELOAD='libiomp5.so libmkl_core.so.2 libmkl_intel_thread.so.2'`), or build with a
+statically linked MKL (`-DBLA_STATIC=ON`), which leaves DiagLib with no MKL dependency.
+
 errors (invalid input, not enough memory, failures of LAPACK or of the
 orthogonalizations) are reported through the optional `dgl_info` argument of the
 Fortran drivers (if it is not present, the program is stopped), through the

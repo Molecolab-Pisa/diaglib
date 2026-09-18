@@ -226,7 +226,7 @@ contains
         else
             do k = 1, n
                 diag_a(k) = 1.0_dp + spread_in*real(k - 1, dp)/real(n - 1, dp)
-                if (deg_in .gt. 0.0_dp .and. mod(k, 2) .eq. 0) diag_a(k) = diag_a(k - 1) + deg_in
+                if (deg_in .gt. 0.0_dp .and. mod(k, 2_ip) .eq. 0) diag_a(k) = diag_a(k - 1) + deg_in
                 diag_b(k) = 1.0_dp + (cond_in - 1.0_dp)*real(n - k, dp)/real(n - 1, dp)
             end do
         end if

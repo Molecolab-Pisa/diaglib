@@ -183,7 +183,7 @@ contains
         d = 0.0_dp
         do i = 1, n
             d(i, i) = 1.0_dp + real(i - 1, dp)
-            if (deg_in .gt. 0.0_dp .and. mod(i, 2) .eq. 0) d(i, i) = d(i - 1, i - 1) + deg_in
+            if (deg_in .gt. 0.0_dp .and. mod(i, 2_ip) .eq. 0) d(i, i) = d(i - 1, i - 1) + deg_in
         end do
         if (cplx_in .gt. 0.0_dp) then
             ! complex pairs only among the lowest few eigenvalues (like the repo's own

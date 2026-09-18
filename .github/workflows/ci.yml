@@ -269,19 +269,33 @@ jobs:
           name: diaglib-doc
           path: doc
 
-  # every driver, many times, from random guesses, against dense LAPACK references
+  # every driver, many times, from random guesses, against dense LAPACK references, with
+  # both integer kinds: the kinds of the stress programs are only checked by compiling them,
+  # and the drivers are only exercised with 64-bit integers if they are also run
   stress:
-    name: stress tests
+    name: stress tests, ${{ matrix.integer_kind }}-byte integers
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - integer_kind: 4
+            blas: libopenblas-dev
+          - integer_kind: 8
+            blas: libopenblas64-dev
     steps:
       - uses: actions/checkout@v7
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gfortran libopenblas-dev
+          sudo apt-get install -y gfortran ${{ matrix.blas }}
       - name: Configure and build
+        # the extreme stress tests are built, but not run: they are time-boxed fuzzers meant
+        # to be started by hand. Building them keeps them compiling with both integer kinds
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDGL_STRESS_TESTS=ON
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DDGL_INTEGER_KIND=${{ matrix.integer_kind }} \
+            -DDGL_STRESS_TESTS=ON -DDGL_EXTREME_STRESS_TESTS=ON
           cmake --build build -j
       - name: Run the stress tests
         run: ctest --test-dir build -L stress --output-on-failure

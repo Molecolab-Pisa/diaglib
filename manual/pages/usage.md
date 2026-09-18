@@ -138,6 +138,27 @@ environment variable, or through the loader. Errors are raised as `RuntimeError`
 module can be installed with `pip install src/python_interface`, or through the CMake
 option `-DBUILD_PYTHON=ON`.
 
+### Two copies of MKL in one process
+
+If a module imported earlier brings its own MKL, which numpy, scipy and torch installed
+from pip or conda commonly do, loading the library can fail with an undefined MKL symbol:
+
+```
+OSError: Could not load the DiagLib C library from .../libdiaglib_c.so:
+  libmkl_intel_ilp64.so.2: undefined symbol: mkl_lapack_clatrs3
+```
+
+Nothing is wrong with the build: `libmkl_core.so.2` is already in the process, the loader
+reuses it for DiagLib, and the MKL DiagLib was linked against then cannot resolve its own
+internal references. Executables of the same build never hit this, because they do not
+import those modules. Three ways out, in order of robustness:
+
+1. build DiagLib with a statically linked MKL, `cmake -DBLA_STATIC=ON`: the libraries then
+   carry MKL inside and have no MKL dependency left, so no conflict is possible
+2. preload the MKL DiagLib was built against, its OpenMP runtime first, for instance
+   `LD_PRELOAD='libiomp5.so libmkl_core.so.2 libmkl_intel_thread.so.2'`
+3. build DiagLib against the same MKL those modules use
+
 ## Examples
 
 `test/` contains working programs for every interface, and `test/test_consumers` is a
