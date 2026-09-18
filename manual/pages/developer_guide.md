@@ -92,7 +92,8 @@ ford manual/diaglib.md
 
 The pipeline pins that version, which is the one these pages were last generated with.
 
-The result lands in `doc/`, which is not tracked. Two settings in the project file are
+The result lands in `doc/`, which is not tracked, and is what the pipeline publishes at
+<https://molecolab-pisa.github.io/diaglib> for every push to `main`. Two settings in the project file are
 worth knowing about. `warn: true` makes FORD list undocumented entities, which is a
 backlog of about a thousand internal variables rather than a failure, so the `docs` job
 of the pipeline fails only on a `[[link]]` that no longer resolves. And `fpp_extensions:

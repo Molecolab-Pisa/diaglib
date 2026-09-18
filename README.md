@@ -144,7 +144,10 @@ The runner image is pinned, so that a result only changes when the repository do
 job following the newest image and its default compiler to warn when the two diverge.
 
 ## Documentation
-the reference documentation is generated from the `!!` comments in the sources with
+the documentation is published at <https://molecolab-pisa.github.io/diaglib>, and is
+rebuilt from `main` at every push.
+
+it is generated from the `!!` comments in the sources with
 [FORD](https://forddocs.readthedocs.io), configured in `manual/diaglib.md`, together with
 the guides in `manual/pages`:
 
@@ -153,4 +156,4 @@ the guides in `manual/pages`:
 
 the result is written to `doc/` (not tracked) and starts at `doc/index.html`. The CI
 pipeline builds it on every push, with that same pinned version, and fails if a
-`[[link]]` in it no longer resolves.
+`[[link]]` in it no longer resolves; from `main` it also publishes it to GitHub Pages.

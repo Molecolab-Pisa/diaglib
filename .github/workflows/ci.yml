@@ -255,6 +255,9 @@ jobs:
         run: python3 -m pip install ford==7.0.13
       - name: Build the documentation
         run: |
+          # without pipefail the step would pass even if ford itself failed, since the
+          # exit status of the pipeline would be the one of tee
+          set -o pipefail
           ford manual/diaglib.md 2>&1 | tee ford.log
           # FORD reports undocumented internal entities too, which is a backlog rather
           # than a failure: only unresolved links fail the job
@@ -264,10 +267,42 @@ jobs:
             exit 1
           fi
       - name: Upload the documentation
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: diaglib-doc
           path: doc
+      # the same pages, in the layout and under the fixed name that the deployment below
+      # expects. Only from main: a push to a branch must not replace the published site
+      - name: Upload the documentation as a GitHub Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: doc
+
+  # publish the documentation at https://molecolab-pisa.github.io/diaglib. The Pages source
+  # of the repository has to be set to "GitHub Actions" (Settings -> Pages) for this to work
+  deploy_docs:
+    name: publish the documentation
+    needs: docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # the deployment needs to write to Pages and to prove the run's identity; every other
+    # job keeps the default read-only token
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # one deployment at a time, and never cancelled halfway: the site would be left
+    # half-written if two pushes to main overlapped
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
 
   # every driver, many times, from random guesses, against dense LAPACK references, with
   # both integer kinds: the kinds of the stress programs are only checked by compiling them,
