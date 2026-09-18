@@ -134,8 +134,9 @@ the reference documentation is generated from the `!!` comments in the sources w
 [FORD](https://forddocs.readthedocs.io), configured in `manual/diaglib.md`, together with
 the guides in `manual/pages`:
 
-    pip install ford
+    pip install ford==7.0.13
     ford manual/diaglib.md
 
 the result is written to `doc/` (not tracked) and starts at `doc/index.html`. The CI
-pipeline builds it on every push and fails if a `[[link]]` in it no longer resolves.
+pipeline builds it on every push, with that same pinned version, and fails if a
+`[[link]]` in it no longer resolves.

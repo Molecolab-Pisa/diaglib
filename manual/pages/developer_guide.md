@@ -86,9 +86,11 @@ The pages are generated from the `!!` comments in the sources by
 [FORD](https://forddocs.readthedocs.io), configured in `manual/diaglib.md`:
 
 ```console
-pip install ford
+pip install ford==7.0.13
 ford manual/diaglib.md
 ```
+
+The pipeline pins that version, which is the one these pages were last generated with.
 
 The result lands in `doc/`, which is not tracked. Two settings in the project file are
 worth knowing about. `warn: true` makes FORD list undocumented entities, which is a

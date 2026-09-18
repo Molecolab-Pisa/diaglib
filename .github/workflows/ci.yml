@@ -251,7 +251,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install FORD
-        run: python3 -m pip install ford
+        # pinned: a new FORD release must not be able to turn the pipeline red on its own
+        run: python3 -m pip install ford==7.0.13
       - name: Build the documentation
         run: |
           ford manual/diaglib.md 2>&1 | tee ford.log
