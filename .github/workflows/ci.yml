@@ -211,7 +211,12 @@ jobs:
       - name: Uninstall
         run: |
           cmake --build build --target uninstall
-          left=$(while read -r f; do [ -e "$f" ] && echo "$f"; done < build/install_manifest.txt)
+          # the manifest lists every file that was installed: none should be left. The test
+          # has to be inside an if: with `[ -e "$f" ] && echo "$f"`, the loop would exit with
+          # the status of the last test, and the step would fail (bash -e) precisely when
+          # nothing is left. An empty manifest would make the check vacuous, hence test -s
+          test -s build/install_manifest.txt
+          left=$(while read -r f; do if [ -e "$f" ]; then echo "$f"; fi; done < build/install_manifest.txt)
           if [ -n "$left" ]; then echo "still installed after uninstall:"; echo "$left"; exit 1; fi
 
   # every driver, many times, from random guesses, against dense LAPACK references
