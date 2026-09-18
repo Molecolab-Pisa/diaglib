@@ -1,0 +1,9 @@
+-i 4
+--whitespace-assignment 1
+--whitespace-relational 1
+--whitespace-logical 1
+--whitespace-plusminus 1
+--whitespace-multdiv 0
+--strict-indent
+--enable-decl
+--strip-comments

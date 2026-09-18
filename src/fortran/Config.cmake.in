@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+# Size in bytes of the integers used by this DiagLib build
+set(diaglib_INTEGER_KIND @DGL_INTEGER_KIND@)
+
+# BLAS, LAPACK and OpenMP are private dependencies of the shared libraries,
+# so there is no need to look for them here.
+include("${CMAKE_CURRENT_LIST_DIR}/DiaglibTargets.cmake")
+
+check_required_components(diaglib)

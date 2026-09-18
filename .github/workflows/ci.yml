@@ -1,0 +1,301 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # once a week, to keep the jobs that use the Intel oneAPI repository from rotting
+    # (scheduled runs only ever use the default branch)
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # the test problems are small: threaded BLAS/LAPACK libraries can be very slow on them
+  OMP_NUM_THREADS: 2
+  OPENBLAS_NUM_THREADS: 1
+
+# the runner image is pinned, so that a result only changes when this repository does, and
+# not when GitHub moves the ubuntu-latest label (Ubuntu 26.04 from October 19, 2026). The
+# newest job below is the one that follows the label, and warns when the two diverge
+
+jobs:
+  # build and test with gfortran and OpenBLAS, in both build types, with the two compiler
+  # versions available on the runner
+  gnu:
+    name: gfortran ${{ matrix.compiler }}, ${{ matrix.build_type }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gfortran-12, gfortran-13]
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.compiler }} libopenblas-dev python3-numpy
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_Fortran_COMPILER=${{ matrix.compiler }} \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DBUILD_PYTHON=ON
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # whatever the newest runner image and its default compiler happen to be: this job is the
+  # early warning that the image, the compiler or the packages have moved, and the only one
+  # that is expected to break by itself. Everything else is pinned
+  newest:
+    name: newest runner image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenblas-dev python3-numpy
+      - name: Report the compiler that was used
+        run: gfortran --version | head -1
+      - name: Configure, build and test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+  # 64-bit integers: OpenBLAS also comes with a 64-bit integer interface, which makes it
+  # possible to test that build on every push without downloading MKL
+  integer64:
+    name: 64-bit integers, OpenBLAS
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenblas64-dev python3-numpy
+      - name: Configure, build and test
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDGL_INTEGER_KIND=8 \
+            -DBUILD_PYTHON=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+  # 32-bit and 64-bit integers, with the matching MKL interface
+  mkl:
+    name: MKL, ${{ matrix.integer_kind }}-byte integers
+    runs-on: ubuntu-24.04
+    # MKL and the Intel compilers are installed from the Intel oneAPI apt repository, which
+    # is a large download (about 600 MB for MKL, 1.3 GB with the compilers): rather than on
+    # every push, this job runs on main, on tags, on demand, and once a week
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+      || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - integer_kind: 4
+            vendor: Intel10_64lp
+          - integer_kind: 8
+            vendor: Intel10_64ilp
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install MKL
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-mkl-devel python3-numpy
+      - name: Configure, build and test
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDGL_INTEGER_KIND=${{ matrix.integer_kind }} \
+            -DBLA_VENDOR=${{ matrix.vendor }} \
+            -DBUILD_PYTHON=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+  # the Intel compilers are stricter than gfortran on the standard, and use their own .mod files
+  intel:
+    name: ifx and icx
+    runs-on: ubuntu-24.04
+    # MKL and the Intel compilers are installed from the Intel oneAPI apt repository, which
+    # is a large download (about 600 MB for MKL, 1.3 GB with the compilers): rather than on
+    # every push, this job runs on main, on tags, on demand, and once a week
+    if: >-
+      github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+      || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the Intel compilers and MKL
+        run: |
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y intel-oneapi-compiler-fortran \
+            intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel python3-numpy
+      - name: Configure, build and test
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake -S . -B build \
+            -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBLA_VENDOR=Intel10_64lp \
+            -DBUILD_PYTHON=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+  # the library itself must compile without warnings, with both integer kinds
+  warnings:
+    name: strict warnings, ${{ matrix.integer_kind }}-byte integers
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # a BLAS/LAPACK with integers of the matching size is required to configure:
+          # libopenblas64-dev installs a build of OpenBLAS with 64-bit integers, which
+          # FindBLAS locates through BLA_SIZEOF_INTEGER
+          - integer_kind: 4
+            blas: libopenblas-dev
+          - integer_kind: 8
+            blas: libopenblas64-dev
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran ${{ matrix.blas }}
+      - name: Build the libraries with warnings as errors
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=OFF \
+            -DDGL_INTEGER_KIND=${{ matrix.integer_kind }} \
+            -DDGL_STRICT_WARNINGS=ON
+          cmake --build build -j --target diaglib diaglib_c
+
+  # an installed DiagLib, used as a user would: find_package from Fortran, C and C++, the
+  # installed python module, DiagLib as a subproject, and the uninstall target
+  consumers:
+    name: installed package and consumers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran libopenblas-dev python3-numpy python3-pip
+      - name: Build and install
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+            -DBUILD_PYTHON=ON -DCMAKE_INSTALL_PREFIX=$PWD/prefix
+          cmake --build build -j
+          cmake --install build
+      - name: Build and run the consumers
+        run: |
+          cmake -S test/test_consumers -B build_consumers -DCMAKE_PREFIX_PATH=$PWD/prefix
+          cmake --build build_consumers -j
+          ctest --test-dir build_consumers --output-on-failure
+      - name: Use DiagLib as a subproject
+        run: |
+          mkdir -p subproject
+          cp test/test_consumers/consumer_fortran.f90 subproject/
+          cat > subproject/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.15)
+          project(uses_diaglib LANGUAGES Fortran)
+          find_package(OpenMP REQUIRED COMPONENTS Fortran)
+          add_subdirectory(${DGL_SOURCE_DIR} diaglib_build)
+          add_executable(user consumer_fortran.f90)
+          target_link_libraries(user PRIVATE diaglib OpenMP::OpenMP_Fortran)
+          EOF
+          cmake -S subproject -B build_subproject -DDGL_SOURCE_DIR=$PWD
+          cmake --build build_subproject -j
+          ./build_subproject/user
+      - name: Install the python interface with pip
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --target pymodule src/python_interface
+          PYTHONPATH=$PWD/pymodule python3 test/test_consumers/consumer_python.py \
+            $PWD/prefix/lib/libdiaglib_c.so
+      - name: Uninstall
+        run: |
+          cmake --build build --target uninstall
+          # the manifest lists every file that was installed: none should be left. The test
+          # has to be inside an if: with `[ -e "$f" ] && echo "$f"`, the loop would exit with
+          # the status of the last test, and the step would fail (bash -e) precisely when
+          # nothing is left. An empty manifest would make the check vacuous, hence test -s
+          test -s build/install_manifest.txt
+          left=$(while read -r f; do if [ -e "$f" ]; then echo "$f"; fi; done < build/install_manifest.txt)
+          if [ -n "$left" ]; then echo "still installed after uninstall:"; echo "$left"; exit 1; fi
+
+  # the documentation is generated from the !! comments in the sources: this job checks
+  # that it still builds and that every [[link]] in it still resolves
+  docs:
+    name: documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install FORD
+        # pinned: a new FORD release must not be able to turn the pipeline red on its own
+        run: python3 -m pip install ford==7.0.13
+      - name: Build the documentation
+        run: |
+          ford manual/diaglib.md 2>&1 | tee ford.log
+          # FORD reports undocumented internal entities too, which is a backlog rather
+          # than a failure: only unresolved links fail the job
+          if grep -q "Could not substitute link" ford.log; then
+            echo "the documentation has links that do not resolve:"
+            grep -A2 "Could not substitute link" ford.log
+            exit 1
+          fi
+      - name: Upload the documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: diaglib-doc
+          path: doc
+
+  # every driver, many times, from random guesses, against dense LAPACK references, with
+  # both integer kinds: the kinds of the stress programs are only checked by compiling them,
+  # and the drivers are only exercised with 64-bit integers if they are also run
+  stress:
+    name: stress tests, ${{ matrix.integer_kind }}-byte integers
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - integer_kind: 4
+            blas: libopenblas-dev
+          - integer_kind: 8
+            blas: libopenblas64-dev
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran ${{ matrix.blas }}
+      - name: Configure and build
+        # the extreme stress tests are built, but not run: they are time-boxed fuzzers meant
+        # to be started by hand. Building them keeps them compiling with both integer kinds
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DDGL_INTEGER_KIND=${{ matrix.integer_kind }} \
+            -DDGL_STRESS_TESTS=ON -DDGL_EXTREME_STRESS_TESTS=ON
+          cmake --build build -j
+      - name: Run the stress tests
+        run: ctest --test-dir build -L stress --output-on-failure
