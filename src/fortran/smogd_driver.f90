@@ -328,7 +328,7 @@ contains
                 um(1:ld_current, i_eig) = um(1:ld_current, i_eig)/eig(i_eig)
             end do
 !
-! asemble the symmetric and antysimmetric combinations (Y+Z) and (Y-Z)
+! asemble the symmetric and antisymmetric combinations (Y+Z) and (Y-Z)
 !
             call dgemm('n', 'n', n, n_max, ld_current, one, vp, n, up, lda, zero, eigp, n)
             call dgemm('n', 'n', n, n_max, ld_current, one, vm, n, um, lda, zero, eigm, n)

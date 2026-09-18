@@ -47,7 +47,7 @@ contains
         real(dp) :: tol, shift
         character(len=2) :: memory_unit
 !
-! expansion space varibles:
+! expansion space variables:
 ! total dimension, current dimension
 !
         integer(ip) :: lda, ld_current
