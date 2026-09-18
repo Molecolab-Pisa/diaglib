@@ -121,5 +121,7 @@ would (`find_package(diaglib)` from Fortran, C and C++, and the installed python
     cmake --build build_consumers
     ctest --test-dir build_consumers
 
-all of this (both integer kinds, gfortran and the Intel compilers, OpenBLAS and MKL, the strict
-warnings, the consumers and the stress tests) is run by the CI pipeline on every push.
+all of this is run by the CI pipeline. Every push is built with gfortran and OpenBLAS, with
+both integer kinds, and runs the tests, the strict warnings, the consumers and the stress
+tests. The jobs that use MKL and the Intel compilers download about 1.3 GB from the Intel
+oneAPI repository, and therefore only run on `main`, on tags, on demand, and once a week.
