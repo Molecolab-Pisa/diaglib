@@ -125,3 +125,5 @@ all of this is run by the CI pipeline. Every push is built with gfortran and Ope
 both integer kinds, and runs the tests, the strict warnings, the consumers and the stress
 tests. The jobs that use MKL and the Intel compilers download about 1.3 GB from the Intel
 oneAPI repository, and therefore only run on `main`, on tags, on demand, and once a week.
+The runner image is pinned, so that a result only changes when the repository does, with one
+job following the newest image and its default compiler to warn when the two diverge.
